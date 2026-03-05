@@ -1,0 +1,13 @@
+{
+  "projectId": "ceff3f38-d2cd-4e46-8a02-9b5083382f2a",
+  "projectName": "signalrisk",
+  "projectType": "GREENFIELD",
+  "createdAt": "2026-03-05",
+  "techStack": ["typescript", "nestjs", "postgresql", "redis", "neo4j", "kafka", "docker", "kubernetes"],
+  "enabledPhases": ["REQUIREMENTS", "DESIGN", "ARCHITECTURE", "PLANNING", "DEVELOPMENT", "TESTING", "DEPLOYMENT"],
+  "nfrs": {
+    "maxResponseTime": "200ms",
+    "concurrentUsers": 10000,
+    "uptime": "99.9%"
+  }
+}
