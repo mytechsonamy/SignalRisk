@@ -106,6 +106,74 @@ variable "cluster_endpoint_private_access" {
 }
 
 ###############################################################################
+# RDS PostgreSQL
+###############################################################################
+
+variable "rds_db_name" {
+  description = "Name of the default database to create in RDS"
+  type        = string
+  default     = "signalrisk"
+}
+
+variable "rds_db_username" {
+  description = "Master username for the RDS instance"
+  type        = string
+  default     = "signalrisk_admin"
+}
+
+variable "rds_instance_class" {
+  description = "RDS instance class"
+  type        = string
+  default     = "db.r6g.large"
+}
+
+variable "rds_allocated_storage" {
+  description = "Initial allocated storage in GB for RDS"
+  type        = number
+  default     = 100
+}
+
+variable "rds_max_allocated_storage" {
+  description = "Maximum storage for RDS autoscaling in GB"
+  type        = number
+  default     = 500
+}
+
+variable "rds_backup_retention_period" {
+  description = "Number of days to retain automated backups"
+  type        = number
+  default     = 7
+}
+
+variable "rds_backup_window" {
+  description = "Preferred backup window for RDS (UTC)"
+  type        = string
+  default     = "03:00-04:00"
+}
+
+###############################################################################
+# ElastiCache Redis
+###############################################################################
+
+variable "redis_node_type" {
+  description = "ElastiCache node instance type"
+  type        = string
+  default     = "cache.r6g.large"
+}
+
+variable "redis_num_shards" {
+  description = "Number of shards in the Redis cluster"
+  type        = number
+  default     = 3
+}
+
+variable "redis_replicas_per_shard" {
+  description = "Number of replica nodes per Redis shard"
+  type        = number
+  default     = 1
+}
+
+###############################################################################
 # Tags
 ###############################################################################
 

@@ -78,6 +78,60 @@ output "node_role_arn" {
 }
 
 ###############################################################################
+# RDS Outputs
+###############################################################################
+
+output "rds_endpoint" {
+  description = "RDS PostgreSQL endpoint (host:port)"
+  value       = module.rds.endpoint
+}
+
+output "rds_address" {
+  description = "RDS PostgreSQL hostname"
+  value       = module.rds.address
+}
+
+output "rds_port" {
+  description = "RDS PostgreSQL port"
+  value       = module.rds.port
+}
+
+output "rds_security_group_id" {
+  description = "Security group ID for the RDS instance"
+  value       = module.rds.security_group_id
+}
+
+output "rds_master_user_secret_arn" {
+  description = "ARN of the Secrets Manager secret for the RDS master password"
+  value       = module.rds.master_user_secret_arn
+  sensitive   = true
+}
+
+###############################################################################
+# ElastiCache Outputs
+###############################################################################
+
+output "redis_primary_endpoint" {
+  description = "Redis cluster configuration endpoint"
+  value       = module.elasticache.primary_endpoint
+}
+
+output "redis_reader_endpoint" {
+  description = "Redis reader endpoint for read-only operations"
+  value       = module.elasticache.reader_endpoint
+}
+
+output "redis_port" {
+  description = "Redis port"
+  value       = module.elasticache.port
+}
+
+output "redis_security_group_id" {
+  description = "Security group ID for the ElastiCache cluster"
+  value       = module.elasticache.security_group_id
+}
+
+###############################################################################
 # Convenience: kubeconfig update command
 ###############################################################################
 

@@ -51,3 +51,49 @@ module "eks" {
 
   extra_tags = var.extra_tags
 }
+
+###############################################################################
+# RDS PostgreSQL Module
+###############################################################################
+
+module "rds" {
+  source = "./modules/rds"
+
+  project_name       = var.project_name
+  environment        = var.environment
+  vpc_id             = module.vpc.vpc_id
+  private_subnet_ids = module.vpc.private_subnet_ids
+
+  allowed_security_group_ids = [module.eks.services_security_group_id]
+
+  db_name               = var.rds_db_name
+  db_username           = var.rds_db_username
+  instance_class        = var.rds_instance_class
+  allocated_storage     = var.rds_allocated_storage
+  max_allocated_storage = var.rds_max_allocated_storage
+  backup_retention_period = var.rds_backup_retention_period
+  backup_window         = var.rds_backup_window
+
+  extra_tags = var.extra_tags
+}
+
+###############################################################################
+# ElastiCache Redis Module
+###############################################################################
+
+module "elasticache" {
+  source = "./modules/elasticache"
+
+  project_name       = var.project_name
+  environment        = var.environment
+  vpc_id             = module.vpc.vpc_id
+  private_subnet_ids = module.vpc.private_subnet_ids
+
+  allowed_security_group_ids = [module.eks.services_security_group_id]
+
+  node_type          = var.redis_node_type
+  num_shards         = var.redis_num_shards
+  replicas_per_shard = var.redis_replicas_per_shard
+
+  extra_tags = var.extra_tags
+}
