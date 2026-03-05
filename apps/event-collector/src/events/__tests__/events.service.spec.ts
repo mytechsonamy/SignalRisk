@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventsService } from '../events.service';
 import { KafkaService, KafkaMessagePayload } from '../../kafka/kafka.service';
+import { DlqService } from '../../dlq/dlq.service';
 import { EventType } from '../dto/create-event.dto';
 
 // Silence OpenTelemetry in tests
@@ -21,11 +22,14 @@ jest.mock('@opentelemetry/api', () => ({
 describe('EventsService', () => {
   let service: EventsService;
   let kafkaService: KafkaService;
+  let dlqService: DlqService;
 
   const mockSendBatch = jest.fn().mockResolvedValue([]);
+  const mockDlqSendBatch = jest.fn().mockResolvedValue(undefined);
 
   beforeEach(async () => {
     mockSendBatch.mockClear();
+    mockDlqSendBatch.mockClear();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -37,11 +41,19 @@ describe('EventsService', () => {
             send: jest.fn().mockResolvedValue([]),
           },
         },
+        {
+          provide: DlqService,
+          useValue: {
+            sendToDlq: jest.fn().mockResolvedValue(undefined),
+            sendBatchToDlq: mockDlqSendBatch,
+          },
+        },
       ],
     }).compile();
 
     service = module.get<EventsService>(EventsService);
     kafkaService = module.get<KafkaService>(KafkaService);
+    dlqService = module.get<DlqService>(DlqService);
   });
 
   describe('ingest', () => {
@@ -50,7 +62,7 @@ describe('EventsService', () => {
       deviceId: 'device-abc',
       sessionId: 'session-xyz',
       type: EventType.PAGE_VIEW,
-      payload: { page: '/home' },
+      payload: { url: 'https://example.com/home' },
     };
 
     it('should produce valid events to signalrisk.events.raw', async () => {
@@ -80,6 +92,7 @@ describe('EventsService', () => {
       expect(headers['merchant-id']).toBe('merchant-001');
       expect(headers['event-type']).toBe('PAGE_VIEW');
       expect(headers['event-id']).toBeDefined();
+      expect(headers['schema-version']).toBe('1');
     });
 
     it('should include all required fields in the produced message', async () => {
@@ -96,7 +109,7 @@ describe('EventsService', () => {
       expect(parsed.deviceId).toBe('device-abc');
       expect(parsed.sessionId).toBe('session-xyz');
       expect(parsed.type).toBe('PAGE_VIEW');
-      expect(parsed.payload).toEqual({ page: '/home' });
+      expect(parsed.payload).toEqual({ url: 'https://example.com/home' });
     });
 
     it('should handle multiple events in a batch', async () => {
@@ -107,7 +120,7 @@ describe('EventsService', () => {
           deviceId: 'device-def',
           sessionId: 'session-abc',
           type: EventType.PAYMENT,
-          payload: { amount: 1000 },
+          payload: { amount: 1000, currency: 'USD', paymentMethod: 'credit_card' },
         },
       ];
 
@@ -118,9 +131,7 @@ describe('EventsService', () => {
       expect(result.results).toHaveLength(2);
     });
 
-    it('should route invalid events to DLQ', async () => {
-      // Create an event missing required fields to trigger JSON Schema validation failure.
-      // The AJV validator checks against the JSON schema which requires "payload" to be an object.
+    it('should route invalid events to DLQ via DlqService', async () => {
       const invalidEvent = {
         merchantId: 'merchant-001',
         deviceId: 'device-abc',
@@ -135,14 +146,12 @@ describe('EventsService', () => {
       expect(result.results[0].accepted).toBe(false);
       expect(result.results[0].error).toBeDefined();
 
-      // The DLQ batch call
-      expect(mockSendBatch).toHaveBeenCalledWith(
-        expect.arrayContaining([
-          expect.objectContaining({
-            topic: 'signalrisk.events.dlq',
-          }),
-        ]),
-      );
+      // DLQ batch should be called
+      expect(mockDlqSendBatch).toHaveBeenCalledTimes(1);
+      const dlqEnrichments = mockDlqSendBatch.mock.calls[0][0];
+      expect(dlqEnrichments).toHaveLength(1);
+      expect(dlqEnrichments[0].failureReason).toBe('validation-failed');
+      expect(dlqEnrichments[0].retryCount).toBe(0);
     });
 
     it('should process mixed valid and invalid events', async () => {
@@ -161,8 +170,9 @@ describe('EventsService', () => {
 
       expect(result.accepted).toBe(1);
       expect(result.rejected).toBe(1);
-      // Should have 2 calls: one for valid (raw), one for invalid (dlq)
-      expect(mockSendBatch).toHaveBeenCalledTimes(2);
+      // Valid events to Kafka, invalid events to DLQ
+      expect(mockSendBatch).toHaveBeenCalledTimes(1);
+      expect(mockDlqSendBatch).toHaveBeenCalledTimes(1);
     });
 
     it('should use client-supplied eventId when provided', async () => {
@@ -195,11 +205,27 @@ describe('EventsService', () => {
       };
 
       // DLQ send fails
-      mockSendBatch.mockRejectedValueOnce(new Error('DLQ send failed'));
+      mockDlqSendBatch.mockRejectedValueOnce(new Error('DLQ send failed'));
 
-      // Should not throw — DLQ failures are logged but not propagated
+      // Should not throw -- DLQ failures are logged but not propagated
       const result = await service.ingest([invalidEvent]);
       expect(result.rejected).toBe(1);
+    });
+
+    it('should include validationErrors in results for invalid events', async () => {
+      const invalidEvent = {
+        merchantId: 'merchant-001',
+        deviceId: 'device-abc',
+        sessionId: 'session-xyz',
+        type: EventType.PAYMENT,
+        payload: { amount: -50 }, // Missing currency and paymentMethod, negative amount
+      };
+
+      const result = await service.ingest([invalidEvent]);
+
+      expect(result.rejected).toBe(1);
+      expect(result.results[0].validationErrors).toBeDefined();
+      expect(result.results[0].validationErrors!.length).toBeGreaterThan(0);
     });
   });
 });

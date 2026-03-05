@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://signalrisk.com/schemas/form-submit-payload.json",
+  "title": "FORM_SUBMIT Payload",
+  "description": "Payload schema for FORM_SUBMIT events",
+  "type": "object",
+  "required": ["formId"],
+  "properties": {
+    "formId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique form identifier"
+    },
+    "fields": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "type": { "type": "string" },
+          "hasValue": { "type": "boolean" }
+        },
+        "additionalProperties": false,
+        "description": "Redacted field metadata (no actual values)"
+      },
+      "description": "Array of form fields (redacted for privacy)"
+    },
+    "fillTimeMs": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Time taken to fill the form in milliseconds"
+    },
+    "submitTimeMs": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Time taken from page load to form submission"
+    },
+    "formAction": {
+      "type": "string",
+      "description": "Form action URL"
+    }
+  },
+  "additionalProperties": false
+}

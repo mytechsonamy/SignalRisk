@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://signalrisk.com/schemas/payment-payload.json",
+  "title": "PAYMENT Payload",
+  "description": "Payload schema for PAYMENT events",
+  "type": "object",
+  "required": ["amount", "currency", "paymentMethod"],
+  "properties": {
+    "amount": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Payment amount in minor units (cents)"
+    },
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$",
+      "description": "ISO-4217 currency code"
+    },
+    "paymentMethod": {
+      "type": "string",
+      "enum": ["credit_card", "debit_card", "bank_transfer", "wallet", "crypto", "other"],
+      "description": "Payment method used"
+    },
+    "merchantRef": {
+      "type": "string",
+      "description": "Merchant-assigned payment reference"
+    },
+    "cardBin": {
+      "type": "string",
+      "pattern": "^[0-9]{6}$",
+      "description": "First 6 digits of the card number (BIN)"
+    },
+    "cardLast4": {
+      "type": "string",
+      "pattern": "^[0-9]{4}$",
+      "description": "Last 4 digits of the card number"
+    },
+    "billingCountry": {
+      "type": "string",
+      "pattern": "^[A-Z]{2}$",
+      "description": "ISO-3166-1 alpha-2 billing country code"
+    },
+    "recurring": {
+      "type": "boolean",
+      "description": "Whether this is a recurring payment"
+    }
+  },
+  "additionalProperties": false
+}

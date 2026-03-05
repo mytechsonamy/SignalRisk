@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://signalrisk.com/schemas/login-payload.json",
+  "title": "LOGIN Payload",
+  "description": "Payload schema for LOGIN events",
+  "type": "object",
+  "required": ["success", "method"],
+  "properties": {
+    "success": {
+      "type": "boolean",
+      "description": "Whether the login attempt was successful"
+    },
+    "method": {
+      "type": "string",
+      "enum": ["password", "sso", "mfa", "oauth", "biometric"],
+      "description": "Authentication method used"
+    },
+    "attemptCount": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Number of login attempts in this session"
+    },
+    "failureReason": {
+      "type": "string",
+      "description": "Reason for login failure (if applicable)"
+    },
+    "mfaUsed": {
+      "type": "boolean",
+      "description": "Whether MFA was used in this attempt"
+    },
+    "userId": {
+      "type": "string",
+      "description": "Hashed user identifier (if login succeeded)"
+    }
+  },
+  "additionalProperties": false
+}

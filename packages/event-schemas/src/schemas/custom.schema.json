@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://signalrisk.com/schemas/custom-payload.json",
+  "title": "CUSTOM Payload",
+  "description": "Flexible payload schema for CUSTOM events with a required event_name",
+  "type": "object",
+  "required": ["event_name"],
+  "properties": {
+    "event_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "description": "Custom event name identifier"
+    },
+    "data": {
+      "type": "object",
+      "description": "Arbitrary custom event data"
+    },
+    "category": {
+      "type": "string",
+      "description": "Optional event category for grouping"
+    },
+    "label": {
+      "type": "string",
+      "description": "Optional event label"
+    },
+    "numericValue": {
+      "type": "number",
+      "description": "Optional numeric value associated with the event"
+    }
+  },
+  "additionalProperties": true
+}

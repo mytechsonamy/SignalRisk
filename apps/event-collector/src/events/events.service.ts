@@ -1,23 +1,24 @@
 /**
  * SignalRisk Event Collector — Events Service
  *
- * Validates incoming events against JSON Schema, produces valid events
- * to the signalrisk.events.raw Kafka topic, and routes invalid events
- * to the signalrisk.events.dlq dead-letter topic.
+ * Validates incoming events using the shared @signalrisk/event-schemas
+ * package with per-type JSON Schema validation. Valid events are produced
+ * to the signalrisk.events.raw Kafka topic; invalid events are routed
+ * to the DLQ via the DlqService with detailed error context.
  */
 
 import { Injectable, Logger } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
-import Ajv, { ValidateFunction } from 'ajv';
-import addFormats from 'ajv-formats';
+import { EventSchemaValidator, ValidationResult } from '@signalrisk/event-schemas';
 import { KafkaService, KafkaMessagePayload } from '../kafka/kafka.service';
+import { DlqService, DlqValidationError } from '../dlq/dlq.service';
 import { CreateEventDto } from './dto/create-event.dto';
-import * as eventSchema from './schemas/event.schema.json';
 
 export interface EventResult {
   eventId: string;
   accepted: boolean;
   error?: string;
+  validationErrors?: DlqValidationError[];
 }
 
 export interface IngestResult {
@@ -29,24 +30,28 @@ export interface IngestResult {
 @Injectable()
 export class EventsService {
   private readonly logger = new Logger(EventsService.name);
-  private readonly validate: ValidateFunction;
+  private readonly validator: EventSchemaValidator;
 
   private static readonly TOPIC_RAW = 'signalrisk.events.raw';
-  private static readonly TOPIC_DLQ = 'signalrisk.events.dlq';
 
-  constructor(private readonly kafkaService: KafkaService) {
-    const ajv = new Ajv({ allErrors: true });
-    addFormats(ajv);
-    this.validate = ajv.compile(eventSchema);
+  constructor(
+    private readonly kafkaService: KafkaService,
+    private readonly dlqService: DlqService,
+  ) {
+    this.validator = new EventSchemaValidator();
   }
 
   /**
-   * Ingest a batch of events: validate each, produce valid ones to the raw
-   * topic and route invalid ones to the DLQ.
+   * Ingest a batch of events: validate each against its type-specific schema,
+   * produce valid ones to the raw topic, and route invalid ones to the DLQ.
    */
   async ingest(events: CreateEventDto[]): Promise<IngestResult> {
     const validPayloads: KafkaMessagePayload[] = [];
-    const dlqPayloads: KafkaMessagePayload[] = [];
+    const invalidEvents: Array<{
+      event: CreateEventDto;
+      eventId: string;
+      result: ValidationResult;
+    }> = [];
     const results: EventResult[] = [];
     let accepted = 0;
     let rejected = 0;
@@ -55,10 +60,10 @@ export class EventsService {
       const eventId = event.eventId || uuidv4();
       const timestamp = event.timestamp || new Date().toISOString();
 
-      const isValid = this.validate(event) as boolean;
+      // Validate envelope + type-specific payload schema
+      const validationResult = this.validator.validate(event);
 
-      if (isValid) {
-        // Session-salted partition key
+      if (validationResult.valid) {
         const partitionKey = `${event.merchantId}:${event.sessionId}`;
 
         const message: KafkaMessagePayload = {
@@ -68,7 +73,7 @@ export class EventsService {
             eventId,
             timestamp,
             source: 'event-collector',
-            schemaVersion: 1,
+            schemaVersion: this.validator.getSchemaVersion(),
             merchantId: event.merchantId,
             deviceId: event.deviceId,
             sessionId: event.sessionId,
@@ -83,6 +88,7 @@ export class EventsService {
             'event-id': eventId,
             'merchant-id': event.merchantId,
             'event-type': event.type,
+            'schema-version': String(this.validator.getSchemaVersion()),
           },
         };
 
@@ -90,39 +96,26 @@ export class EventsService {
         results.push({ eventId, accepted: true });
         accepted++;
       } else {
-        const errorMessage = this.validate.errors
-          ?.map((e) => `${e.instancePath || '/'} ${e.message}`)
-          .join('; ') || 'Unknown validation error';
+        const errorMessage = validationResult.errors
+          .map((e) => `${e.path} ${e.message}`)
+          .join('; ');
 
         this.logger.warn(
-          `Event validation failed for merchant ${event.merchantId}: ${errorMessage}`,
+          `Event validation failed for merchant ${event.merchantId}, ` +
+            `type=${event.type}: ${errorMessage}`,
         );
 
-        // Route to DLQ
-        const dlqMessage: KafkaMessagePayload = {
-          topic: EventsService.TOPIC_DLQ,
-          key: event.merchantId || 'unknown',
-          value: JSON.stringify({
-            eventId: uuidv4(),
-            timestamp: new Date().toISOString(),
-            source: 'event-collector',
-            schemaVersion: 1,
-            originalTopic: 'http-ingestion',
-            originalPartition: 0,
-            originalOffset: 0,
-            originalValue: JSON.stringify(event),
-            errorMessage,
-            retryCount: 0,
-          }),
-          headers: {
-            'event-id': eventId,
-            'merchant-id': event.merchantId || 'unknown',
-            'error-reason': 'validation-failed',
-          },
-        };
-
-        dlqPayloads.push(dlqMessage);
-        results.push({ eventId, accepted: false, error: errorMessage });
+        invalidEvents.push({ event, eventId, result: validationResult });
+        results.push({
+          eventId,
+          accepted: false,
+          error: errorMessage,
+          validationErrors: validationResult.errors.map((e) => ({
+            path: e.path,
+            message: e.message,
+            keyword: e.keyword,
+          })),
+        });
         rejected++;
       }
     }
@@ -131,7 +124,9 @@ export class EventsService {
     if (validPayloads.length > 0) {
       try {
         await this.kafkaService.sendBatch(validPayloads);
-        this.logger.log(`Produced ${validPayloads.length} events to ${EventsService.TOPIC_RAW}`);
+        this.logger.log(
+          `Produced ${validPayloads.length} events to ${EventsService.TOPIC_RAW}`,
+        );
       } catch (error) {
         this.logger.error(
           `Failed to produce events to ${EventsService.TOPIC_RAW}`,
@@ -141,13 +136,27 @@ export class EventsService {
       }
     }
 
-    // Send invalid events to DLQ
-    if (dlqPayloads.length > 0) {
+    // Route invalid events to DLQ via DlqService
+    if (invalidEvents.length > 0) {
       try {
-        await this.kafkaService.sendBatch(dlqPayloads);
-        this.logger.log(`Routed ${dlqPayloads.length} invalid events to ${EventsService.TOPIC_DLQ}`);
+        await this.dlqService.sendBatchToDlq(
+          invalidEvents.map(({ event, result }) => ({
+            originalEvent: event,
+            validationErrors: result.errors.map((e) => ({
+              path: e.path,
+              message: e.message,
+              keyword: e.keyword,
+            })),
+            failureReason: 'validation-failed' as const,
+            retryCount: 0,
+            originalTopic: 'http-ingestion',
+          })),
+        );
+        this.logger.log(
+          `Routed ${invalidEvents.length} invalid events to DLQ`,
+        );
       } catch (error) {
-        // DLQ send failure is logged but not thrown — don't fail the whole batch
+        // DLQ send failure is logged but not thrown -- don't fail the whole batch
         this.logger.error(
           `Failed to route events to DLQ: ${(error as Error).message}`,
           (error as Error).stack,

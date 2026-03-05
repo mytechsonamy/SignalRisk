@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://signalrisk.com/schemas/click-payload.json",
+  "title": "CLICK Payload",
+  "description": "Payload schema for CLICK events",
+  "type": "object",
+  "required": ["x", "y", "targetElement"],
+  "properties": {
+    "x": {
+      "type": "number",
+      "description": "X coordinate of click"
+    },
+    "y": {
+      "type": "number",
+      "description": "Y coordinate of click"
+    },
+    "targetElement": {
+      "type": "string",
+      "minLength": 1,
+      "description": "CSS selector or element identifier of click target"
+    },
+    "targetText": {
+      "type": "string",
+      "description": "Visible text of the clicked element"
+    },
+    "clickTimestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Precise timestamp of the click event"
+    },
+    "button": {
+      "type": "string",
+      "enum": ["left", "right", "middle"],
+      "description": "Mouse button used"
+    }
+  },
+  "additionalProperties": false
+}

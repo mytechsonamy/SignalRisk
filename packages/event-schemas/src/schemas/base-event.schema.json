@@ -1,0 +1,63 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://signalrisk.com/schemas/base-event.json",
+  "title": "SignalRisk Base Event Envelope",
+  "description": "Common envelope fields required on every incoming event",
+  "type": "object",
+  "required": ["merchantId", "deviceId", "sessionId", "type", "payload"],
+  "properties": {
+    "merchantId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Merchant identifier"
+    },
+    "deviceId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Device fingerprint or identifier"
+    },
+    "sessionId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Session identifier for session-salted partitioning"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["PAGE_VIEW", "CLICK", "FORM_SUBMIT", "LOGIN", "SIGNUP", "PAYMENT", "CUSTOM"],
+      "description": "Event type classification"
+    },
+    "payload": {
+      "type": "object",
+      "description": "Event-type-specific payload data"
+    },
+    "ipAddress": {
+      "type": "string",
+      "format": "ipv4",
+      "description": "Client IP address"
+    },
+    "userAgent": {
+      "type": "string",
+      "description": "Client user agent string"
+    },
+    "pageUrl": {
+      "type": "string",
+      "format": "uri",
+      "description": "Page URL where the event occurred"
+    },
+    "referrer": {
+      "type": "string",
+      "description": "HTTP referrer"
+    },
+    "eventId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Client-supplied event ID (UUIDv4)"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Client-supplied ISO-8601 timestamp"
+    }
+  },
+  "additionalProperties": false
+}
