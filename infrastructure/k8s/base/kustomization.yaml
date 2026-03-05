@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: signalrisk
+
+resources:
+  - namespace.yaml
+  - deployment.yaml
+
+commonLabels:
+  app.kubernetes.io/managed-by: argocd
+  app.kubernetes.io/part-of: signalrisk-platform
+
+images:
+  - name: REGISTRY/signalrisk/auth-service
+    newName: REGISTRY/signalrisk/auth-service
+    newTag: latest # auth-service

@@ -1,0 +1,70 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: signalrisk
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: SignalRisk real-time fraud detection platform
+
+  # Only allow manifests from this repository
+  sourceRepos:
+    - "https://github.com/*/signalrisk.git"
+
+  # Destinations this project can deploy to
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: signalrisk
+    - server: https://kubernetes.default.svc
+      namespace: signalrisk-staging
+
+  # Allowed cluster-scoped resources
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+
+  # Allowed namespace-scoped resources
+  namespaceResourceWhitelist:
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: Secret
+    - group: ""
+      kind: Service
+    - group: ""
+      kind: ServiceAccount
+    - group: ""
+      kind: PersistentVolumeClaim
+    - group: apps
+      kind: Deployment
+    - group: apps
+      kind: StatefulSet
+    - group: autoscaling
+      kind: HorizontalPodAutoscaler
+    - group: networking.k8s.io
+      kind: Ingress
+    - group: networking.k8s.io
+      kind: NetworkPolicy
+    - group: batch
+      kind: Job
+    - group: batch
+      kind: CronJob
+    - group: policy
+      kind: PodDisruptionBudget
+
+  # Roles for team access
+  roles:
+    - name: admin
+      description: Full access to SignalRisk project
+      policies:
+        - p, proj:signalrisk:admin, applications, *, signalrisk/*, allow
+      groups:
+        - signalrisk-admins
+
+    - name: readonly
+      description: Read-only access
+      policies:
+        - p, proj:signalrisk:readonly, applications, get, signalrisk/*, allow
+      groups:
+        - signalrisk-viewers

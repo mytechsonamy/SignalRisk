@@ -1,0 +1,50 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: signalrisk
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: signalrisk
+    app.kubernetes.io/part-of: signalrisk-platform
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: signalrisk
+
+  source:
+    repoURL: https://github.com/OWNER/signalrisk.git  # Replace OWNER with your GitHub org/user
+    targetRevision: main
+    path: infrastructure/k8s/base
+    kustomize:
+      namePrefix: ""
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: signalrisk
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - ApplyOutOfSyncOnly=true
+      - ServerSideApply=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+
+  # Health checks and notifications
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas  # Allow HPA to manage replicas
+
+  revisionHistoryLimit: 10
