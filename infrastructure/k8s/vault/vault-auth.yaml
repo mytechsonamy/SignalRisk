@@ -1,0 +1,47 @@
+# =============================================================================
+# SignalRisk -- Vault Kubernetes Auth Method Configuration
+# =============================================================================
+# ClusterRoleBinding and Secret to allow Vault to verify K8s service account
+# tokens via the TokenReview API.
+# =============================================================================
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vault-auth-secret
+  namespace: signalrisk
+  annotations:
+    kubernetes.io/service-account.name: signalrisk-vault-auth
+type: kubernetes.io/service-account-token
+---
+# ClusterRole granting token review permissions to Vault
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: vault-tokenreview
+  labels:
+    app.kubernetes.io/name: vault
+    app.kubernetes.io/part-of: signalrisk
+rules:
+  - apiGroups: ["authentication.k8s.io"]
+    resources: ["tokenreviews"]
+    verbs: ["create"]
+  - apiGroups: ["authorization.k8s.io"]
+    resources: ["subjectaccessreviews"]
+    verbs: ["create"]
+---
+# Bind the ClusterRole to the Vault auth service account
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vault-tokenreview-binding
+  labels:
+    app.kubernetes.io/name: vault
+    app.kubernetes.io/part-of: signalrisk
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: vault-tokenreview
+subjects:
+  - kind: ServiceAccount
+    name: signalrisk-vault-auth
+    namespace: signalrisk

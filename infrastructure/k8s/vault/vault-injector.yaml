@@ -1,0 +1,191 @@
+# =============================================================================
+# SignalRisk -- Vault Agent Injector Deployment
+# =============================================================================
+# Deploys the Vault Agent Injector as a mutating webhook that automatically
+# injects Vault Agent sidecars into annotated pods. This enables transparent
+# secret injection without application code changes.
+#
+# In production, prefer deploying via the official Helm chart:
+#   helm install vault hashicorp/vault --set injector.enabled=true ...
+# This manifest is provided for reference / non-Helm environments.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vault-agent-injector
+  namespace: vault
+  labels:
+    app.kubernetes.io/name: vault-agent-injector
+    app.kubernetes.io/part-of: signalrisk
+    component: webhook
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vault-agent-injector
+      component: webhook
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vault-agent-injector
+        app.kubernetes.io/part-of: signalrisk
+        component: webhook
+    spec:
+      serviceAccountName: vault-agent-injector
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 1000
+        fsGroup: 1000
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: vault-agent-injector
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: sidecar-injector
+          image: hashicorp/vault-k8s:1.4.1
+          imagePullPolicy: IfNotPresent
+          args:
+            - agent-inject
+            - 2>&1
+          env:
+            - name: AGENT_INJECT_LISTEN
+              value: ":8080"
+            - name: AGENT_INJECT_LOG_LEVEL
+              value: "info"
+            - name: AGENT_INJECT_VAULT_ADDR
+              value: "https://vault.vault.svc.cluster.local:8200"
+            - name: AGENT_INJECT_VAULT_AUTH_PATH
+              value: "auth/kubernetes"
+            - name: AGENT_INJECT_TLS_AUTO
+              value: vault-agent-injector-cfg
+            - name: AGENT_INJECT_TLS_AUTO_HOSTS
+              value: "vault-agent-injector-svc,vault-agent-injector-svc.vault,vault-agent-injector-svc.vault.svc"
+            - name: AGENT_INJECT_LOG_FORMAT
+              value: "json"
+            - name: AGENT_INJECT_REVOKE_ON_SHUTDOWN
+              value: "true"
+            - name: AGENT_INJECT_DEFAULT_TEMPLATE
+              value: "json"
+            # Use the Vault image for the injected sidecar containers
+            - name: AGENT_INJECT_VAULT_IMAGE
+              value: "hashicorp/vault:1.17.2"
+          ports:
+            - containerPort: 8080
+              name: https
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8080
+              scheme: HTTPS
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8080
+              scheme: HTTPS
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vault-agent-injector-svc
+  namespace: vault
+  labels:
+    app.kubernetes.io/name: vault-agent-injector
+    app.kubernetes.io/part-of: signalrisk
+spec:
+  ports:
+    - port: 443
+      targetPort: 8080
+      protocol: TCP
+      name: https
+  selector:
+    app.kubernetes.io/name: vault-agent-injector
+    component: webhook
+---
+# MutatingWebhookConfiguration -- intercepts pod creation to inject sidecars
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: vault-agent-injector-cfg
+  labels:
+    app.kubernetes.io/name: vault-agent-injector
+    app.kubernetes.io/part-of: signalrisk
+webhooks:
+  - name: vault.hashicorp.com
+    admissionReviewVersions:
+      - v1
+      - v1beta1
+    clientConfig:
+      service:
+        name: vault-agent-injector-svc
+        namespace: vault
+        path: /mutate
+    rules:
+      - operations: ["CREATE", "UPDATE"]
+        apiGroups: [""]
+        apiVersions: ["v1"]
+        resources: ["pods"]
+    # Only process pods in the signalrisk namespace
+    namespaceSelector:
+      matchLabels:
+        vault-injection: enabled
+    failurePolicy: Ignore
+    sideEffects: None
+    timeoutSeconds: 10
+---
+# ServiceAccount for the injector itself
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vault-agent-injector
+  namespace: vault
+  labels:
+    app.kubernetes.io/name: vault-agent-injector
+    app.kubernetes.io/part-of: signalrisk
+---
+# The injector needs permissions to read/write secrets and manage TLS certs
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: vault-agent-injector-clusterrole
+  labels:
+    app.kubernetes.io/name: vault-agent-injector
+    app.kubernetes.io/part-of: signalrisk
+rules:
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["mutatingwebhookconfigurations"]
+    verbs: ["get", "list", "watch", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vault-agent-injector-binding
+  labels:
+    app.kubernetes.io/name: vault-agent-injector
+    app.kubernetes.io/part-of: signalrisk
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: vault-agent-injector-clusterrole
+subjects:
+  - kind: ServiceAccount
+    name: vault-agent-injector
+    namespace: vault
