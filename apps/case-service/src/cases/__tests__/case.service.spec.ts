@@ -22,6 +22,7 @@ function makeCase(overrides: Partial<Case> = {}): Case {
     status: 'OPEN',
     priority: 'HIGH',
     slaDeadline: new Date(Date.now() + 4 * 3_600_000),
+    slaBreached: false,
     assignedTo: null,
     resolution: null,
     resolutionNotes: null,

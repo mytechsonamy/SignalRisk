@@ -120,7 +120,17 @@ export default function CasesTable({ onView }: Props) {
                   <Badge action={c.action} />
                 </td>
                 <td className="px-4 py-3">
-                  <PriorityBadge priority={c.priority} />
+                  <div className="flex items-center gap-1.5">
+                    <PriorityBadge priority={c.priority} />
+                    {c.slaBreached === true && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium animate-pulse text-red-500"
+                        aria-label="SLA Breached"
+                      >
+                        SLA Breached
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className={`px-4 py-3 text-sm ${getRiskScoreColor(c.riskScore)}`}>
                   {c.riskScore}

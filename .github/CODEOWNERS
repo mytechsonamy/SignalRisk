@@ -1,0 +1,15 @@
+# Global fallback
+* @signalrisk/platform-team
+
+# Auth & security
+apps/auth-service/ @signalrisk/security-team
+
+# Infrastructure
+infrastructure/ @signalrisk/infra-team
+.github/workflows/ @signalrisk/infra-team
+
+# Frontend
+apps/dashboard/ @signalrisk/frontend-team
+
+# Signal contracts (frozen in Sprint 3)
+packages/signal-contracts/ @signalrisk/architecture-team

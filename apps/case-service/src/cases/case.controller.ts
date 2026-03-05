@@ -30,6 +30,7 @@ export class CaseController {
   @ApiQuery({ name: 'priority', required: false, enum: ['HIGH', 'MEDIUM', 'LOW'] })
   @ApiQuery({ name: 'assignedTo', required: false, example: 'analyst@acme.com' })
   @ApiQuery({ name: 'search', required: false, description: 'Search by entityId', example: 'user-123' })
+  @ApiQuery({ name: 'slaBreached', required: false, description: 'Filter by SLA breach status', example: 'true' })
   @ApiQuery({ name: 'page', required: false, example: 1 })
   @ApiQuery({ name: 'limit', required: false, example: 20 })
   @ApiResponse({ status: 200, description: 'Paginated list of cases' })
@@ -40,6 +41,7 @@ export class CaseController {
     @Query('priority') priority?: CasePriority,
     @Query('assignedTo') assignedTo?: string,
     @Query('search') search?: string,
+    @Query('slaBreached') slaBreached?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page = 1,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit = 20,
   ) {
@@ -52,6 +54,7 @@ export class CaseController {
       priority,
       assignedTo,
       search,
+      slaBreached: slaBreached === 'true' ? true : slaBreached === 'false' ? false : undefined,
       page: safePage,
       limit: safeLimit,
     });

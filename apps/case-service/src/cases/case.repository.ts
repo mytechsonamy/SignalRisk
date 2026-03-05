@@ -109,6 +109,12 @@ export class CaseRepository {
         idx++;
       }
 
+      if (params.slaBreached !== undefined) {
+        conditions.push(`sla_breached = $${idx}`);
+        values.push(params.slaBreached);
+        idx++;
+      }
+
       const where = conditions.join(' AND ');
       const limit = Math.min(params.limit, 100);
       const offset = (params.page - 1) * limit;
@@ -256,6 +262,33 @@ export class CaseRepository {
     }
   }
 
+  async findBreachedCases(): Promise<Case[]> {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT * FROM cases
+         WHERE sla_deadline < NOW()
+           AND sla_breached = false
+           AND status != 'CLOSED'`,
+      );
+      return result.rows.map((r) => this.rowToCase(r));
+    } finally {
+      client.release();
+    }
+  }
+
+  async markSlaBreached(caseId: string): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      await client.query(
+        `UPDATE cases SET sla_breached = true, updated_at = NOW() WHERE id = $1`,
+        [caseId],
+      );
+    } finally {
+      client.release();
+    }
+  }
+
   private rowToCase(row: Record<string, unknown>): Case {
     return {
       id: row.id as string,
@@ -270,6 +303,7 @@ export class CaseRepository {
       status: row.status as Case['status'],
       priority: row.priority as Case['priority'],
       slaDeadline: new Date(row.sla_deadline as string),
+      slaBreached: Boolean(row.sla_breached),
       assignedTo: (row.assigned_to as string | null) ?? null,
       resolution: (row.resolution as Case['resolution']) ?? null,
       resolutionNotes: (row.resolution_notes as string | null) ?? null,

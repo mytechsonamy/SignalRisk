@@ -13,6 +13,7 @@ export interface Case {
   status: CaseStatus;
   priority: CasePriority;
   slaDeadline: string;        // ISO datetime
+  slaBreached?: boolean;
   assignedTo: string | null;
   resolution: string | null;
   resolutionNotes: string | null;

@@ -36,6 +36,6 @@ const PG_POOL_TOKEN = 'PG_POOL';
     },
     CaseService,
   ],
-  exports: [CaseService],
+  exports: [CaseService, CaseRepository],
 })
 export class CaseModule {}

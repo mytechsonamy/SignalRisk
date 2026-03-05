@@ -1,0 +1,15 @@
+{
+  "eventIngestion": {
+    "http_req_duration": ["p(95)<200", "p(99)<500"],
+    "http_req_failed": ["rate<0.001"],
+    "http_reqs": ["rate>5000"]
+  },
+  "decisionLatency": {
+    "http_req_duration": ["p(95)<500", "p(99)<1000"],
+    "http_req_failed": ["rate<0.01"]
+  },
+  "rateLimit": {
+    "rate_limited": ["count>0"],
+    "http_req_failed": ["rate<0.5"]
+  }
+}

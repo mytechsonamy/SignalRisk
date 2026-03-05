@@ -14,10 +14,10 @@ export interface DecisionEvent {
 }
 
 export interface WebhookPayload {
-  event: 'decision.block' | 'decision.review';
+  event: 'decision.block' | 'decision.review' | 'case.sla_breach';
   requestId: string;
   merchantId: string;
   outcome: string;
   riskScore: number;
-  timestamp: string;
+  timestamp: string | Date;
 }

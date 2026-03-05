@@ -20,6 +20,7 @@ export interface Case {
   status: CaseStatus;
   priority: CasePriority;
   slaDeadline: Date;        // BLOCK=4h from creation, REVIEW=24h
+  slaBreached: boolean;      // true when SLA deadline has been exceeded
   assignedTo: string | null;
   resolution: CaseResolution | null;
   resolutionNotes: string | null;
@@ -54,6 +55,7 @@ export interface CaseListParams {
   priority?: CasePriority;
   assignedTo?: string;
   search?: string;     // search by entityId
+  slaBreached?: boolean;
   page: number;        // 1-based
   limit: number;       // max 100
 }

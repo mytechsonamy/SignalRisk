@@ -3,6 +3,7 @@ import LoginPage from './pages/LoginPage';
 import OverviewPage from './pages/OverviewPage';
 import CasesPage from './pages/CasesPage';
 import AnalyticsPage from './pages/AnalyticsPage';
+import AdminPage from './pages/AdminPage';
 import NotFoundPage from './pages/NotFoundPage';
 import UnauthorizedPage from './pages/UnauthorizedPage';
 import AppShell from './components/layout/AppShell';
@@ -50,6 +51,14 @@ export default function App() {
             }
           />
           <Route path="analytics" element={<AnalyticsPage />} />
+          <Route
+            path="admin"
+            element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <AdminPage />
+              </ProtectedRoute>
+            }
+          />
         </Route>
 
         <Route path="*" element={<NotFoundPage />} />

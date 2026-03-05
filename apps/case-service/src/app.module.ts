@@ -4,6 +4,7 @@ import configuration from './config/configuration';
 import { CaseModule } from './cases/case.module';
 import { KafkaModule } from './kafka/kafka.module';
 import { HealthModule } from './health/health.module';
+import { SlaModule } from './sla/sla.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { HealthModule } from './health/health.module';
     CaseModule,
     KafkaModule,
     HealthModule,
+    SlaModule,
   ],
 })
 export class AppModule {}
