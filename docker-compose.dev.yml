@@ -1,0 +1,235 @@
+# SignalRisk — Development Overrides
+# Enables hot reload, source mounting, and debug ports for all NestJS services
+#
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+x-dev-overrides: &dev-overrides
+  volumes:
+    - ./libs:/app/libs:cached
+    - ./node_modules:/app/node_modules:cached
+  environment: &dev-env
+    NODE_ENV: development
+    LOG_LEVEL: debug
+    # Enable Node.js inspector for remote debugging
+    NODE_OPTIONS: "--inspect=0.0.0.0:9229"
+
+services:
+  # ---------------------------------------------------------------------------
+  # Application Services — Dev Overrides (hot reload + debug ports)
+  # ---------------------------------------------------------------------------
+
+  api-gateway:
+    <<: *dev-overrides
+    command: ["npx", "nest", "start", "--watch", "api-gateway"]
+    volumes:
+      - ./apps/api-gateway/src:/app/apps/api-gateway/src:cached
+      - ./libs:/app/libs:cached
+    ports:
+      - "3000:3000"
+      - "9200:9229"
+    environment:
+      <<: *dev-env
+      SERVICE_NAME: api-gateway
+      PORT: "3000"
+
+  event-collector:
+    <<: *dev-overrides
+    command: ["npx", "nest", "start", "--watch", "event-collector"]
+    volumes:
+      - ./apps/event-collector/src:/app/apps/event-collector/src:cached
+      - ./libs:/app/libs:cached
+    ports:
+      - "3001:3001"
+      - "9201:9229"
+    environment:
+      <<: *dev-env
+      SERVICE_NAME: event-collector
+      PORT: "3001"
+
+  device-intel-service:
+    <<: *dev-overrides
+    command: ["npx", "nest", "start", "--watch", "device-intel-service"]
+    volumes:
+      - ./apps/device-intel-service/src:/app/apps/device-intel-service/src:cached
+      - ./libs:/app/libs:cached
+    ports:
+      - "3002:3002"
+      - "9202:9229"
+    environment:
+      <<: *dev-env
+      SERVICE_NAME: device-intel-service
+      PORT: "3002"
+
+  velocity-engine:
+    <<: *dev-overrides
+    command: ["npx", "nest", "start", "--watch", "velocity-engine"]
+    volumes:
+      - ./apps/velocity-engine/src:/app/apps/velocity-engine/src:cached
+      - ./libs:/app/libs:cached
+    ports:
+      - "3003:3003"
+      - "9203:9229"
+    environment:
+      <<: *dev-env
+      SERVICE_NAME: velocity-engine
+      PORT: "3003"
+
+  behavioral-intel-service:
+    <<: *dev-overrides
+    command: ["npx", "nest", "start", "--watch", "behavioral-intel-service"]
+    volumes:
+      - ./apps/behavioral-intel-service/src:/app/apps/behavioral-intel-service/src:cached
+      - ./libs:/app/libs:cached
+    ports:
+      - "3004:3004"
+      - "9204:9229"
+    environment:
+      <<: *dev-env
+      SERVICE_NAME: behavioral-intel-service
+      PORT: "3004"
+
+  network-intel-service:
+    <<: *dev-overrides
+    command: ["npx", "nest", "start", "--watch", "network-intel-service"]
+    volumes:
+      - ./apps/network-intel-service/src:/app/apps/network-intel-service/src:cached
+      - ./libs:/app/libs:cached
+    ports:
+      - "3005:3005"
+      - "9205:9229"
+    environment:
+      <<: *dev-env
+      SERVICE_NAME: network-intel-service
+      PORT: "3005"
+
+  rule-engine:
+    <<: *dev-overrides
+    command: ["npx", "nest", "start", "--watch", "rule-engine"]
+    volumes:
+      - ./apps/rule-engine/src:/app/apps/rule-engine/src:cached
+      - ./libs:/app/libs:cached
+    ports:
+      - "3006:3006"
+      - "9206:9229"
+    environment:
+      <<: *dev-env
+      SERVICE_NAME: rule-engine
+      PORT: "3006"
+
+  decision-engine:
+    <<: *dev-overrides
+    command: ["npx", "nest", "start", "--watch", "decision-engine"]
+    volumes:
+      - ./apps/decision-engine/src:/app/apps/decision-engine/src:cached
+      - ./libs:/app/libs:cached
+    ports:
+      - "3007:3007"
+      - "9207:9229"
+    environment:
+      <<: *dev-env
+      SERVICE_NAME: decision-engine
+      PORT: "3007"
+
+  telco-intel-service:
+    <<: *dev-overrides
+    command: ["npx", "nest", "start", "--watch", "telco-intel-service"]
+    volumes:
+      - ./apps/telco-intel-service/src:/app/apps/telco-intel-service/src:cached
+      - ./libs:/app/libs:cached
+    ports:
+      - "3008:3008"
+      - "9208:9229"
+    environment:
+      <<: *dev-env
+      SERVICE_NAME: telco-intel-service
+      PORT: "3008"
+
+  dashboard-api:
+    <<: *dev-overrides
+    command: ["npx", "nest", "start", "--watch", "dashboard-api"]
+    volumes:
+      - ./apps/dashboard-api/src:/app/apps/dashboard-api/src:cached
+      - ./libs:/app/libs:cached
+    ports:
+      - "3010:3010"
+      - "9210:9229"
+    environment:
+      <<: *dev-env
+      SERVICE_NAME: dashboard-api
+      PORT: "3010"
+
+  dashboard-web:
+    volumes:
+      - ./apps/dashboard-web/src:/app/src:cached
+    environment:
+      VITE_API_URL: http://localhost:3010
+
+  case-management-service:
+    <<: *dev-overrides
+    command: ["npx", "nest", "start", "--watch", "case-management-service"]
+    volumes:
+      - ./apps/case-management-service/src:/app/apps/case-management-service/src:cached
+      - ./libs:/app/libs:cached
+    ports:
+      - "3011:3011"
+      - "9211:9229"
+    environment:
+      <<: *dev-env
+      SERVICE_NAME: case-management-service
+      PORT: "3011"
+
+  consent-service:
+    <<: *dev-overrides
+    command: ["npx", "nest", "start", "--watch", "consent-service"]
+    volumes:
+      - ./apps/consent-service/src:/app/apps/consent-service/src:cached
+      - ./libs:/app/libs:cached
+    ports:
+      - "3012:3012"
+      - "9212:9229"
+    environment:
+      <<: *dev-env
+      SERVICE_NAME: consent-service
+      PORT: "3012"
+
+  erasure-service:
+    <<: *dev-overrides
+    command: ["npx", "nest", "start", "--watch", "erasure-service"]
+    volumes:
+      - ./apps/erasure-service/src:/app/apps/erasure-service/src:cached
+      - ./libs:/app/libs:cached
+    ports:
+      - "3013:3013"
+      - "9213:9229"
+    environment:
+      <<: *dev-env
+      SERVICE_NAME: erasure-service
+      PORT: "3013"
+
+  webhook-service:
+    <<: *dev-overrides
+    command: ["npx", "nest", "start", "--watch", "webhook-service"]
+    volumes:
+      - ./apps/webhook-service/src:/app/apps/webhook-service/src:cached
+      - ./libs:/app/libs:cached
+    ports:
+      - "3014:3014"
+      - "9214:9229"
+    environment:
+      <<: *dev-env
+      SERVICE_NAME: webhook-service
+      PORT: "3014"
+
+  auth-service:
+    <<: *dev-overrides
+    command: ["npx", "nest", "start", "--watch", "auth-service"]
+    volumes:
+      - ./apps/auth-service/src:/app/apps/auth-service/src:cached
+      - ./libs:/app/libs:cached
+    ports:
+      - "3015:3015"
+      - "9215:9229"
+    environment:
+      <<: *dev-env
+      SERVICE_NAME: auth-service
+      PORT: "3015"
