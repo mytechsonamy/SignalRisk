@@ -1,0 +1,80 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: signalriskrequiredlabels
+  annotations:
+    description: >-
+      Requires specified labels on Kubernetes resources. Optionally validates
+      label values against a regex pattern.
+spec:
+  crd:
+    spec:
+      names:
+        kind: SignalRiskRequiredLabels
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            labels:
+              description: List of required labels with optional regex validation.
+              type: array
+              items:
+                type: object
+                properties:
+                  key:
+                    description: The label key that must be present.
+                    type: string
+                  allowedRegex:
+                    description: >-
+                      Optional regex pattern. If set, the label value must match.
+                    type: string
+                required:
+                  - key
+            message:
+              description: Custom message to display on violation.
+              type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package signalriskrequiredlabels
+
+        violation[{"msg": msg}] {
+          required := input.parameters.labels[_]
+          not has_label(required.key)
+          msg := get_message(required.key, "missing")
+        }
+
+        violation[{"msg": msg}] {
+          required := input.parameters.labels[_]
+          has_label(required.key)
+          required.allowedRegex != ""
+          value := input.review.object.metadata.labels[required.key]
+          not re_match(required.allowedRegex, value)
+          msg := sprintf(
+            "Label '%s' has value '%s' which does not match allowed pattern '%s'",
+            [required.key, value, required.allowedRegex]
+          )
+        }
+
+        has_label(key) {
+          input.review.object.metadata.labels[key]
+        }
+
+        get_message(key, reason) = msg {
+          input.parameters.message != ""
+          msg := sprintf("%s (label: '%s', reason: %s)", [input.parameters.message, key, reason])
+        }
+
+        get_message(key, reason) = msg {
+          not input.parameters.message
+          msg := sprintf("Required label '%s' is %s on %s '%s'",
+            [key, reason, input.review.kind.kind, input.review.object.metadata.name]
+          )
+        }
+
+        get_message(key, reason) = msg {
+          input.parameters.message == ""
+          msg := sprintf("Required label '%s' is %s on %s '%s'",
+            [key, reason, input.review.kind.kind, input.review.object.metadata.name]
+          )
+        }

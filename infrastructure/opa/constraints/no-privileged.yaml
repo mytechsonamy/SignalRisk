@@ -1,0 +1,29 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: SignalRiskNoPrivileged
+metadata:
+  name: signalrisk-no-privileged
+  annotations:
+    description: >-
+      Block privileged containers across all SignalRisk namespaces.
+      No container should run with escalated privileges. Only NET_BIND_SERVICE
+      is permitted for the API gateway.
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+      - apiGroups: ["apps"]
+        kinds: ["Deployment", "StatefulSet", "DaemonSet", "ReplicaSet"]
+      - apiGroups: ["batch"]
+        kinds: ["Job", "CronJob"]
+    namespaces:
+      - signalrisk-ingestion
+      - signalrisk-detection
+      - signalrisk-alerting
+      - signalrisk-api
+      - signalrisk-ml
+      - signalrisk-data
+  parameters:
+    allowedCapabilities:
+      - "NET_BIND_SERVICE"

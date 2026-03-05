@@ -1,0 +1,103 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: signalrisknamespaceisolation
+  annotations:
+    description: >-
+      Enforces namespace isolation by preventing resources from referencing
+      services, secrets, or config maps in other namespaces. This blocks
+      cross-namespace service references, volume mounts from foreign
+      namespaces, and environment variable references to external namespace
+      resources.
+spec:
+  crd:
+    spec:
+      names:
+        kind: SignalRiskNamespaceIsolation
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            allowedCrossNamespaceTargets:
+              description: >-
+                List of namespace names that are permitted for cross-namespace
+                references (e.g., shared infrastructure namespaces).
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package signalrisknamespaceisolation
+
+        violation[{"msg": msg}] {
+          resource_namespace := input.review.object.metadata.namespace
+          container := input.review.object.spec.containers[_]
+          env := container.env[_]
+          ref := env.valueFrom.secretKeyRef
+          ref.namespace != ""
+          ref.namespace != resource_namespace
+          not ns_allowed(ref.namespace)
+          msg := sprintf(
+            "Container '%s' references secret '%s' in namespace '%s' which violates namespace isolation (resource namespace: '%s')",
+            [container.name, ref.name, ref.namespace, resource_namespace]
+          )
+        }
+
+        violation[{"msg": msg}] {
+          resource_namespace := input.review.object.metadata.namespace
+          container := input.review.object.spec.containers[_]
+          env := container.env[_]
+          ref := env.valueFrom.configMapKeyRef
+          ref.namespace != ""
+          ref.namespace != resource_namespace
+          not ns_allowed(ref.namespace)
+          msg := sprintf(
+            "Container '%s' references configMap '%s' in namespace '%s' which violates namespace isolation (resource namespace: '%s')",
+            [container.name, ref.name, ref.namespace, resource_namespace]
+          )
+        }
+
+        violation[{"msg": msg}] {
+          resource_namespace := input.review.object.metadata.namespace
+          volume := input.review.object.spec.volumes[_]
+          secret := volume.secret
+          secret.namespace != ""
+          secret.namespace != resource_namespace
+          not ns_allowed(secret.namespace)
+          msg := sprintf(
+            "Volume '%s' mounts secret from namespace '%s' which violates namespace isolation (resource namespace: '%s')",
+            [volume.name, secret.namespace, resource_namespace]
+          )
+        }
+
+        violation[{"msg": msg}] {
+          resource_namespace := input.review.object.metadata.namespace
+          volume := input.review.object.spec.volumes[_]
+          cm := volume.configMap
+          cm.namespace != ""
+          cm.namespace != resource_namespace
+          not ns_allowed(cm.namespace)
+          msg := sprintf(
+            "Volume '%s' mounts configMap from namespace '%s' which violates namespace isolation (resource namespace: '%s')",
+            [volume.name, cm.namespace, resource_namespace]
+          )
+        }
+
+        violation[{"msg": msg}] {
+          input.review.kind.kind == "RoleBinding"
+          resource_namespace := input.review.object.metadata.namespace
+          subject := input.review.object.subjects[_]
+          subject.namespace != ""
+          subject.namespace != resource_namespace
+          not ns_allowed(subject.namespace)
+          msg := sprintf(
+            "RoleBinding '%s' references subject '%s' from namespace '%s' which violates namespace isolation (resource namespace: '%s')",
+            [input.review.object.metadata.name, subject.name, subject.namespace, resource_namespace]
+          )
+        }
+
+        ns_allowed(ns) {
+          allowed := input.parameters.allowedCrossNamespaceTargets[_]
+          ns == allowed
+        }

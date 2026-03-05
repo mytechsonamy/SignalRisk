@@ -1,0 +1,90 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: signalriskresourcelimits
+  annotations:
+    description: >-
+      Requires CPU and memory limits (and optionally requests) on all
+      containers. Optionally enforces maximum values to prevent resource
+      hoarding.
+spec:
+  crd:
+    spec:
+      names:
+        kind: SignalRiskResourceLimits
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            requireRequests:
+              description: If true, resource requests must also be set.
+              type: boolean
+            maxCpuLimit:
+              description: >-
+                Maximum CPU limit allowed (e.g., "4"). Leave empty for no max.
+              type: string
+            maxMemoryLimit:
+              description: >-
+                Maximum memory limit allowed (e.g., "8Gi"). Leave empty for no max.
+              type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package signalriskresourcelimits
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          not container.resources.limits.cpu
+          msg := sprintf(
+            "Container '%s' in %s '%s' must specify a CPU limit",
+            [container.name, input.review.kind.kind, input.review.object.metadata.name]
+          )
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          not container.resources.limits.memory
+          msg := sprintf(
+            "Container '%s' in %s '%s' must specify a memory limit",
+            [container.name, input.review.kind.kind, input.review.object.metadata.name]
+          )
+        }
+
+        violation[{"msg": msg}] {
+          input.parameters.requireRequests == true
+          container := input.review.object.spec.containers[_]
+          not container.resources.requests.cpu
+          msg := sprintf(
+            "Container '%s' in %s '%s' must specify a CPU request",
+            [container.name, input.review.kind.kind, input.review.object.metadata.name]
+          )
+        }
+
+        violation[{"msg": msg}] {
+          input.parameters.requireRequests == true
+          container := input.review.object.spec.containers[_]
+          not container.resources.requests.memory
+          msg := sprintf(
+            "Container '%s' in %s '%s' must specify a memory request",
+            [container.name, input.review.kind.kind, input.review.object.metadata.name]
+          )
+        }
+
+        # Init container checks
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.initContainers[_]
+          not container.resources.limits.cpu
+          msg := sprintf(
+            "Init container '%s' in %s '%s' must specify a CPU limit",
+            [container.name, input.review.kind.kind, input.review.object.metadata.name]
+          )
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.initContainers[_]
+          not container.resources.limits.memory
+          msg := sprintf(
+            "Init container '%s' in %s '%s' must specify a memory limit",
+            [container.name, input.review.kind.kind, input.review.object.metadata.name]
+          )
+        }

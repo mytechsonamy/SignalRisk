@@ -1,0 +1,80 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: signalrisknoprivileged
+  annotations:
+    description: >-
+      Blocks containers from running in privileged mode or with dangerous
+      capabilities. Covers containers, init containers, and ephemeral containers.
+spec:
+  crd:
+    spec:
+      names:
+        kind: SignalRiskNoPrivileged
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            allowedCapabilities:
+              description: >-
+                List of Linux capabilities that are permitted. All others
+                are denied if the container requests them.
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package signalrisknoprivileged
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          container.securityContext.privileged == true
+          msg := sprintf(
+            "Container '%s' in %s '%s' is running in privileged mode, which is not allowed",
+            [container.name, input.review.kind.kind, input.review.object.metadata.name]
+          )
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.initContainers[_]
+          container.securityContext.privileged == true
+          msg := sprintf(
+            "Init container '%s' in %s '%s' is running in privileged mode, which is not allowed",
+            [container.name, input.review.kind.kind, input.review.object.metadata.name]
+          )
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.ephemeralContainers[_]
+          container.securityContext.privileged == true
+          msg := sprintf(
+            "Ephemeral container '%s' in %s '%s' is running in privileged mode, which is not allowed",
+            [container.name, input.review.kind.kind, input.review.object.metadata.name]
+          )
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          cap := container.securityContext.capabilities.add[_]
+          not cap_allowed(cap)
+          msg := sprintf(
+            "Container '%s' in %s '%s' requests capability '%s' which is not in the allowed list",
+            [container.name, input.review.kind.kind, input.review.object.metadata.name, cap]
+          )
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.initContainers[_]
+          cap := container.securityContext.capabilities.add[_]
+          not cap_allowed(cap)
+          msg := sprintf(
+            "Init container '%s' in %s '%s' requests capability '%s' which is not in the allowed list",
+            [container.name, input.review.kind.kind, input.review.object.metadata.name, cap]
+          )
+        }
+
+        cap_allowed(cap) {
+          allowed := input.parameters.allowedCapabilities[_]
+          cap == allowed
+        }

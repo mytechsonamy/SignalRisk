@@ -1,0 +1,31 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: SignalRiskRequiredLabels
+metadata:
+  name: signalrisk-required-labels
+  annotations:
+    description: >-
+      All Deployments in SignalRisk namespaces must carry app, version,
+      and team labels for observability, ownership tracking, and incident
+      response routing.
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: ["apps"]
+        kinds: ["Deployment", "StatefulSet", "DaemonSet"]
+    namespaces:
+      - signalrisk-ingestion
+      - signalrisk-detection
+      - signalrisk-alerting
+      - signalrisk-api
+      - signalrisk-ml
+      - signalrisk-data
+  parameters:
+    message: "SignalRisk policy: all workloads must have required labels for observability and incident routing"
+    labels:
+      - key: app
+        allowedRegex: "^signalrisk-[a-z0-9-]+$"
+      - key: version
+        allowedRegex: "^v?[0-9]+\\.[0-9]+\\.[0-9]+.*$"
+      - key: team
+        allowedRegex: "^(platform|detection|ingestion|alerting|ml|data|sre)$"

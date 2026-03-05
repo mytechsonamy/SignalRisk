@@ -1,0 +1,36 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: SignalRiskAllowedRepos
+metadata:
+  name: signalrisk-allowed-repos
+  annotations:
+    description: >-
+      Only permit container images from the SignalRisk ECR registry and
+      approved base images. All services must pull from the private ECR
+      registry to ensure supply chain integrity.
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+      - apiGroups: ["apps"]
+        kinds: ["Deployment", "StatefulSet", "DaemonSet", "ReplicaSet"]
+      - apiGroups: ["batch"]
+        kinds: ["Job", "CronJob"]
+    namespaces:
+      - signalrisk-ingestion
+      - signalrisk-detection
+      - signalrisk-alerting
+      - signalrisk-api
+      - signalrisk-ml
+      - signalrisk-data
+  parameters:
+    repos:
+      # Primary ECR registry for SignalRisk images
+      - "123456789012.dkr.ecr.us-east-1.amazonaws.com/signalrisk/"
+      # Approved base images from ECR mirror
+      - "123456789012.dkr.ecr.us-east-1.amazonaws.com/base/"
+      # AWS managed images (e.g., Fluent Bit, CloudWatch agent)
+      - "602401143452.dkr.ecr.us-east-1.amazonaws.com/"
+      # Datadog agent (approved vendor)
+      - "123456789012.dkr.ecr.us-east-1.amazonaws.com/vendor/datadog/"

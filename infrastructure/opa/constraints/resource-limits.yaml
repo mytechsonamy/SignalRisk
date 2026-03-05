@@ -1,0 +1,30 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: SignalRiskResourceLimits
+metadata:
+  name: signalrisk-resource-limits
+  annotations:
+    description: >-
+      Require CPU and memory limits on all containers in SignalRisk
+      namespaces. This prevents unbounded resource consumption and
+      ensures cluster stability under load.
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+      - apiGroups: ["apps"]
+        kinds: ["Deployment", "StatefulSet", "DaemonSet", "ReplicaSet"]
+      - apiGroups: ["batch"]
+        kinds: ["Job", "CronJob"]
+    namespaces:
+      - signalrisk-ingestion
+      - signalrisk-detection
+      - signalrisk-alerting
+      - signalrisk-api
+      - signalrisk-ml
+      - signalrisk-data
+  parameters:
+    requireRequests: true
+    maxCpuLimit: "4"
+    maxMemoryLimit: "8Gi"

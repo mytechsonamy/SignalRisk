@@ -1,0 +1,58 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: signalriskallowedrepos
+  annotations:
+    description: >-
+      Restricts container images to approved registries. Only images from
+      the specified repository prefixes are permitted.
+spec:
+  crd:
+    spec:
+      names:
+        kind: SignalRiskAllowedRepos
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            repos:
+              description: List of allowed container image repository prefixes.
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package signalriskallowedrepos
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          not image_allowed(container.image)
+          msg := sprintf(
+            "Container '%s' uses image '%s' which is not from an approved registry. Allowed prefixes: %v",
+            [container.name, container.image, input.parameters.repos]
+          )
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.initContainers[_]
+          not image_allowed(container.image)
+          msg := sprintf(
+            "Init container '%s' uses image '%s' which is not from an approved registry. Allowed prefixes: %v",
+            [container.name, container.image, input.parameters.repos]
+          )
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.ephemeralContainers[_]
+          not image_allowed(container.image)
+          msg := sprintf(
+            "Ephemeral container '%s' uses image '%s' which is not from an approved registry. Allowed prefixes: %v",
+            [container.name, container.image, input.parameters.repos]
+          )
+        }
+
+        image_allowed(image) {
+          repo := input.parameters.repos[_]
+          startswith(image, repo)
+        }
