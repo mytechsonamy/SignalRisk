@@ -1,0 +1,112 @@
+groups:
+  - name: signalrisk.decision
+    rules:
+      # Decision latency exceeds 500ms (p95) for 5 minutes
+      - alert: HighDecisionLatency
+        expr: histogram_quantile(0.95, rate(signalrisk_decision_latency_ms_bucket[5m])) > 500
+        for: 5m
+        labels:
+          severity: warning
+          team: fraud-platform
+        annotations:
+          summary: "High fraud decision latency (p95 > 500ms)"
+          description: "Service {{ $labels.service_name }} p95 decision latency is {{ $value }}ms, exceeding the 500ms SLO."
+          runbook_url: "https://wiki.signalrisk.internal/runbooks/high-decision-latency"
+
+      # Decision latency exceeds 1000ms (p99) -- critical
+      - alert: CriticalDecisionLatency
+        expr: histogram_quantile(0.99, rate(signalrisk_decision_latency_ms_bucket[5m])) > 1000
+        for: 2m
+        labels:
+          severity: critical
+          team: fraud-platform
+        annotations:
+          summary: "Critical fraud decision latency (p99 > 1000ms)"
+          description: "Service {{ $labels.service_name }} p99 decision latency is {{ $value }}ms. Immediate action required."
+
+  - name: signalrisk.errors
+    rules:
+      # Error rate exceeds 1% of total events
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(signalrisk_errors_total[5m])) by (service)
+            /
+            sum(rate(signalrisk_events_throughput_total[5m])) by (service)
+          ) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          team: fraud-platform
+        annotations:
+          summary: "High error rate (> 1%)"
+          description: "Service {{ $labels.service }} error rate is {{ $value | humanizePercentage }}, exceeding the 1% threshold."
+
+      # Error rate exceeds 5% -- critical
+      - alert: CriticalErrorRate
+        expr: |
+          (
+            sum(rate(signalrisk_errors_total[5m])) by (service)
+            /
+            sum(rate(signalrisk_events_throughput_total[5m])) by (service)
+          ) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+          team: fraud-platform
+        annotations:
+          summary: "Critical error rate (> 5%)"
+          description: "Service {{ $labels.service }} error rate is {{ $value | humanizePercentage }}. Immediate investigation required."
+
+  - name: signalrisk.kafka
+    rules:
+      # Kafka consumer lag exceeds 10,000 messages
+      - alert: HighKafkaConsumerLag
+        expr: kafka_consumer_group_lag > 10000
+        for: 5m
+        labels:
+          severity: warning
+          team: fraud-platform
+        annotations:
+          summary: "High Kafka consumer lag (> 10K messages)"
+          description: "Consumer group {{ $labels.group }} on topic {{ $labels.topic }} has a lag of {{ $value }} messages."
+
+      # Kafka consumer lag exceeds 50,000 messages -- critical
+      - alert: CriticalKafkaConsumerLag
+        expr: kafka_consumer_group_lag > 50000
+        for: 2m
+        labels:
+          severity: critical
+          team: fraud-platform
+        annotations:
+          summary: "Critical Kafka consumer lag (> 50K messages)"
+          description: "Consumer group {{ $labels.group }} on topic {{ $labels.topic }} has a lag of {{ $value }} messages. Risk of processing delays."
+
+  - name: signalrisk.infrastructure
+    rules:
+      # Service is down (no metrics for 2 minutes)
+      - alert: ServiceDown
+        expr: up{job=~"decision-engine|event-ingestion|auth-service|rule-engine"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          team: fraud-platform
+        annotations:
+          summary: "SignalRisk service is down"
+          description: "{{ $labels.job }} instance {{ $labels.instance }} has been unreachable for 2 minutes."
+
+      # High memory usage (> 85%)
+      - alert: HighMemoryUsage
+        expr: |
+          (
+            container_memory_usage_bytes{namespace="signalrisk"}
+            /
+            container_spec_memory_limit_bytes{namespace="signalrisk"}
+          ) > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          team: fraud-platform
+        annotations:
+          summary: "High memory usage (> 85%)"
+          description: "Container {{ $labels.container }} in pod {{ $labels.pod }} is using {{ $value | humanizePercentage }} of its memory limit."

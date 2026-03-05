@@ -1,0 +1,30 @@
+{
+  "name": "@signalrisk/telemetry",
+  "version": "1.0.0",
+  "description": "Shared OpenTelemetry instrumentation for SignalRisk services",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/sdk-node": "^0.52.0",
+    "@opentelemetry/sdk-trace-node": "^1.25.0",
+    "@opentelemetry/sdk-metrics": "^1.25.0",
+    "@opentelemetry/exporter-trace-otlp-grpc": "^0.52.0",
+    "@opentelemetry/exporter-metrics-otlp-grpc": "^0.52.0",
+    "@opentelemetry/exporter-prometheus": "^0.52.0",
+    "@opentelemetry/instrumentation-http": "^0.52.0",
+    "@opentelemetry/instrumentation-nestjs-core": "^0.39.0",
+    "@opentelemetry/instrumentation-pg": "^0.43.0",
+    "@opentelemetry/instrumentation-ioredis": "^0.42.0",
+    "@opentelemetry/resources": "^1.25.0",
+    "@opentelemetry/semantic-conventions": "^1.25.0",
+    "pino": "^9.2.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}
