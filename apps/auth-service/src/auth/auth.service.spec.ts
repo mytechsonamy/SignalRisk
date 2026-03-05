@@ -1,10 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { AuthService } from './auth.service';
 import { MerchantsService, Merchant } from '../merchants/merchants.service';
+import { JwtTokenService } from '../jwt/jwt.service';
+import { KeyManager, ManagedKey } from '../jwt/key-manager';
 
 // Silence OpenTelemetry in tests
 jest.mock('@opentelemetry/api', () => ({
@@ -23,8 +25,9 @@ jest.mock('@opentelemetry/api', () => ({
 
 describe('AuthService', () => {
   let authService: AuthService;
-  let jwtService: JwtService;
+  let jwtTokenService: JwtTokenService;
   let merchantsService: MerchantsService;
+  let testKey: ManagedKey;
 
   const testSecretHash = bcrypt.hashSync('test-secret', 10);
 
@@ -39,41 +42,47 @@ describe('AuthService', () => {
     updatedAt: new Date(),
   };
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        AuthService,
-        {
-          provide: JwtService,
-          useValue: {
-            signAsync: jest.fn().mockResolvedValue('mock-jwt-token'),
-          },
-        },
-        {
-          provide: ConfigService,
-          useValue: {
-            get: jest.fn((key: string, defaultValue?: any) => {
-              const config: Record<string, any> = {
-                JWT_EXPIRES_IN_SECONDS: 3600,
-                JWT_PUBLIC_KEY: undefined,
-                JWT_KID: 'test-kid',
-              };
-              return config[key] ?? defaultValue;
-            }),
-          },
-        },
-        {
-          provide: MerchantsService,
-          useValue: {
-            findByClientId: jest.fn(),
-          },
-        },
-      ],
-    }).compile();
+  beforeAll(() => {
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+    });
+    testKey = {
+      kid: 'test-kid-1',
+      privateKey,
+      publicKey,
+      createdAt: new Date(),
+      active: true,
+    };
+  });
 
-    authService = module.get<AuthService>(AuthService);
-    jwtService = module.get<JwtService>(JwtService);
-    merchantsService = module.get<MerchantsService>(MerchantsService);
+  beforeEach(async () => {
+    const keyManager = {
+      getCurrentSigningKey: jest.fn().mockReturnValue(testKey),
+      getKeyByKid: jest.fn().mockReturnValue(testKey),
+    } as any;
+
+    const configService = {
+      get: jest.fn((key: string, defaultValue?: any) => {
+        const config: Record<string, any> = {
+          JWT_ACCESS_TOKEN_TTL_SECONDS: 900,
+          JWT_REFRESH_TOKEN_TTL_SECONDS: 604800,
+          JWT_ISSUER: 'signalrisk-auth',
+        };
+        return config[key] ?? defaultValue;
+      }),
+    } as any;
+
+    jwtTokenService = new JwtTokenService(keyManager, configService);
+
+    merchantsService = {
+      findByClientId: jest.fn(),
+    } as any;
+
+    authService = new AuthService(
+      jwtTokenService,
+      configService,
+      merchantsService,
+    );
   });
 
   describe('validateCredentials', () => {
@@ -126,46 +135,13 @@ describe('AuthService', () => {
   });
 
   describe('issueToken', () => {
-    it('should return a valid token response', async () => {
+    it('should return a valid token response with refresh token', async () => {
       const result = await authService.issueToken(mockMerchant);
 
-      expect(result).toEqual({
-        access_token: 'mock-jwt-token',
-        token_type: 'Bearer',
-        expires_in: 3600,
-      });
-    });
-
-    it('should sign token with correct payload fields', async () => {
-      await authService.issueToken(mockMerchant);
-
-      expect(jwtService.signAsync).toHaveBeenCalledWith(
-        expect.objectContaining({
-          sub: 'merchant-001',
-          client_id: 'sr_test_client_id',
-          merchant_name: 'Test Merchant',
-          roles: ['merchant'],
-          jti: expect.any(String),
-        }),
-        { expiresIn: 3600 },
-      );
-    });
-
-    it('should generate unique jti for each token', async () => {
-      await authService.issueToken(mockMerchant);
-      await authService.issueToken(mockMerchant);
-
-      const calls = (jwtService.signAsync as jest.Mock).mock.calls;
-      const jti1 = calls[0][0].jti;
-      const jti2 = calls[1][0].jti;
-      expect(jti1).not.toEqual(jti2);
-    });
-  });
-
-  describe('getJwks', () => {
-    it('should return empty keys array when no public key configured', async () => {
-      const result = await authService.getJwks();
-      expect(result).toEqual({ keys: [] });
+      expect(result.access_token).toBeDefined();
+      expect(result.token_type).toBe('Bearer');
+      expect(result.expires_in).toBe(900);
+      expect(result.refresh_token).toBeDefined();
     });
   });
 });

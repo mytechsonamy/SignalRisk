@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { JwtTokenModule } from './jwt/jwt.module';
 import { AuthModule } from './auth/auth.module';
 import { MerchantsModule } from './merchants/merchants.module';
 import { HealthModule } from './health/health.module';
@@ -18,6 +19,7 @@ import { HealthModule } from './health/health.module';
         limit: 30,
       },
     ]),
+    JwtTokenModule,
     AuthModule,
     MerchantsModule,
     HealthModule,

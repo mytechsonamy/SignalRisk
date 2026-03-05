@@ -2,12 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
+import { KeyManager } from '../../jwt/key-manager';
 
 export interface JwtPayload {
   sub: string;
-  client_id: string;
-  merchant_name: string;
-  roles: string[];
+  merchant_id: string;
+  role: string;
+  permissions: string[];
   jti: string;
   iat: number;
   exp: number;
@@ -16,11 +17,20 @@ export interface JwtPayload {
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly keyManager: KeyManager,
+  ) {
+    // Use the current signing key's public key for verification
+    const signingKey = keyManager.getCurrentSigningKey();
+    const publicKeyPem = signingKey.publicKey
+      .export({ type: 'spki', format: 'pem' })
+      .toString();
+
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('JWT_PUBLIC_KEY'),
+      secretOrKey: publicKeyPem,
       algorithms: ['RS256'],
       issuer: configService.get<string>('JWT_ISSUER', 'signalrisk-auth'),
     });
@@ -28,10 +38,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
   validate(payload: JwtPayload) {
     return {
-      merchantId: payload.sub,
-      clientId: payload.client_id,
-      merchantName: payload.merchant_name,
-      roles: payload.roles,
+      userId: payload.sub,
+      merchantId: payload.merchant_id,
+      role: payload.role,
+      permissions: payload.permissions,
       jti: payload.jti,
     };
   }
