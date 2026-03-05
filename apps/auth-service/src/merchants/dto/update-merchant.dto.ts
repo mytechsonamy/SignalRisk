@@ -1,8 +1,7 @@
 import {
-  IsArray,
+  IsBoolean,
   IsEnum,
   IsInt,
-  IsNotEmpty,
   IsOptional,
   IsString,
   IsUrl,
@@ -10,10 +9,10 @@ import {
   Min,
 } from 'class-validator';
 
-export class CreateMerchantDto {
+export class UpdateMerchantDto {
   @IsString()
-  @IsNotEmpty()
-  name: string;
+  @IsOptional()
+  name?: string;
 
   @IsString()
   @IsOptional()
@@ -30,9 +29,7 @@ export class CreateMerchantDto {
   @IsOptional()
   tier?: 'default' | 'burst';
 
-  // Legacy field kept for backwards compatibility with existing tests
-  @IsArray()
-  @IsString({ each: true })
+  @IsBoolean()
   @IsOptional()
-  roles?: string[];
+  isActive?: boolean;
 }

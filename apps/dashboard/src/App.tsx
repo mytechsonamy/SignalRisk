@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import OverviewPage from './pages/OverviewPage';
 import CasesPage from './pages/CasesPage';
+import AnalyticsPage from './pages/AnalyticsPage';
 import NotFoundPage from './pages/NotFoundPage';
 import UnauthorizedPage from './pages/UnauthorizedPage';
 import AppShell from './components/layout/AppShell';
@@ -48,6 +49,7 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+          <Route path="analytics" element={<AnalyticsPage />} />
         </Route>
 
         <Route path="*" element={<NotFoundPage />} />
