@@ -16,7 +16,8 @@
     "kafkajs": "^2.2.4",
     "ioredis": "^5.3.2",
     "reflect-metadata": "^0.1.13",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "@nestjs/swagger": "^7.3.0"
   },
   "devDependencies": {
     "@nestjs/testing": "^10.0.0",

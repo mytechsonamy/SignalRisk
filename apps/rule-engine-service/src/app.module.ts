@@ -1,13 +1,15 @@
 import { Module, OnModuleInit, Logger } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { DslModule } from './dsl/dsl.module';
 import { RegistryModule } from './registry/registry.module';
 import { EvaluationModule } from './evaluation/evaluation.module';
+import { ChargebackModule } from './chargeback/chargeback.module';
 import { RuleRegistryService } from './registry/rule-registry.service';
 
 @Module({
-  imports: [DslModule, RegistryModule, EvaluationModule],
+  imports: [ConfigModule.forRoot({ isGlobal: true }), DslModule, RegistryModule, EvaluationModule, ChargebackModule],
 })
 export class AppModule implements OnModuleInit {
   private readonly logger = new Logger(AppModule.name);

@@ -1,0 +1,56 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: signalrisk-ingress
+  namespace: signalrisk
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: api.signalrisk.io
+    http:
+      paths:
+      - path: /v1/events
+        pathType: Prefix
+        backend:
+          service:
+            name: event-collector
+            port:
+              number: 3002
+      - path: /v1/decisions
+        pathType: Prefix
+        backend:
+          service:
+            name: decision-service
+            port:
+              number: 3009
+      - path: /auth
+        pathType: Prefix
+        backend:
+          service:
+            name: auth-service
+            port:
+              number: 3001
+      - path: /v1/cases
+        pathType: Prefix
+        backend:
+          service:
+            name: case-service
+            port:
+              number: 3010
+      - path: /v1/webhooks
+        pathType: Prefix
+        backend:
+          service:
+            name: webhook-service
+            port:
+              number: 3011
+  tls:
+  - hosts:
+    - api.signalrisk.io
+    secretName: signalrisk-tls

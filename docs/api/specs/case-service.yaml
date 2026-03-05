@@ -1,0 +1,359 @@
+openapi: "3.0.0"
+info:
+  title: SignalRisk Case Service API
+  version: "1.0.0"
+  description: |
+    Fraud case management — auto-created from REVIEW and BLOCK decisions.
+    Provides case listing with filters, individual retrieval, status updates,
+    resolution recording, and bulk actions for analyst workflows.
+servers:
+  - url: https://api.signalrisk.io
+    description: Production
+  - url: http://localhost:3010
+    description: Local development
+security:
+  - BearerAuth: []
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    RiskFactor:
+      type: object
+      properties:
+        signal:
+          type: string
+          example: device.trustScore
+        value:
+          oneOf:
+            - type: number
+            - type: boolean
+            - type: string
+          example: 15
+        contribution:
+          type: integer
+          example: 60
+        description:
+          type: string
+          example: Device trust score is very low — unrecognized device
+    Case:
+      type: object
+      properties:
+        id:
+          type: string
+          example: case-abc123
+        merchantId:
+          type: string
+          example: merchant-001
+        decisionId:
+          type: string
+          description: requestId from decision-service
+          example: req-unique-id-001
+        entityId:
+          type: string
+          example: user-abc123
+        action:
+          type: string
+          enum: [REVIEW, BLOCK]
+          example: BLOCK
+        riskScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+          example: 88
+        riskFactors:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskFactor'
+        status:
+          type: string
+          enum: [OPEN, IN_REVIEW, RESOLVED, ESCALATED]
+          example: OPEN
+        priority:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+          example: HIGH
+        slaDeadline:
+          type: string
+          format: date-time
+          description: BLOCK cases have 4h SLA, REVIEW cases have 24h SLA
+          example: "2026-03-06T16:00:00.000Z"
+        assignedTo:
+          type: string
+          nullable: true
+          example: analyst@acme.com
+        resolution:
+          type: string
+          enum: [FRAUD, LEGITIMATE, INCONCLUSIVE]
+          nullable: true
+          example: null
+        resolutionNotes:
+          type: string
+          nullable: true
+          example: null
+        resolvedAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-03-06T12:00:00.000Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-03-06T12:00:00.000Z"
+    CaseList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Case'
+        total:
+          type: integer
+          example: 42
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 20
+    UpdateCase:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [OPEN, IN_REVIEW, RESOLVED, ESCALATED]
+          example: RESOLVED
+        assignedTo:
+          type: string
+          nullable: true
+          example: analyst@acme.com
+        resolution:
+          type: string
+          enum: [FRAUD, LEGITIMATE, INCONCLUSIVE]
+          nullable: true
+          example: FRAUD
+        resolutionNotes:
+          type: string
+          nullable: true
+          example: Verified fraudulent transaction via manual review
+    BulkAction:
+      type: object
+      required:
+        - ids
+        - action
+      properties:
+        ids:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          example: ["case-abc123", "case-def456"]
+        action:
+          type: string
+          enum: [RESOLVE, ESCALATE, ASSIGN]
+          example: RESOLVE
+        assignedTo:
+          type: string
+          description: Required when action is ASSIGN
+          example: analyst@acme.com
+paths:
+  /v1/cases:
+    get:
+      summary: List fraud cases for a merchant with optional filters
+      operationId: listCases
+      tags:
+        - cases
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: merchantId
+          in: query
+          required: true
+          schema:
+            type: string
+          example: merchant-001
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [OPEN, IN_REVIEW, RESOLVED, ESCALATED]
+        - name: priority
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [HIGH, MEDIUM, LOW]
+        - name: assignedTo
+          in: query
+          required: false
+          schema:
+            type: string
+          example: analyst@acme.com
+        - name: search
+          in: query
+          required: false
+          description: Search by entityId
+          schema:
+            type: string
+          example: user-abc123
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          example: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+      responses:
+        '200':
+          description: Paginated list of cases
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaseList'
+
+  /v1/cases/bulk:
+    post:
+      summary: Perform a bulk action on multiple cases
+      operationId: bulkCaseAction
+      tags:
+        - cases
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: merchantId
+          in: query
+          required: true
+          schema:
+            type: string
+          example: merchant-001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkAction'
+            examples:
+              bulkResolve:
+                summary: Resolve multiple cases as fraud
+                value:
+                  ids: ["case-abc123", "case-def456"]
+                  action: RESOLVE
+              bulkAssign:
+                summary: Assign cases to an analyst
+                value:
+                  ids: ["case-abc123"]
+                  action: ASSIGN
+                  assignedTo: analyst@acme.com
+      responses:
+        '200':
+          description: Bulk action result with affected case IDs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  affected:
+                    type: integer
+                    example: 2
+                  ids:
+                    type: array
+                    items:
+                      type: string
+                    example: ["case-abc123", "case-def456"]
+        '400':
+          description: Invalid action or empty IDs array
+
+  /v1/cases/{id}:
+    get:
+      summary: Get a single fraud case by ID
+      operationId: getCase
+      tags:
+        - cases
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: case-abc123
+        - name: merchantId
+          in: query
+          required: true
+          schema:
+            type: string
+          example: merchant-001
+      responses:
+        '200':
+          description: Case record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Case'
+        '404':
+          description: Case not found
+    patch:
+      summary: Update a case status, assignment, or resolution
+      operationId: updateCase
+      tags:
+        - cases
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: case-abc123
+        - name: merchantId
+          in: query
+          required: true
+          schema:
+            type: string
+          example: merchant-001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCase'
+            examples:
+              resolve:
+                summary: Resolve as fraud
+                value:
+                  status: RESOLVED
+                  resolution: FRAUD
+                  resolutionNotes: Verified fraudulent transaction via manual review
+              assign:
+                summary: Assign to analyst
+                value:
+                  status: IN_REVIEW
+                  assignedTo: analyst@acme.com
+      responses:
+        '200':
+          description: Updated case record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Case'
+        '404':
+          description: Case not found

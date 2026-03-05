@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: telco-intel-service
+  namespace: signalrisk
+  labels:
+    app: telco-intel-service
+    version: "1.0.0"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: telco-intel-service
+  template:
+    metadata:
+      labels:
+        app: telco-intel-service
+        version: "1.0.0"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+      containers:
+      - name: telco-intel-service
+        image: signalrisk/telco-intel-service:latest
+        ports:
+        - containerPort: 3007
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+        envFrom:
+        - configMapRef:
+            name: signalrisk-config
+        - secretRef:
+            name: signalrisk-secrets
+        env:
+        - name: SERVICE_NAME
+          value: "telco-intel-service"
+        - name: PORT
+          value: "3007"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3007
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 3007
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          failureThreshold: 3

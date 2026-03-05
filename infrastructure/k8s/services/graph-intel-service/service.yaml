@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: graph-intel-service
+  namespace: signalrisk
+  labels:
+    app: graph-intel-service
+spec:
+  selector:
+    app: graph-intel-service
+  ports:
+  - port: 3012
+    targetPort: 3012
+    protocol: TCP
+  type: ClusterIP

@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: behavioral-service
+  namespace: signalrisk
+  labels:
+    app: behavioral-service
+spec:
+  selector:
+    app: behavioral-service
+  ports:
+  - port: 3005
+    targetPort: 3005
+    protocol: TCP
+  type: ClusterIP

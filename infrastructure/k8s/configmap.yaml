@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: signalrisk-config
+  namespace: signalrisk
+data:
+  NODE_ENV: "production"
+  LOG_LEVEL: "info"
+  KAFKA_BROKER: "kafka:9092"
+  KAFKA_BROKERS: "kafka:9092"
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  POSTGRES_HOST: "postgres"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "signalrisk"
+  DATABASE_HOST: "postgres"
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: "signalrisk"
+  PGBOUNCER_HOST: "pgbouncer"
+  PGBOUNCER_PORT: "6432"
+  AUTH_SERVICE_URL: "http://auth-service:3001"

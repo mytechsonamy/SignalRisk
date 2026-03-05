@@ -19,11 +19,13 @@ import {
   Headers,
 } from '@nestjs/common';
 import { Response } from 'express';
+import { ApiOperation, ApiResponse, ApiTags, ApiHeader } from '@nestjs/swagger';
 import { DecisionOrchestratorService } from './decision-orchestrator.service';
 import { IdempotencyService } from '../idempotency/idempotency.service';
 import { DecisionStoreService } from './decision-store.service';
 import { DecisionRequest, DecisionResult } from './decision.types';
 
+@ApiTags('decisions')
 @Controller()
 export class DecisionController {
   private readonly logger = new Logger(DecisionController.name);
@@ -34,6 +36,12 @@ export class DecisionController {
     private readonly store: DecisionStoreService,
   ) {}
 
+  @ApiOperation({ summary: 'Request a fraud decision for a transaction or entity' })
+  @ApiHeader({ name: 'Authorization', description: 'Bearer <access-token>', required: true })
+  @ApiHeader({ name: 'X-Request-ID', description: 'Idempotency key — identical requestIds return cached results', required: false })
+  @ApiResponse({ status: 202, description: 'Decision result: ALLOW, REVIEW, or BLOCK with risk score and factors' })
+  @ApiResponse({ status: 400, description: 'Missing required fields' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   @Post('/v1/decisions')
   @HttpCode(202)
   async decide(

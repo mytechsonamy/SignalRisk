@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: decision-service
+  namespace: signalrisk
+  labels:
+    app: decision-service
+spec:
+  selector:
+    app: decision-service
+  ports:
+  - port: 3009
+    targetPort: 3009
+    protocol: TCP
+  type: ClusterIP

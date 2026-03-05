@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: signalrisk
+  labels:
+    app: kafka
+    tier: infrastructure
+spec:
+  type: ExternalName
+  externalName: kafka.signalrisk-infra.svc.cluster.local
+  ports:
+  - name: broker
+    port: 9092
+    targetPort: 9092
+---
+# If Kafka is running outside the cluster, use this EndpointSlice approach instead.
+# Update externalName above to point to your managed Kafka broker hostname.
+# For self-managed Kafka in the same cluster, reference the kafka namespace service directly.

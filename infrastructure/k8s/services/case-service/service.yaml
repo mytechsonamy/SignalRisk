@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: case-service
+  namespace: signalrisk
+  labels:
+    app: case-service
+spec:
+  selector:
+    app: case-service
+  ports:
+  - port: 3010
+    targetPort: 3010
+    protocol: TCP
+  type: ClusterIP

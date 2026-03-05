@@ -7,6 +7,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import {
   TokenRequestDto,
@@ -19,6 +20,7 @@ import {
 } from './dto';
 import { Public } from './decorators/public.decorator';
 
+@ApiTags('auth')
 @Controller('v1/auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
@@ -27,6 +29,10 @@ export class AuthController {
    * POST /v1/auth/token
    * Issue JWT via client_credentials or password grant.
    */
+  @ApiOperation({ summary: 'Issue a JWT access token (OAuth2 token endpoint)' })
+  @ApiResponse({ status: 200, description: 'Token issued successfully', type: TokenResponseDto })
+  @ApiResponse({ status: 400, description: 'Invalid grant type or missing required fields' })
+  @ApiResponse({ status: 401, description: 'Invalid client credentials' })
   @Post('token')
   @Public()
   @HttpCode(HttpStatus.OK)
@@ -77,6 +83,9 @@ export class AuthController {
    * POST /v1/auth/token/refresh
    * Refresh an access token using a refresh token.
    */
+  @ApiOperation({ summary: 'Refresh an access token using a refresh token' })
+  @ApiResponse({ status: 200, description: 'New access token issued', type: TokenResponseDto })
+  @ApiResponse({ status: 401, description: 'Invalid or expired refresh token' })
   @Post('token/refresh')
   @Public()
   @HttpCode(HttpStatus.OK)
@@ -91,6 +100,9 @@ export class AuthController {
    * POST /v1/auth/token/revoke
    * Revoke a refresh token (RFC 7009).
    */
+  @ApiOperation({ summary: 'Revoke a token (RFC 7009)' })
+  @ApiResponse({ status: 200, description: 'Token revoked successfully' })
+  @ApiResponse({ status: 400, description: 'Missing token field' })
   @Post('token/revoke')
   @Public()
   @HttpCode(HttpStatus.OK)
@@ -102,6 +114,8 @@ export class AuthController {
    * POST /v1/auth/token/introspect
    * Token introspection (RFC 7662).
    */
+  @ApiOperation({ summary: 'Introspect a token to check its validity and claims (RFC 7662)' })
+  @ApiResponse({ status: 200, description: 'Introspection result', type: IntrospectResponseDto })
   @Post('token/introspect')
   @Public()
   @HttpCode(HttpStatus.OK)

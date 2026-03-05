@@ -19,10 +19,12 @@ import {
   UseGuards,
   ValidationPipe,
 } from '@nestjs/common';
+import { ApiOperation, ApiResponse, ApiTags, ApiHeader } from '@nestjs/swagger';
 import { EventsService, IngestResult } from './events.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { BackpressureGuard } from '../backpressure/backpressure.guard';
 
+@ApiTags('events')
 @Controller('v1/events')
 export class EventsController {
   private readonly logger = new Logger(EventsController.name);
@@ -31,6 +33,12 @@ export class EventsController {
     private readonly eventsService: EventsService,
   ) {}
 
+  @ApiOperation({ summary: 'Ingest one or more fraud detection events' })
+  @ApiHeader({ name: 'Authorization', description: 'Bearer <api-key> or ApiKey <api-key>', required: true })
+  @ApiResponse({ status: 202, description: 'Events accepted for processing' })
+  @ApiResponse({ status: 400, description: 'Empty events array or invalid schema' })
+  @ApiResponse({ status: 401, description: 'Missing or invalid Authorization header' })
+  @ApiResponse({ status: 429, description: 'Rate limit exceeded — see Retry-After header' })
   @Post()
   @HttpCode(HttpStatus.ACCEPTED)
   @UseGuards(BackpressureGuard)

@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: device-intel-service
+  namespace: signalrisk
+  labels:
+    app: device-intel-service
+spec:
+  selector:
+    app: device-intel-service
+  ports:
+  - port: 3003
+    targetPort: 3003
+    protocol: TCP
+  type: ClusterIP

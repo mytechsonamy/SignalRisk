@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: network-intel-service
+  namespace: signalrisk
+  labels:
+    app: network-intel-service
+    version: "1.0.0"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: network-intel-service
+  template:
+    metadata:
+      labels:
+        app: network-intel-service
+        version: "1.0.0"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+      containers:
+      - name: network-intel-service
+        image: signalrisk/network-intel-service:latest
+        ports:
+        - containerPort: 3006
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+        envFrom:
+        - configMapRef:
+            name: signalrisk-config
+        - secretRef:
+            name: signalrisk-secrets
+        env:
+        - name: SERVICE_NAME
+          value: "network-intel-service"
+        - name: PORT
+          value: "3006"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3006
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 3006
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          failureThreshold: 3

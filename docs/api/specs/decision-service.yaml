@@ -1,0 +1,191 @@
+openapi: "3.0.0"
+info:
+  title: SignalRisk Decision Service API
+  version: "1.0.0"
+  description: |
+    Orchestrates intelligence signals (device, velocity, behavioral, telco) into
+    ALLOW, REVIEW, or BLOCK fraud decisions with a risk score and contributing factors.
+    Decisions are idempotent — repeat calls with the same requestId return cached results.
+servers:
+  - url: https://api.signalrisk.io
+    description: Production
+  - url: http://localhost:3009
+    description: Local development
+security:
+  - BearerAuth: []
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    DecisionRequest:
+      type: object
+      required:
+        - requestId
+        - merchantId
+        - entityId
+      properties:
+        requestId:
+          type: string
+          description: Idempotency key — identical requestIds return cached results
+          example: req-unique-id-001
+        merchantId:
+          type: string
+          example: merchant-001
+        entityId:
+          type: string
+          description: User ID or transaction ID used for velocity lookup
+          example: user-abc123
+        deviceId:
+          type: string
+          example: device-abc123
+        sessionId:
+          type: string
+          example: session-xyz789
+        ip:
+          type: string
+          format: ipv4
+          example: 192.168.1.1
+        msisdn:
+          type: string
+          description: E.164 format phone number
+          example: "+905551234567"
+        billingCountry:
+          type: string
+          example: TR
+        amount:
+          type: number
+          example: 99.99
+    RiskFactor:
+      type: object
+      properties:
+        signal:
+          type: string
+          description: Signal identifier
+          example: device.trustScore
+        value:
+          oneOf:
+            - type: number
+            - type: boolean
+            - type: string
+          example: 85
+        contribution:
+          type: integer
+          description: How much this factor contributed to the overall risk score (0-100)
+          example: 30
+        description:
+          type: string
+          example: Device trust score is high — familiar device
+    DecisionResult:
+      type: object
+      properties:
+        requestId:
+          type: string
+          example: req-unique-id-001
+        merchantId:
+          type: string
+          example: merchant-001
+        action:
+          type: string
+          enum: [ALLOW, REVIEW, BLOCK]
+          example: ALLOW
+        riskScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Composite risk score from 0 (safe) to 100 (high risk)
+          example: 23
+        riskFactors:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskFactor'
+        appliedRules:
+          type: array
+          items:
+            type: string
+          description: Rule IDs that matched during evaluation
+          example: ["rule-high-velocity", "rule-new-device"]
+        latencyMs:
+          type: integer
+          description: Total processing time in milliseconds
+          example: 87
+        cached:
+          type: boolean
+          description: True if served from idempotency cache
+          example: false
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-03-06T12:00:00.000Z"
+paths:
+  /v1/decisions:
+    post:
+      summary: Request a fraud decision for a transaction or entity
+      operationId: requestDecision
+      tags:
+        - decisions
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: X-Request-ID
+          in: header
+          required: false
+          description: Idempotency key — echoed back in the X-Request-ID response header
+          schema:
+            type: string
+          example: req-unique-id-001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+            example:
+              requestId: req-unique-id-001
+              merchantId: merchant-001
+              entityId: user-abc123
+              deviceId: device-abc123
+              sessionId: session-xyz789
+              ip: 192.168.1.1
+              msisdn: "+905551234567"
+              amount: 99.99
+      responses:
+        '202':
+          description: Decision result — ALLOW, REVIEW, or BLOCK with risk score and factors
+          headers:
+            X-Request-ID:
+              description: Echoes the requestId from the request body or X-Request-ID header
+              schema:
+                type: string
+            X-Latency-Ms:
+              description: Server-side processing latency in milliseconds
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionResult'
+              example:
+                requestId: req-unique-id-001
+                merchantId: merchant-001
+                action: ALLOW
+                riskScore: 23
+                riskFactors:
+                  - signal: device.trustScore
+                    value: 85
+                    contribution: 30
+                    description: Device trust score is high — familiar device
+                  - signal: velocity.txCount1h
+                    value: 2
+                    contribution: 10
+                    description: Transaction velocity is low
+                appliedRules: []
+                latencyMs: 87
+                cached: false
+                createdAt: "2026-03-06T12:00:00.000Z"
+        '400':
+          description: Missing required fields (requestId, merchantId, or entityId)
+        '401':
+          description: Unauthorized — missing or invalid Bearer token

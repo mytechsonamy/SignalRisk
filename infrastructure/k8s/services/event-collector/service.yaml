@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: event-collector
+  namespace: signalrisk
+  labels:
+    app: event-collector
+spec:
+  selector:
+    app: event-collector
+  ports:
+  - port: 3002
+    targetPort: 3002
+    protocol: TCP
+  type: ClusterIP

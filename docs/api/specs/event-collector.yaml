@@ -1,0 +1,200 @@
+openapi: "3.0.0"
+info:
+  title: SignalRisk Event Collector API
+  version: "1.0.0"
+  description: Real-time event ingestion endpoint for fraud signal collection
+servers:
+  - url: https://api.signalrisk.io
+    description: Production
+  - url: http://localhost:3001
+    description: Local development
+security:
+  - BearerAuth: []
+  - ApiKeyAuth: []
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+  schemas:
+    Event:
+      type: object
+      required:
+        - merchantId
+        - deviceId
+        - sessionId
+        - type
+        - payload
+      properties:
+        merchantId:
+          type: string
+          example: merchant-001
+        deviceId:
+          type: string
+          example: device-abc123
+        sessionId:
+          type: string
+          example: session-xyz789
+        type:
+          type: string
+          enum: [PAGE_VIEW, CLICK, FORM_SUBMIT, LOGIN, SIGNUP, PAYMENT, CUSTOM]
+          example: PAYMENT
+        payload:
+          type: object
+          additionalProperties: true
+          example:
+            amount: 99.99
+            currency: USD
+            msisdn: "+905551234567"
+        ipAddress:
+          type: string
+          format: ipv4
+          example: 192.168.1.1
+        userAgent:
+          type: string
+          example: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0)"
+        pageUrl:
+          type: string
+          example: https://shop.example.com/checkout
+        referrer:
+          type: string
+          example: https://shop.example.com/cart
+        eventId:
+          type: string
+          format: uuid
+          example: a1b2c3d4-1234-5678-abcd-ef0123456789
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-03-06T12:00:00.000Z"
+    IngestRequest:
+      type: object
+      required:
+        - events
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/Event'
+          minItems: 1
+          maxItems: 1000
+    EventResult:
+      type: object
+      properties:
+        eventId:
+          type: string
+          example: a1b2c3d4-1234-5678-abcd-ef0123456789
+        accepted:
+          type: boolean
+          example: true
+        reason:
+          type: string
+          description: Present only when accepted is false
+          example: Schema validation failed
+    IngestResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [accepted]
+          example: accepted
+        accepted:
+          type: integer
+          example: 3
+        rejected:
+          type: integer
+          example: 0
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventResult'
+paths:
+  /v1/events:
+    post:
+      summary: Ingest one or more fraud detection events
+      operationId: ingestEvents
+      tags:
+        - events
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IngestRequest'
+            example:
+              events:
+                - merchantId: merchant-001
+                  deviceId: device-abc123
+                  sessionId: session-xyz789
+                  type: PAYMENT
+                  payload:
+                    amount: 99.99
+                    currency: USD
+                    msisdn: "+905551234567"
+                  ipAddress: 192.168.1.1
+      responses:
+        '202':
+          description: Events accepted for processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestResponse'
+              example:
+                status: accepted
+                accepted: 1
+                rejected: 0
+                results:
+                  - eventId: a1b2c3d4-1234-5678-abcd-ef0123456789
+                    accepted: true
+        '400':
+          description: Empty events array or invalid schema
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 400
+                  message:
+                    type: string
+                    example: 'Request body must contain a non-empty "events" array.'
+        '401':
+          description: Missing or invalid Authorization header
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 401
+                  message:
+                    type: string
+                    example: Missing Authorization header.
+        '429':
+          description: Rate limit exceeded
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds until rate limit resets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 429
+                  message:
+                    type: string
+                    example: Too Many Requests

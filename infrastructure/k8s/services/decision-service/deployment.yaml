@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: decision-service
+  namespace: signalrisk
+  labels:
+    app: decision-service
+    version: "1.0.0"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: decision-service
+  template:
+    metadata:
+      labels:
+        app: decision-service
+        version: "1.0.0"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+      containers:
+      - name: decision-service
+        image: signalrisk/decision-service:latest
+        ports:
+        - containerPort: 3009
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+        envFrom:
+        - configMapRef:
+            name: signalrisk-config
+        - secretRef:
+            name: signalrisk-secrets
+        env:
+        - name: SERVICE_NAME
+          value: "decision-service"
+        - name: PORT
+          value: "3009"
+        - name: RULE_ENGINE_URL
+          value: "http://rule-engine-service:3008"
+        - name: DEVICE_INTEL_URL
+          value: "http://device-intel-service:3003"
+        - name: VELOCITY_ENGINE_URL
+          value: "http://velocity-engine:3004"
+        - name: BEHAVIORAL_INTEL_URL
+          value: "http://behavioral-service:3005"
+        - name: NETWORK_INTEL_URL
+          value: "http://network-intel-service:3006"
+        - name: TELCO_INTEL_URL
+          value: "http://telco-intel-service:3007"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3009
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 3009
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          failureThreshold: 3

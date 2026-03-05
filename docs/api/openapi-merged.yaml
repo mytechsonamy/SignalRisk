@@ -1,0 +1,656 @@
+openapi: "3.0.0"
+info:
+  title: SignalRisk Platform API
+  version: "1.0.0"
+  description: |
+    Complete API reference for the SignalRisk fraud detection platform.
+
+    All endpoints require authentication via Bearer token or API key.
+
+    ## Services
+    | Service | Port | Purpose |
+    |---------|------|---------|
+    | auth-service | 3015 | OAuth2 token issuance, merchant management |
+    | event-collector | 3001 | Real-time event ingestion |
+    | decision-service | 3009 | Fraud decision orchestration |
+    | case-service | 3010 | Fraud case management |
+    | webhook-service | 3011 | Real-time webhook delivery |
+
+    ## Quick Start
+    1. Create a merchant via `POST /merchants`
+    2. Obtain a token via `POST /v1/auth/token` (client_credentials grant)
+    3. Ingest events via `POST /v1/events`
+    4. Request decisions via `POST /v1/decisions`
+    5. Manage resulting cases via `GET /v1/cases`
+servers:
+  - url: https://api.signalrisk.io
+    description: Production
+  - url: http://localhost:3001
+    description: Local — event-collector
+  - url: http://localhost:3009
+    description: Local — decision-service
+  - url: http://localhost:3010
+    description: Local — case-service
+  - url: http://localhost:3015
+    description: Local — auth-service
+security:
+  - BearerAuth: []
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+  schemas:
+    TokenRequest:
+      type: object
+      required:
+        - grant_type
+      properties:
+        grant_type:
+          type: string
+          enum: [client_credentials, password, refresh_token]
+          example: client_credentials
+        client_id:
+          type: string
+          example: merchant-001
+        client_secret:
+          type: string
+          example: sk_test_abc123deadbeef
+        refresh_token:
+          type: string
+          example: rt_eyJhbGciOiJSUzI1NiJ9...
+    TokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          example: eyJhbGciOiJSUzI1NiJ9...
+        token_type:
+          type: string
+          example: Bearer
+        expires_in:
+          type: integer
+          example: 900
+        refresh_token:
+          type: string
+          example: rt_eyJhbGciOiJSUzI1NiJ9...
+    Event:
+      type: object
+      required:
+        - merchantId
+        - deviceId
+        - sessionId
+        - type
+        - payload
+      properties:
+        merchantId:
+          type: string
+          example: merchant-001
+        deviceId:
+          type: string
+          example: device-abc123
+        sessionId:
+          type: string
+          example: session-xyz789
+        type:
+          type: string
+          enum: [PAGE_VIEW, CLICK, FORM_SUBMIT, LOGIN, SIGNUP, PAYMENT, CUSTOM]
+          example: PAYMENT
+        payload:
+          type: object
+          additionalProperties: true
+          example:
+            amount: 99.99
+            currency: USD
+        ipAddress:
+          type: string
+          example: 192.168.1.1
+        eventId:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+    IngestResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [accepted]
+        accepted:
+          type: integer
+          example: 1
+        rejected:
+          type: integer
+          example: 0
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              eventId:
+                type: string
+              accepted:
+                type: boolean
+    DecisionRequest:
+      type: object
+      required:
+        - requestId
+        - merchantId
+        - entityId
+      properties:
+        requestId:
+          type: string
+          example: req-unique-id-001
+        merchantId:
+          type: string
+          example: merchant-001
+        entityId:
+          type: string
+          example: user-abc123
+        deviceId:
+          type: string
+          example: device-abc123
+        sessionId:
+          type: string
+          example: session-xyz789
+        ip:
+          type: string
+          example: 192.168.1.1
+        msisdn:
+          type: string
+          example: "+905551234567"
+        amount:
+          type: number
+          example: 99.99
+    DecisionResult:
+      type: object
+      properties:
+        requestId:
+          type: string
+          example: req-unique-id-001
+        merchantId:
+          type: string
+          example: merchant-001
+        action:
+          type: string
+          enum: [ALLOW, REVIEW, BLOCK]
+          example: ALLOW
+        riskScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+          example: 23
+        riskFactors:
+          type: array
+          items:
+            type: object
+            properties:
+              signal:
+                type: string
+              value:
+                oneOf:
+                  - type: number
+                  - type: boolean
+                  - type: string
+              contribution:
+                type: integer
+              description:
+                type: string
+        appliedRules:
+          type: array
+          items:
+            type: string
+        latencyMs:
+          type: integer
+          example: 87
+        cached:
+          type: boolean
+          example: false
+        createdAt:
+          type: string
+          format: date-time
+    Case:
+      type: object
+      properties:
+        id:
+          type: string
+          example: case-abc123
+        merchantId:
+          type: string
+          example: merchant-001
+        decisionId:
+          type: string
+          example: req-unique-id-001
+        entityId:
+          type: string
+          example: user-abc123
+        action:
+          type: string
+          enum: [REVIEW, BLOCK]
+          example: BLOCK
+        riskScore:
+          type: integer
+          example: 88
+        status:
+          type: string
+          enum: [OPEN, IN_REVIEW, RESOLVED, ESCALATED]
+          example: OPEN
+        priority:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+          example: HIGH
+        slaDeadline:
+          type: string
+          format: date-time
+        assignedTo:
+          type: string
+          nullable: true
+        resolution:
+          type: string
+          enum: [FRAUD, LEGITIMATE, INCONCLUSIVE]
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CreateMerchant:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          example: Acme Corp
+        webhookUrl:
+          type: string
+          example: https://acme.com/webhooks/signalrisk
+        rateLimitPerMinute:
+          type: integer
+          example: 1000
+        tier:
+          type: string
+          enum: [default, burst]
+          example: default
+paths:
+  # Auth Service endpoints
+  /v1/auth/token:
+    post:
+      summary: Issue a JWT access token (OAuth2 token endpoint)
+      operationId: issueToken
+      tags:
+        - auth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+      responses:
+        '200':
+          description: Token issued successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          description: Invalid grant type or missing required fields
+        '401':
+          description: Invalid client credentials
+
+  /v1/auth/token/refresh:
+    post:
+      summary: Refresh an access token using a refresh token
+      operationId: refreshToken
+      tags:
+        - auth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refresh_token
+              properties:
+                refresh_token:
+                  type: string
+                  example: rt_eyJhbGciOiJSUzI1NiJ9...
+      responses:
+        '200':
+          description: New access token issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          description: Invalid or expired refresh token
+
+  # Merchant Management endpoints
+  /merchants:
+    post:
+      summary: Create a new merchant account
+      operationId: createMerchant
+      tags:
+        - merchants
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMerchant'
+      responses:
+        '201':
+          description: Merchant created with client credentials (clientSecret shown once)
+        '400':
+          description: Invalid request body
+    get:
+      summary: List all merchants
+      operationId: listMerchants
+      tags:
+        - merchants
+      responses:
+        '200':
+          description: Array of merchant records
+
+  /merchants/{id}:
+    get:
+      summary: Get a merchant by ID
+      operationId: getMerchant
+      tags:
+        - merchants
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: merchant-001
+      responses:
+        '200':
+          description: Merchant record
+        '404':
+          description: Merchant not found
+
+  /merchants/{id}/rotate-secret:
+    post:
+      summary: Rotate the client secret for a merchant
+      operationId: rotateMerchantSecret
+      tags:
+        - merchants
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: merchant-001
+      responses:
+        '200':
+          description: New client secret returned
+        '404':
+          description: Merchant not found
+
+  # Event Collector endpoint
+  /v1/events:
+    post:
+      summary: Ingest one or more fraud detection events
+      operationId: ingestEvents
+      tags:
+        - events
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - events
+              properties:
+                events:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Event'
+                  minItems: 1
+                  maxItems: 1000
+      responses:
+        '202':
+          description: Events accepted for processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestResponse'
+        '400':
+          description: Empty events array or invalid schema
+        '401':
+          description: Missing or invalid Authorization header
+        '429':
+          description: Rate limit exceeded
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+
+  # Decision Service endpoint
+  /v1/decisions:
+    post:
+      summary: Request a fraud decision for a transaction or entity
+      operationId: requestDecision
+      tags:
+        - decisions
+      parameters:
+        - name: X-Request-ID
+          in: header
+          required: false
+          schema:
+            type: string
+          example: req-unique-id-001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+      responses:
+        '202':
+          description: Decision result
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+            X-Latency-Ms:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionResult'
+        '400':
+          description: Missing required fields
+        '401':
+          description: Unauthorized
+
+  # Case Service endpoints
+  /v1/cases:
+    get:
+      summary: List fraud cases for a merchant with optional filters
+      operationId: listCases
+      tags:
+        - cases
+      parameters:
+        - name: merchantId
+          in: query
+          required: true
+          schema:
+            type: string
+          example: merchant-001
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [OPEN, IN_REVIEW, RESOLVED, ESCALATED]
+        - name: priority
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [HIGH, MEDIUM, LOW]
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        '200':
+          description: Paginated list of cases
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Case'
+                  total:
+                    type: integer
+                  page:
+                    type: integer
+                  limit:
+                    type: integer
+
+  /v1/cases/bulk:
+    post:
+      summary: Perform a bulk action on multiple cases
+      operationId: bulkCaseAction
+      tags:
+        - cases
+      parameters:
+        - name: merchantId
+          in: query
+          required: true
+          schema:
+            type: string
+          example: merchant-001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - ids
+                - action
+              properties:
+                ids:
+                  type: array
+                  items:
+                    type: string
+                  example: ["case-abc123", "case-def456"]
+                action:
+                  type: string
+                  enum: [RESOLVE, ESCALATE, ASSIGN]
+                assignedTo:
+                  type: string
+      responses:
+        '200':
+          description: Bulk action result
+        '400':
+          description: Invalid action or empty IDs array
+
+  /v1/cases/{id}:
+    get:
+      summary: Get a single fraud case by ID
+      operationId: getCase
+      tags:
+        - cases
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: case-abc123
+        - name: merchantId
+          in: query
+          required: true
+          schema:
+            type: string
+          example: merchant-001
+      responses:
+        '200':
+          description: Case record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Case'
+        '404':
+          description: Case not found
+    patch:
+      summary: Update a case status, assignment, or resolution
+      operationId: updateCase
+      tags:
+        - cases
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: case-abc123
+        - name: merchantId
+          in: query
+          required: true
+          schema:
+            type: string
+          example: merchant-001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [OPEN, IN_REVIEW, RESOLVED, ESCALATED]
+                assignedTo:
+                  type: string
+                  nullable: true
+                resolution:
+                  type: string
+                  enum: [FRAUD, LEGITIMATE, INCONCLUSIVE]
+                  nullable: true
+                resolutionNotes:
+                  type: string
+                  nullable: true
+      responses:
+        '200':
+          description: Updated case record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Case'
+        '404':
+          description: Case not found
