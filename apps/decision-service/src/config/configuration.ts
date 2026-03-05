@@ -37,6 +37,19 @@ export default () => ({
     idempotencyTtlSeconds: parseInt(process.env.IDEMPOTENCY_TTL_SECONDS || '86400', 10),
   },
 
+  services: {
+    /** Base URL of device-intel-service */
+    deviceIntelUrl: process.env.DEVICE_INTEL_URL || 'http://localhost:3003',
+    /** Base URL of velocity-engine service */
+    velocityUrl: process.env.VELOCITY_URL || 'http://localhost:3004',
+    /** Base URL of behavioral-service */
+    behavioralUrl: process.env.BEHAVIORAL_URL || 'http://localhost:3005',
+    /** Base URL of network-intel-service */
+    networkIntelUrl: process.env.NETWORK_INTEL_URL || 'http://localhost:3006',
+    /** Base URL of telco-intel-service */
+    telcoIntelUrl: process.env.TELCO_INTEL_URL || 'http://localhost:3007',
+  },
+
   otel: {
     endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318/v1/traces',
   },

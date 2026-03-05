@@ -1,19 +1,11 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import OverviewPage from './pages/OverviewPage';
+import CasesPage from './pages/CasesPage';
 import NotFoundPage from './pages/NotFoundPage';
 import UnauthorizedPage from './pages/UnauthorizedPage';
 import AppShell from './components/layout/AppShell';
 import ProtectedRoute from './components/auth/ProtectedRoute';
-
-function CasesPage() {
-  return (
-    <div className="p-6">
-      <h1 className="text-2xl font-semibold text-text-primary">Cases</h1>
-      <p className="mt-2 text-text-secondary">Case management — coming soon.</p>
-    </div>
-  );
-}
 
 function RulesPage() {
   return (

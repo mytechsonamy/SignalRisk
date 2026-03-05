@@ -1,20 +1,19 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { DecisionOrchestratorService } from '../decision-orchestrator.service';
+import {
+  SignalFetcher,
+  DeviceSignal,
+  VelocitySignal,
+  BehavioralSignal,
+  NetworkSignal,
+  TelcoSignal,
+} from '../signal-fetchers';
 import { DecisionRequest } from '../decision.types';
-import * as fetchers from '../signal-fetchers';
 
 // ---------------------------------------------------------------------------
-// Mock signal fetchers
+// Mocks
 // ---------------------------------------------------------------------------
-
-jest.mock('../signal-fetchers', () => ({
-  fetchDeviceSignal:    jest.fn(),
-  fetchVelocitySignal:  jest.fn(),
-  fetchBehavioralSignal: jest.fn(),
-  fetchNetworkSignal:   jest.fn(),
-  fetchTelcoSignal:     jest.fn(),
-}));
 
 const mockConfigService = {
   get: jest.fn((key: string) => {
@@ -23,6 +22,14 @@ const mockConfigService = {
     };
     return config[key];
   }),
+};
+
+const mockSignalFetcher = {
+  fetchDeviceSignal:    jest.fn(),
+  fetchVelocitySignal:  jest.fn(),
+  fetchBehavioralSignal: jest.fn(),
+  fetchNetworkSignal:   jest.fn(),
+  fetchTelcoSignal:     jest.fn(),
 };
 
 // ---------------------------------------------------------------------------
@@ -42,7 +49,7 @@ function makeRequest(overrides: Partial<DecisionRequest> = {}): DecisionRequest 
   };
 }
 
-const mockDeviceSignal: fetchers.DeviceSignal = {
+const mockDeviceSignal: DeviceSignal = {
   deviceId:           'device-001',
   merchantId:         'merchant-001',
   fingerprint:        'fp-001',
@@ -55,7 +62,7 @@ const mockDeviceSignal: fetchers.DeviceSignal = {
   daysSinceFirstSeen: 65,
 };
 
-const mockVelocitySignal: fetchers.VelocitySignal = {
+const mockVelocitySignal: VelocitySignal = {
   entityId:   'user-001',
   merchantId: 'merchant-001',
   dimensions: {
@@ -69,7 +76,7 @@ const mockVelocitySignal: fetchers.VelocitySignal = {
   burstDetected: false,
 };
 
-const mockBehavioralSignal: fetchers.BehavioralSignal = {
+const mockBehavioralSignal: BehavioralSignal = {
   sessionId:        'session-001',
   merchantId:       'merchant-001',
   sessionRiskScore: 10,
@@ -78,7 +85,7 @@ const mockBehavioralSignal: fetchers.BehavioralSignal = {
   indicators:       [],
 };
 
-const mockNetworkSignal: fetchers.NetworkSignal = {
+const mockNetworkSignal: NetworkSignal = {
   ip:               '1.2.3.4',
   merchantId:       'merchant-001',
   isProxy:          false,
@@ -89,7 +96,7 @@ const mockNetworkSignal: fetchers.NetworkSignal = {
   riskScore:        5,
 };
 
-const mockTelcoSignal: fetchers.TelcoSignal = {
+const mockTelcoSignal: TelcoSignal = {
   msisdn:             '+905001234567',
   merchantId:         'merchant-001',
   lineType:           'postpaid',
@@ -102,11 +109,11 @@ const mockTelcoSignal: fetchers.TelcoSignal = {
 // ---------------------------------------------------------------------------
 
 function setupAllSignals() {
-  (fetchers.fetchDeviceSignal    as jest.Mock).mockResolvedValue(mockDeviceSignal);
-  (fetchers.fetchVelocitySignal  as jest.Mock).mockResolvedValue(mockVelocitySignal);
-  (fetchers.fetchBehavioralSignal as jest.Mock).mockResolvedValue(mockBehavioralSignal);
-  (fetchers.fetchNetworkSignal   as jest.Mock).mockResolvedValue(mockNetworkSignal);
-  (fetchers.fetchTelcoSignal     as jest.Mock).mockResolvedValue(mockTelcoSignal);
+  mockSignalFetcher.fetchDeviceSignal.mockResolvedValue(mockDeviceSignal);
+  mockSignalFetcher.fetchVelocitySignal.mockResolvedValue(mockVelocitySignal);
+  mockSignalFetcher.fetchBehavioralSignal.mockResolvedValue(mockBehavioralSignal);
+  mockSignalFetcher.fetchNetworkSignal.mockResolvedValue(mockNetworkSignal);
+  mockSignalFetcher.fetchTelcoSignal.mockResolvedValue(mockTelcoSignal);
 }
 
 // ---------------------------------------------------------------------------
@@ -122,7 +129,8 @@ describe('DecisionOrchestratorService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         DecisionOrchestratorService,
-        { provide: ConfigService, useValue: mockConfigService },
+        { provide: ConfigService,  useValue: mockConfigService },
+        { provide: SignalFetcher,  useValue: mockSignalFetcher },
       ],
     }).compile();
 
@@ -212,28 +220,28 @@ describe('DecisionOrchestratorService', () => {
 
     it('riskScore=75 → BLOCK', async () => {
       // device with very low trust score → high device risk
-      (fetchers.fetchDeviceSignal as jest.Mock).mockResolvedValue({
+      mockSignalFetcher.fetchDeviceSignal.mockResolvedValue({
         ...mockDeviceSignal,
         trustScore: 10,     // deviceRisk = 90
         isEmulator: false,
       });
-      (fetchers.fetchVelocitySignal  as jest.Mock).mockResolvedValue({
+      mockSignalFetcher.fetchVelocitySignal.mockResolvedValue({
         ...mockVelocitySignal,
         dimensions: { ...mockVelocitySignal.dimensions, txCount1h: 25 }, // +50
         burstDetected: true,
         burstRatio: 5,
       });
-      (fetchers.fetchBehavioralSignal as jest.Mock).mockResolvedValue({
+      mockSignalFetcher.fetchBehavioralSignal.mockResolvedValue({
         ...mockBehavioralSignal,
         sessionRiskScore: 80,
         isBot: true,
       });
-      (fetchers.fetchNetworkSignal as jest.Mock).mockResolvedValue({
+      mockSignalFetcher.fetchNetworkSignal.mockResolvedValue({
         ...mockNetworkSignal,
         isTor: true,
         riskScore: 90,
       });
-      (fetchers.fetchTelcoSignal as jest.Mock).mockResolvedValue({
+      mockSignalFetcher.fetchTelcoSignal.mockResolvedValue({
         ...mockTelcoSignal,
         isPorted: true,
         prepaidProbability: 0.9,
@@ -246,24 +254,24 @@ describe('DecisionOrchestratorService', () => {
 
     it('riskScore=50 → REVIEW', async () => {
       // Moderate risk: device trust=50, velocity ok, behavioral=50, network=30, telco ok
-      (fetchers.fetchDeviceSignal as jest.Mock).mockResolvedValue({
+      mockSignalFetcher.fetchDeviceSignal.mockResolvedValue({
         ...mockDeviceSignal,
         trustScore: 50,  // deviceRisk = 50
       });
-      (fetchers.fetchVelocitySignal as jest.Mock).mockResolvedValue({
+      mockSignalFetcher.fetchVelocitySignal.mockResolvedValue({
         ...mockVelocitySignal,
         dimensions: { ...mockVelocitySignal.dimensions, txCount1h: 8 }, // +10
       });
-      (fetchers.fetchBehavioralSignal as jest.Mock).mockResolvedValue({
+      mockSignalFetcher.fetchBehavioralSignal.mockResolvedValue({
         ...mockBehavioralSignal,
         sessionRiskScore: 60,
       });
-      (fetchers.fetchNetworkSignal as jest.Mock).mockResolvedValue({
+      mockSignalFetcher.fetchNetworkSignal.mockResolvedValue({
         ...mockNetworkSignal,
         isProxy: true,
         riskScore: 40,
       });
-      (fetchers.fetchTelcoSignal as jest.Mock).mockResolvedValue({
+      mockSignalFetcher.fetchTelcoSignal.mockResolvedValue({
         ...mockTelcoSignal,
         isPorted: false,
         prepaidProbability: 0.3,
@@ -285,13 +293,13 @@ describe('DecisionOrchestratorService', () => {
 
     it('one signal times out → excluded from scoring, weights renormalized', async () => {
       // device signal takes 200ms > 150ms timeout → should be excluded
-      (fetchers.fetchDeviceSignal as jest.Mock).mockImplementation(
+      mockSignalFetcher.fetchDeviceSignal.mockImplementation(
         () => new Promise((resolve) => setTimeout(() => resolve(mockDeviceSignal), 200)),
       );
-      (fetchers.fetchVelocitySignal  as jest.Mock).mockResolvedValue(mockVelocitySignal);
-      (fetchers.fetchBehavioralSignal as jest.Mock).mockResolvedValue(mockBehavioralSignal);
-      (fetchers.fetchNetworkSignal   as jest.Mock).mockResolvedValue(mockNetworkSignal);
-      (fetchers.fetchTelcoSignal     as jest.Mock).mockResolvedValue(mockTelcoSignal);
+      mockSignalFetcher.fetchVelocitySignal.mockResolvedValue(mockVelocitySignal);
+      mockSignalFetcher.fetchBehavioralSignal.mockResolvedValue(mockBehavioralSignal);
+      mockSignalFetcher.fetchNetworkSignal.mockResolvedValue(mockNetworkSignal);
+      mockSignalFetcher.fetchTelcoSignal.mockResolvedValue(mockTelcoSignal);
 
       const result = await service.decide(makeRequest());
 
@@ -304,11 +312,11 @@ describe('DecisionOrchestratorService', () => {
     }, 1000);
 
     it('all signals fail → fallback to REVIEW (score=50)', async () => {
-      (fetchers.fetchDeviceSignal    as jest.Mock).mockRejectedValue(new Error('timeout'));
-      (fetchers.fetchVelocitySignal  as jest.Mock).mockRejectedValue(new Error('timeout'));
-      (fetchers.fetchBehavioralSignal as jest.Mock).mockRejectedValue(new Error('timeout'));
-      (fetchers.fetchNetworkSignal   as jest.Mock).mockRejectedValue(new Error('timeout'));
-      (fetchers.fetchTelcoSignal     as jest.Mock).mockRejectedValue(new Error('timeout'));
+      mockSignalFetcher.fetchDeviceSignal.mockRejectedValue(new Error('timeout'));
+      mockSignalFetcher.fetchVelocitySignal.mockRejectedValue(new Error('timeout'));
+      mockSignalFetcher.fetchBehavioralSignal.mockRejectedValue(new Error('timeout'));
+      mockSignalFetcher.fetchNetworkSignal.mockRejectedValue(new Error('timeout'));
+      mockSignalFetcher.fetchTelcoSignal.mockRejectedValue(new Error('timeout'));
 
       const result = await service.decide(makeRequest());
 
@@ -340,20 +348,56 @@ describe('DecisionOrchestratorService', () => {
     });
 
     it('emulator device → rule:emulator-detected in appliedRules', async () => {
-      (fetchers.fetchDeviceSignal as jest.Mock).mockResolvedValue({
+      mockSignalFetcher.fetchDeviceSignal.mockResolvedValue({
         ...mockDeviceSignal,
         isEmulator: true,
         emulatorConfidence: 0.9,
         trustScore: 20,
       });
-      (fetchers.fetchVelocitySignal  as jest.Mock).mockResolvedValue(mockVelocitySignal);
-      (fetchers.fetchBehavioralSignal as jest.Mock).mockResolvedValue(mockBehavioralSignal);
-      (fetchers.fetchNetworkSignal   as jest.Mock).mockResolvedValue(mockNetworkSignal);
-      (fetchers.fetchTelcoSignal     as jest.Mock).mockResolvedValue(mockTelcoSignal);
+      mockSignalFetcher.fetchVelocitySignal.mockResolvedValue(mockVelocitySignal);
+      mockSignalFetcher.fetchBehavioralSignal.mockResolvedValue(mockBehavioralSignal);
+      mockSignalFetcher.fetchNetworkSignal.mockResolvedValue(mockNetworkSignal);
+      mockSignalFetcher.fetchTelcoSignal.mockResolvedValue(mockTelcoSignal);
 
       const result = await service.decide(makeRequest());
 
       expect(result.appliedRules).toContain('rule:emulator-detected');
+    });
+
+    it('skips behavioral signal when sessionId is absent', async () => {
+      setupAllSignals();
+
+      const result = await service.decide(makeRequest({ sessionId: undefined }));
+
+      expect(mockSignalFetcher.fetchBehavioralSignal).not.toHaveBeenCalled();
+      expect(result.riskScore).toBeGreaterThanOrEqual(0);
+    });
+
+    it('skips network signal when ip is absent', async () => {
+      setupAllSignals();
+
+      const result = await service.decide(makeRequest({ ip: undefined }));
+
+      expect(mockSignalFetcher.fetchNetworkSignal).not.toHaveBeenCalled();
+      expect(result.riskScore).toBeGreaterThanOrEqual(0);
+    });
+
+    it('skips telco signal when msisdn is absent', async () => {
+      setupAllSignals();
+
+      const result = await service.decide(makeRequest({ msisdn: undefined }));
+
+      expect(mockSignalFetcher.fetchTelcoSignal).not.toHaveBeenCalled();
+      expect(result.riskScore).toBeGreaterThanOrEqual(0);
+    });
+
+    it('skips device signal when deviceId is absent', async () => {
+      setupAllSignals();
+
+      const result = await service.decide(makeRequest({ deviceId: undefined }));
+
+      expect(mockSignalFetcher.fetchDeviceSignal).not.toHaveBeenCalled();
+      expect(result.riskScore).toBeGreaterThanOrEqual(0);
     });
   });
 });

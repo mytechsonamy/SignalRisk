@@ -31,11 +31,7 @@ import {
   BehavioralSignal,
   NetworkSignal,
   TelcoSignal,
-  fetchDeviceSignal,
-  fetchVelocitySignal,
-  fetchBehavioralSignal,
-  fetchNetworkSignal,
-  fetchTelcoSignal,
+  SignalFetcher,
 } from './signal-fetchers';
 
 interface SignalWeight {
@@ -59,7 +55,10 @@ export class DecisionOrchestratorService {
   private readonly logger = new Logger(DecisionOrchestratorService.name);
   private readonly signalTimeoutMs: number;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly signalFetcher: SignalFetcher,
+  ) {
     this.signalTimeoutMs =
       this.configService.get<number>('decision.signalTimeoutMs') ?? 150;
   }
@@ -73,11 +72,39 @@ export class DecisionOrchestratorService {
 
     // Fetch all signals in parallel with per-signal timeout
     const [device, velocity, behavioral, network, telco] = await Promise.allSettled([
-      this.withTimeout(fetchDeviceSignal(req),    this.signalTimeoutMs, 'device'),
-      this.withTimeout(fetchVelocitySignal(req),  this.signalTimeoutMs, 'velocity'),
-      this.withTimeout(fetchBehavioralSignal(req), this.signalTimeoutMs, 'behavioral'),
-      this.withTimeout(fetchNetworkSignal(req),   this.signalTimeoutMs, 'network'),
-      this.withTimeout(fetchTelcoSignal(req),     this.signalTimeoutMs, 'telco'),
+      this.withTimeout(
+        req.deviceId
+          ? this.signalFetcher.fetchDeviceSignal(req.deviceId, req.merchantId)
+          : Promise.resolve(null),
+        this.signalTimeoutMs,
+        'device',
+      ),
+      this.withTimeout(
+        this.signalFetcher.fetchVelocitySignal(req.entityId, req.merchantId),
+        this.signalTimeoutMs,
+        'velocity',
+      ),
+      this.withTimeout(
+        req.sessionId
+          ? this.signalFetcher.fetchBehavioralSignal(req.sessionId, req.merchantId)
+          : Promise.resolve(null),
+        this.signalTimeoutMs,
+        'behavioral',
+      ),
+      this.withTimeout(
+        req.ip
+          ? this.signalFetcher.fetchNetworkSignal(req.ip, req.merchantId, undefined, req.billingCountry)
+          : Promise.resolve(null),
+        this.signalTimeoutMs,
+        'network',
+      ),
+      this.withTimeout(
+        req.msisdn
+          ? this.signalFetcher.fetchTelcoSignal(req.msisdn, req.merchantId)
+          : Promise.resolve(null),
+        this.signalTimeoutMs,
+        'telco',
+      ),
     ]);
 
     // Extract values from settled results — null on timeout/rejection
