@@ -1,0 +1,97 @@
+/**
+ * SignalRisk Decision Service — Decision Store
+ *
+ * Persists decision results to PostgreSQL with RLS tenant isolation.
+ * Gracefully degrades: if PG is unavailable, logs the error but allows
+ * the decision flow to continue uninterrupted.
+ *
+ * Table: decisions (
+ *   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+ *   request_id    TEXT NOT NULL,
+ *   merchant_id   TEXT NOT NULL,
+ *   action        TEXT NOT NULL,
+ *   risk_score    INTEGER NOT NULL,
+ *   risk_factors  JSONB NOT NULL,
+ *   applied_rules TEXT[] NOT NULL,
+ *   latency_ms    INTEGER NOT NULL,
+ *   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+ * )
+ */
+
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Pool } from 'pg';
+import { DecisionResult } from './decision.types';
+
+@Injectable()
+export class DecisionStoreService {
+  private readonly logger = new Logger(DecisionStoreService.name);
+  private readonly pool: Pool;
+
+  constructor(private readonly configService: ConfigService) {
+    const dbConfig = this.configService.get('database');
+
+    this.pool = new Pool({
+      host:     dbConfig?.host     || 'localhost',
+      port:     dbConfig?.port     || 5432,
+      user:     dbConfig?.username || 'signalrisk',
+      password: dbConfig?.password || 'signalrisk',
+      database: dbConfig?.database || 'signalrisk',
+      ssl:      dbConfig?.ssl ? { rejectUnauthorized: false } : false,
+      max:      20,
+      idleTimeoutMillis:    30_000,
+      connectionTimeoutMillis: 5_000,
+    });
+  }
+
+  /**
+   * Persist a decision result.
+   * Uses RLS set_config to enforce tenant isolation.
+   * All errors are caught and logged — the decision flow is never blocked.
+   */
+  async save(result: DecisionResult): Promise<void> {
+    let client;
+    try {
+      client = await this.pool.connect();
+
+      // SET LOCAL for tenant isolation (RLS)
+      await client.query("SELECT set_config('app.merchant_id', $1, true)", [result.merchantId]);
+
+      await client.query(
+        `INSERT INTO decisions
+           (request_id, merchant_id, action, risk_score, risk_factors, applied_rules, latency_ms, created_at)
+         VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8)
+         ON CONFLICT (request_id, merchant_id) DO NOTHING`,
+        [
+          result.requestId,
+          result.merchantId,
+          result.action,
+          result.riskScore,
+          JSON.stringify(result.riskFactors),
+          result.appliedRules,
+          result.latencyMs,
+          result.createdAt,
+        ],
+      );
+
+      this.logger.debug(
+        `Saved decision ${result.requestId} for merchant ${result.merchantId}: ${result.action}`,
+      );
+    } catch (err) {
+      // Graceful degradation — log but do not re-throw
+      this.logger.error(
+        `Failed to persist decision ${result.requestId}: ${(err as Error).message}`,
+        (err as Error).stack,
+      );
+    } finally {
+      client?.release();
+    }
+  }
+
+  /**
+   * Get the underlying connection pool (used by health checks).
+   */
+  getPool(): Pool {
+    return this.pool;
+  }
+}
