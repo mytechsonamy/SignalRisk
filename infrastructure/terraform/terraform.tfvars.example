@@ -1,0 +1,31 @@
+###############################################################################
+# SignalRisk — Example Terraform Variables
+#
+# Copy this file to terraform.tfvars and adjust values for your environment.
+# NEVER commit terraform.tfvars — it may contain sensitive configuration.
+###############################################################################
+
+aws_region   = "us-east-1"
+environment  = "production"
+project_name = "signalrisk"
+
+# Networking
+vpc_cidr             = "10.0.0.0/16"
+availability_zones   = ["us-east-1a", "us-east-1b", "us-east-1c"]
+private_subnet_cidrs = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
+public_subnet_cidrs  = ["10.0.101.0/24", "10.0.102.0/24", "10.0.103.0/24"]
+
+# EKS
+cluster_version     = "1.29"
+node_instance_types = ["m6i.xlarge"]
+node_desired_size   = 3
+node_min_size       = 3
+node_max_size       = 10
+node_disk_size      = 100
+
+cluster_endpoint_public_access  = true
+cluster_endpoint_private_access = true
+
+extra_tags = {
+  Team = "platform"
+}
