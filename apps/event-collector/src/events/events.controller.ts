@@ -1,8 +1,9 @@
 /**
  * SignalRisk Event Collector — Events Controller
  *
- * POST /v1/events — accepts arrays of events with API key validation,
- * per-merchant rate limiting, and Kafka backpressure (429 on high lag).
+ * POST /v1/events — accepts arrays of events with API key validation
+ * and comprehensive backpressure control (queue depth, per-merchant
+ * fairness, dynamic rate adjustment via BackpressureGuard).
  */
 
 import {
@@ -15,28 +16,24 @@ import {
   HttpException,
   Logger,
   UsePipes,
+  UseGuards,
   ValidationPipe,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { EventsService, IngestResult } from './events.service';
-import { KafkaService } from '../kafka/kafka.service';
 import { CreateEventDto } from './dto/create-event.dto';
+import { BackpressureGuard } from '../backpressure/backpressure.guard';
 
 @Controller('v1/events')
 export class EventsController {
   private readonly logger = new Logger(EventsController.name);
-  private readonly maxConsumerLag: number;
 
   constructor(
     private readonly eventsService: EventsService,
-    private readonly kafkaService: KafkaService,
-    private readonly configService: ConfigService,
-  ) {
-    this.maxConsumerLag = this.configService.get<number>('backpressure.maxConsumerLag') || 100_000;
-  }
+  ) {}
 
   @Post()
   @HttpCode(HttpStatus.ACCEPTED)
+  @UseGuards(BackpressureGuard)
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
   async ingestEvents(
     @Headers('authorization') authHeader: string | undefined,
@@ -44,22 +41,6 @@ export class EventsController {
   ): Promise<{ status: string; accepted: number; rejected: number; results: IngestResult['results'] }> {
     // --- API Key validation ---
     this.validateApiKey(authHeader);
-
-    // --- Backpressure check ---
-    const lag = this.kafkaService.getConsumerLag();
-    if (lag > this.maxConsumerLag) {
-      this.logger.warn(
-        `Backpressure triggered: consumer lag ${lag} exceeds threshold ${this.maxConsumerLag}`,
-      );
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.TOO_MANY_REQUESTS,
-          message: 'Service under backpressure. Please retry later.',
-          consumerLag: lag,
-        },
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
 
     // --- Validate events array ---
     const events = body.events;

@@ -9,24 +9,27 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'crypto';
-import { Pool, PoolClient } from 'pg';
+import { Pool } from 'pg';
 import {
   DeviceAttributes,
   Device,
   IdentifyResult,
 } from './interfaces/device-attributes.interface';
 import { DeviceCacheService } from '../cache/device-cache.service';
+import { EmulatorDetector } from './emulator-detector';
+import { TrustScoreService } from './trust-score.service';
 
 @Injectable()
 export class FingerprintService {
   private readonly logger = new Logger(FingerprintService.name);
   private readonly pool: Pool;
   private readonly fuzzyThreshold: number;
-  private readonly defaultTrustScore: number;
+  private readonly emulatorDetector: EmulatorDetector;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly cacheService: DeviceCacheService,
+    private readonly trustScoreService: TrustScoreService,
   ) {
     const dbConfig = this.configService.get('database');
     this.pool = new Pool({
@@ -42,7 +45,7 @@ export class FingerprintService {
     });
 
     this.fuzzyThreshold = this.configService.get<number>('fingerprint.fuzzyMatchThreshold') ?? 0.85;
-    this.defaultTrustScore = this.configService.get<number>('fingerprint.defaultTrustScore') ?? 50;
+    this.emulatorDetector = new EmulatorDetector();
   }
 
   // ---------------------------------------------------------------------------
@@ -138,6 +141,10 @@ export class FingerprintService {
 
   /**
    * Create or update a device record. Returns the persisted device.
+   * For new devices, calculates an initial trust score from attributes.
+   * For existing devices (ON CONFLICT path), updates attributes and emulator
+   * status but preserves the trust_score already in the DB (managed by
+   * updateDeviceLastSeen / inactivity decay).
    */
   async registerDevice(
     merchantId: string,
@@ -145,12 +152,19 @@ export class FingerprintService {
     attrs: DeviceAttributes,
   ): Promise<Device> {
     const prefix = fingerprint.substring(0, 8);
-    const isEmulator = this.detectEmulator(attrs);
+    const emulatorAnalysis = this.emulatorDetector.detect(attrs);
+    const { isEmulator } = emulatorAnalysis;
+
+    // Calculate initial trust score for brand-new devices
+    const initialTrustScore = this.trustScoreService.calculateInitialTrustScore(
+      attrs,
+      emulatorAnalysis,
+    );
 
     const client = await this.pool.connect();
     try {
-      // SET LOCAL for tenant isolation (RLS)
-      await client.query(`SET LOCAL app.merchant_id = '${merchantId}'`);
+      // SET LOCAL for tenant isolation (RLS) — use set_config to avoid SQL injection
+      await client.query("SELECT set_config('app.merchant_id', $1, true)", [merchantId]);
 
       const result = await client.query(
         `INSERT INTO devices (merchant_id, fingerprint, fingerprint_prefix, trust_score, is_emulator, attributes, first_seen_at, last_seen_at)
@@ -161,7 +175,7 @@ export class FingerprintService {
            is_emulator = $5,
            last_seen_at = NOW()
          RETURNING id, merchant_id, fingerprint, fingerprint_prefix, trust_score, is_emulator, attributes, first_seen_at, last_seen_at`,
-        [merchantId, fingerprint, prefix, this.defaultTrustScore, isEmulator, JSON.stringify(attrs)],
+        [merchantId, fingerprint, prefix, initialTrustScore, isEmulator, JSON.stringify(attrs)],
       );
 
       const row = result.rows[0];
@@ -172,7 +186,8 @@ export class FingerprintService {
 
       this.logger.log(
         `Registered device ${device.id} for merchant ${merchantId} ` +
-          `(emulator=${isEmulator})`,
+          `(emulator=${isEmulator}, trustScore=${device.trustScore}, ` +
+          `emulatorConfidence=${emulatorAnalysis.confidence})`,
       );
 
       return device;
@@ -183,6 +198,7 @@ export class FingerprintService {
 
   /**
    * Full identify flow: generate fingerprint, match or register, return result.
+   * For returning devices, recalculates trust score based on full context.
    */
   async identify(merchantId: string, attrs: DeviceAttributes): Promise<IdentifyResult> {
     const fingerprint = this.generateFingerprint(attrs);
@@ -191,15 +207,32 @@ export class FingerprintService {
     const existingDevice = await this.fuzzyMatch(fingerprint, merchantId);
 
     if (existingDevice) {
-      // Update last_seen_at and attributes
-      await this.updateDeviceLastSeen(existingDevice.id, merchantId, attrs);
+      const emulatorAnalysis = this.emulatorDetector.detect(attrs);
+      const now = new Date();
+      const daysSinceFirstSeen = Math.floor(
+        (now.getTime() - existingDevice.firstSeenAt.getTime()) / 86_400_000,
+      );
+      const daysSinceLastSeen = Math.floor(
+        (now.getTime() - existingDevice.lastSeenAt.getTime()) / 86_400_000,
+      );
+
+      const newTrustScore = this.trustScoreService.calculateTrustScore({
+        device: existingDevice,
+        currentAttrs: attrs,
+        emulatorAnalysis,
+        daysSinceFirstSeen,
+        daysSinceLastSeen,
+      });
+
+      // Update last_seen_at, attributes, and recalculated trust score
+      await this.updateDeviceLastSeen(existingDevice.id, merchantId, attrs, newTrustScore);
 
       return {
         deviceId: existingDevice.id,
         fingerprint: existingDevice.fingerprint,
-        trustScore: existingDevice.trustScore,
+        trustScore: newTrustScore,
         isNew: false,
-        isEmulator: existingDevice.isEmulator,
+        isEmulator: emulatorAnalysis.isEmulator,
       };
     }
 
@@ -318,13 +351,14 @@ export class FingerprintService {
     deviceId: string,
     merchantId: string,
     attrs: DeviceAttributes,
+    trustScore: number,
   ): Promise<void> {
     const client = await this.pool.connect();
     try {
       await client.query(
-        `UPDATE devices SET last_seen_at = NOW(), attributes = $3
+        `UPDATE devices SET last_seen_at = NOW(), attributes = $3, trust_score = $4
          WHERE id = $1 AND merchant_id = $2`,
-        [deviceId, merchantId, JSON.stringify(attrs)],
+        [deviceId, merchantId, JSON.stringify(attrs), trustScore],
       );
 
       // Invalidate cache so next read gets fresh data
@@ -332,39 +366,6 @@ export class FingerprintService {
     } finally {
       client.release();
     }
-  }
-
-  /**
-   * Basic emulator detection heuristics.
-   */
-  private detectEmulator(attrs: DeviceAttributes): boolean {
-    const gpuLower = attrs.gpuRenderer.toLowerCase();
-    const emulatorGpuPatterns = [
-      'swiftshader',
-      'llvmpipe',
-      'softpipe',
-      'chromium',
-      'google inc',
-      'android emulator',
-      'genymotion',
-      'bluestacks',
-    ];
-
-    if (emulatorGpuPatterns.some((p) => gpuLower.includes(p))) {
-      return true;
-    }
-
-    // Common emulator screen resolutions
-    if (attrs.platform === 'android' && attrs.screenResolution === '1080x1920') {
-      // Not conclusive alone, but combined with other signals
-    }
-
-    // Sensor noise of exactly 0 suggests emulated sensors
-    if (attrs.sensorNoise && attrs.sensorNoise.every((n) => n === 0)) {
-      return true;
-    }
-
-    return false;
   }
 
   private toBigrams(str: string): string[] {

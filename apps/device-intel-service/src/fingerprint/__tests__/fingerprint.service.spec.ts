@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { FingerprintService } from '../fingerprint.service';
 import { DeviceCacheService } from '../../cache/device-cache.service';
+import { TrustScoreService } from '../trust-score.service';
 import { DeviceAttributes, Device } from '../interfaces/device-attributes.interface';
 
 // ---------------------------------------------------------------------------
@@ -27,10 +28,15 @@ const mockConfigService = {
         ssl: false,
       },
       'fingerprint.fuzzyMatchThreshold': 0.85,
-      'fingerprint.defaultTrustScore': 50,
     };
     return config[key];
   }),
+};
+
+const mockTrustScoreService = {
+  calculateTrustScore: jest.fn().mockReturnValue(75),
+  calculateInitialTrustScore: jest.fn().mockReturnValue(50),
+  applyInactivityDecay: jest.fn().mockReturnValue(70),
 };
 
 // ---------------------------------------------------------------------------
@@ -80,6 +86,7 @@ describe('FingerprintService', () => {
         FingerprintService,
         { provide: DeviceCacheService, useValue: mockCacheService },
         { provide: ConfigService, useValue: mockConfigService },
+        { provide: TrustScoreService, useValue: mockTrustScoreService },
       ],
     }).compile();
 
@@ -212,52 +219,16 @@ describe('FingerprintService', () => {
         query: jest.fn().mockResolvedValue({ rows: [] }),
         release: jest.fn(),
       };
-      jest.spyOn(service['pool'], 'connect').mockResolvedValue(mockClient as any);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (service['pool'] as any).connect = jest.fn().mockResolvedValue(mockClient);
 
       const result = await service.fuzzyMatch('nonexistent', 'merchant-001');
       expect(result).toBeNull();
     });
   });
 
-  // -------------------------------------------------------------------------
-  // Emulator detection (private, tested via registerDevice)
-  // -------------------------------------------------------------------------
-
-  describe('emulator detection', () => {
-    it('should detect SwiftShader as emulator', () => {
-      const attrs = makeAttrs({ gpuRenderer: 'Google SwiftShader' });
-      const result = (service as any).detectEmulator(attrs);
-      expect(result).toBe(true);
-    });
-
-    it('should detect LLVMpipe as emulator', () => {
-      const attrs = makeAttrs({ gpuRenderer: 'llvmpipe (LLVM 12.0.0)' });
-      const result = (service as any).detectEmulator(attrs);
-      expect(result).toBe(true);
-    });
-
-    it('should detect BlueStacks as emulator', () => {
-      const attrs = makeAttrs({ gpuRenderer: 'BlueStacks Renderer' });
-      const result = (service as any).detectEmulator(attrs);
-      expect(result).toBe(true);
-    });
-
-    it('should detect zero sensor noise as emulator', () => {
-      const attrs = makeAttrs({ sensorNoise: [0, 0, 0] });
-      const result = (service as any).detectEmulator(attrs);
-      expect(result).toBe(true);
-    });
-
-    it('should NOT flag real GPUs as emulator', () => {
-      const attrs = makeAttrs({ gpuRenderer: 'ANGLE (NVIDIA GeForce RTX 3080)' });
-      const result = (service as any).detectEmulator(attrs);
-      expect(result).toBe(false);
-    });
-
-    it('should NOT flag real sensor noise as emulator', () => {
-      const attrs = makeAttrs({ sensorNoise: [0.0012, 0.0034, 0.0001] });
-      const result = (service as any).detectEmulator(attrs);
-      expect(result).toBe(false);
-    });
-  });
+  // NOTE: Emulator detection tests have been moved to emulator-detector.spec.ts
+  // since the logic now lives in EmulatorDetector (no longer a private method
+  // on FingerprintService).
 });
+

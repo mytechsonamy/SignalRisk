@@ -1,10 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConfigService } from '@nestjs/config';
 import { HttpException, HttpStatus } from '@nestjs/common';
 import { EventsController } from '../events.controller';
 import { EventsService, IngestResult } from '../events.service';
-import { KafkaService } from '../../kafka/kafka.service';
 import { EventType } from '../dto/create-event.dto';
+import { BackpressureGuard } from '../../backpressure/backpressure.guard';
 
 // Silence OpenTelemetry in tests
 jest.mock('@opentelemetry/api', () => ({
@@ -24,7 +23,6 @@ jest.mock('@opentelemetry/api', () => ({
 describe('EventsController', () => {
   let controller: EventsController;
   let eventsService: EventsService;
-  let kafkaService: KafkaService;
 
   const mockIngestResult: IngestResult = {
     accepted: 2,
@@ -62,30 +60,14 @@ describe('EventsController', () => {
             ingest: jest.fn().mockResolvedValue(mockIngestResult),
           },
         },
-        {
-          provide: KafkaService,
-          useValue: {
-            getConsumerLag: jest.fn().mockReturnValue(0),
-            isConnected: jest.fn().mockReturnValue(true),
-          },
-        },
-        {
-          provide: ConfigService,
-          useValue: {
-            get: jest.fn((key: string) => {
-              const config: Record<string, any> = {
-                'backpressure.maxConsumerLag': 100_000,
-              };
-              return config[key];
-            }),
-          },
-        },
       ],
-    }).compile();
+    })
+      .overrideGuard(BackpressureGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     controller = module.get<EventsController>(EventsController);
     eventsService = module.get<EventsService>(EventsService);
-    kafkaService = module.get<KafkaService>(KafkaService);
   });
 
   describe('POST /v1/events', () => {
@@ -140,21 +122,10 @@ describe('EventsController', () => {
       );
     });
 
-    it('should throw 429 when consumer lag exceeds threshold', async () => {
-      jest.spyOn(kafkaService, 'getConsumerLag').mockReturnValue(200_000);
-
-      await expect(
-        controller.ingestEvents('Bearer test-key', { events: validEvents }),
-      ).rejects.toThrow(
-        expect.objectContaining({
-          status: HttpStatus.TOO_MANY_REQUESTS,
-        }),
-      );
-    });
-
-    it('should not trigger backpressure when lag is below threshold', async () => {
-      jest.spyOn(kafkaService, 'getConsumerLag').mockReturnValue(50_000);
-
+    // NOTE: Backpressure 429 enforcement is now handled by BackpressureGuard
+    // and tested in backpressure.guard.spec.ts. The controller delegates
+    // all backpressure decisions to the guard via @UseGuards(BackpressureGuard).
+    it('should accept request when BackpressureGuard allows', async () => {
       const result = await controller.ingestEvents('Bearer test-key', {
         events: validEvents,
       });
