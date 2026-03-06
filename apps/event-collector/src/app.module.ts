@@ -5,6 +5,8 @@ import { KafkaModule } from './kafka/kafka.module';
 import { EventsModule } from './events/events.module';
 import { HealthModule } from './health/health.module';
 import { DlqModule } from './dlq/dlq.module';
+import { KafkaHealthModule } from '../../../packages/kafka-health/src/kafka-health.module';
+import { KafkaLagController } from './kafka-health/kafka-lag.controller';
 
 @Module({
   imports: [
@@ -17,6 +19,8 @@ import { DlqModule } from './dlq/dlq.module';
     DlqModule,
     EventsModule,
     HealthModule,
+    KafkaHealthModule,
   ],
+  controllers: [KafkaLagController],
 })
 export class AppModule {}

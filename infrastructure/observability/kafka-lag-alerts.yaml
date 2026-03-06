@@ -1,0 +1,37 @@
+groups:
+  - name: kafka_lag_alerts
+    interval: 30s
+    rules:
+      - alert: KafkaConsumerLagCritical
+        expr: kafka_consumer_lag > 1000
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Kafka consumer group lag is critical'
+          description: >
+            Consumer group {{ $labels.group }} on topic {{ $labels.topic }}
+            partition {{ $labels.partition }} has lag {{ $value }} which exceeds the
+            critical threshold of 1000 messages.
+
+      - alert: KafkaConsumerLagHigh
+        expr: kafka_consumer_lag > 500
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Kafka consumer group lag is high'
+          description: >
+            Consumer group {{ $labels.group }} on topic {{ $labels.topic }}
+            partition {{ $labels.partition }} has lag {{ $value }} exceeding 500.
+
+      - alert: KafkaConsumerGroupStalled
+        expr: increase(kafka_consumer_lag[10m]) > 0 and kafka_consumer_lag > 100
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Kafka consumer group is stalled (not making progress)'
+          description: >
+            Consumer group {{ $labels.group }} on topic {{ $labels.topic }}
+            partition {{ $labels.partition }} lag is growing and currently at {{ $value }}.

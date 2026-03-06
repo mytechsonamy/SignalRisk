@@ -1,0 +1,29 @@
+scrape_configs:
+  - job_name: 'kafka-consumer-lag'
+    scrape_interval: 30s
+    metrics_path: '/metrics/kafka-lag'
+    static_configs:
+      - targets:
+          - 'event-collector:3000'
+        labels:
+          service: 'event-collector'
+          component: 'kafka-lag-monitor'
+
+  - job_name: 'kafka-jmx'
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+    static_configs:
+      - targets:
+          - 'kafka:9101'
+        labels:
+          service: 'kafka'
+          component: 'broker'
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - 'alertmanager:9093'
+
+rule_files:
+  - 'kafka-lag-alerts.yaml'
