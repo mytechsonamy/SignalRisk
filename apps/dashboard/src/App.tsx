@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import OverviewPage from './pages/OverviewPage';
@@ -9,6 +10,8 @@ import NotFoundPage from './pages/NotFoundPage';
 import UnauthorizedPage from './pages/UnauthorizedPage';
 import AppShell from './components/layout/AppShell';
 import ProtectedRoute from './components/auth/ProtectedRoute';
+
+const LiveFeedPage = lazy(() => import('./pages/LiveFeedPage'));
 
 function RulesPage() {
   return (
@@ -60,6 +63,14 @@ export default function App() {
             }
           />
           <Route path="analytics" element={<AnalyticsPage />} />
+          <Route
+            path="live-feed"
+            element={
+              <Suspense fallback={<div className="p-6">Loading…</div>}>
+                <LiveFeedPage />
+              </Suspense>
+            }
+          />
           <Route
             path="admin"
             element={

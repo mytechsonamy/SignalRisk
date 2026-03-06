@@ -93,6 +93,24 @@ function AdminIcon() {
   );
 }
 
+function LiveFeedIcon() {
+  return (
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <circle cx="12" cy="12" r="3" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M6.343 17.657A8 8 0 1117.657 6.343 8 8 0 016.343 17.657z"
+      />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M3.515 20.485A13 13 0 1020.485 3.515 13 13 0 003.515 20.485z"
+      />
+    </svg>
+  );
+}
+
 const NAV_ITEMS: NavItem[] = [
   {
     to: '/',
@@ -121,6 +139,11 @@ const NAV_ITEMS: NavItem[] = [
     to: '/analytics',
     label: 'Analytics',
     icon: <AnalyticsIcon />,
+  },
+  {
+    to: '/live-feed',
+    label: 'Live Feed',
+    icon: <LiveFeedIcon />,
   },
   {
     to: '/settings',

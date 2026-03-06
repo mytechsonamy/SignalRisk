@@ -10,6 +10,7 @@ import { MerchantsService } from './merchants.service';
 import { MerchantController } from './merchant.controller';
 import { MerchantService } from './merchant.service';
 import { MerchantRepository } from './merchant.repository';
+import { ApiKeyAuditService } from './api-key-audit.service';
 
 export const PG_POOL = 'PG_POOL';
 
@@ -19,6 +20,8 @@ export const PG_POOL = 'PG_POOL';
   providers: [
     // Legacy in-memory service
     MerchantsService,
+    // API Key Audit service
+    ApiKeyAuditService,
     // pg Pool factory
     {
       provide: PG_POOL,
@@ -40,6 +43,6 @@ export const PG_POOL = 'PG_POOL';
     // Service
     MerchantService,
   ],
-  exports: [MerchantsService, MerchantService],
+  exports: [MerchantsService, MerchantService, ApiKeyAuditService],
 })
 export class MerchantsModule {}

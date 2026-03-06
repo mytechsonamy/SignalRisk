@@ -7,6 +7,8 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { MerchantsModule } from '../merchants/merchants.module';
+import { KeyRotationService } from './key-rotation.service';
+import { KeyRotationController } from './key-rotation.controller';
 
 @Module({
   imports: [
@@ -14,8 +16,8 @@ import { MerchantsModule } from '../merchants/merchants.module';
     ConfigModule,
     MerchantsModule,
   ],
-  controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, JwtAuthGuard, RolesGuard],
-  exports: [AuthService, JwtAuthGuard, RolesGuard],
+  controllers: [AuthController, KeyRotationController],
+  providers: [AuthService, JwtStrategy, JwtAuthGuard, RolesGuard, KeyRotationService],
+  exports: [AuthService, JwtAuthGuard, RolesGuard, KeyRotationService],
 })
 export class AuthModule {}

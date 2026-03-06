@@ -17,7 +17,7 @@
  *   riskScore <  40  → ALLOW
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
 import {
@@ -34,6 +34,8 @@ import {
   TelcoSignal,
   SignalFetcher,
 } from './signal-fetchers';
+import { DecisionGateway, DecisionBroadcastEvent } from './decision.gateway';
+import { DecisionCacheService } from './decision-cache.service';
 
 interface SignalWeight {
   name: string;
@@ -51,15 +53,23 @@ const SIGNAL_WEIGHTS: SignalWeight[] = [
 const BLOCK_THRESHOLD  = 70;
 const REVIEW_THRESHOLD = 40;
 
+// Circular buffer size for timing instrumentation
+const TIMING_BUFFER_SIZE = 100;
+
 @Injectable()
 export class DecisionOrchestratorService {
   private readonly logger = new Logger(DecisionOrchestratorService.name);
   private readonly signalTimeoutMs: number;
   private readonly tracer = trace.getTracer('decision-orchestrator', '1.0.0');
 
+  // Circular buffer for signal fetch timings
+  private readonly fetchTimings: Array<{ signalName: string; ms: number }> = [];
+
   constructor(
     private readonly configService: ConfigService,
     private readonly signalFetcher: SignalFetcher,
+    @Optional() private readonly decisionGateway?: DecisionGateway,
+    @Optional() private readonly decisionCache?: DecisionCacheService,
   ) {
     this.signalTimeoutMs =
       this.configService.get<number>('decision.signalTimeoutMs') ?? 150;
@@ -72,57 +82,70 @@ export class DecisionOrchestratorService {
   async decide(req: DecisionRequest): Promise<DecisionResult> {
     const startedAt = Date.now();
 
+    // Check cache first
+    if (this.decisionCache) {
+      const cached = await this.decisionCache.get(req.merchantId, req.entityId);
+      if (cached) {
+        return { ...cached, cached: true, latencyMs: Date.now() - startedAt };
+      }
+    }
+
     // Fetch all signals in parallel with per-signal timeout, each wrapped in a span
     const [device, velocity, behavioral, network, telco] = await Promise.allSettled([
       this.withTimeout(
-        this.fetchWithSpan(
+        this.fetchWithSpanTimed(
           'fetch.device-signal',
           { 'signal.type': 'device', 'merchant.id': req.merchantId },
           req.deviceId
             ? this.signalFetcher.fetchDeviceSignal(req.deviceId, req.merchantId)
             : Promise.resolve(null),
+          'device',
         ),
         this.signalTimeoutMs,
         'device',
       ),
       this.withTimeout(
-        this.fetchWithSpan(
+        this.fetchWithSpanTimed(
           'fetch.velocity-signal',
           { 'signal.type': 'velocity', 'merchant.id': req.merchantId },
           this.signalFetcher.fetchVelocitySignal(req.entityId, req.merchantId),
+          'velocity',
         ),
         this.signalTimeoutMs,
         'velocity',
       ),
       this.withTimeout(
-        this.fetchWithSpan(
+        this.fetchWithSpanTimed(
           'fetch.behavioral-signal',
           { 'signal.type': 'behavioral', 'merchant.id': req.merchantId },
           req.sessionId
             ? this.signalFetcher.fetchBehavioralSignal(req.sessionId, req.merchantId)
             : Promise.resolve(null),
+          'behavioral',
         ),
         this.signalTimeoutMs,
         'behavioral',
       ),
       this.withTimeout(
-        this.fetchWithSpan(
+        this.fetchWithSpanTimed(
           'fetch.network-signal',
           { 'signal.type': 'network', 'merchant.id': req.merchantId },
           req.ip
             ? this.signalFetcher.fetchNetworkSignal(req.ip, req.merchantId, undefined, req.billingCountry)
             : Promise.resolve(null),
+          'network',
         ),
         this.signalTimeoutMs,
         'network',
       ),
       this.withTimeout(
-        this.fetchWithSpan(
+        this.fetchWithSpanTimed(
           'fetch.telco-signal',
           { 'signal.type': 'telco', 'merchant.id': req.merchantId },
           req.msisdn
             ? this.signalFetcher.fetchTelcoSignal(req.msisdn, req.merchantId)
             : Promise.resolve(null),
+          'telco',
         ),
         this.signalTimeoutMs,
         'telco',
@@ -172,7 +195,7 @@ export class DecisionOrchestratorService {
 
     const latencyMs = Date.now() - startedAt;
 
-    return {
+    const result: DecisionResult = {
       requestId:    req.requestId,
       merchantId:   req.merchantId,
       action,
@@ -183,6 +206,27 @@ export class DecisionOrchestratorService {
       cached:       false,
       createdAt:    new Date(),
     };
+
+    // Cache result before returning
+    if (this.decisionCache) {
+      await this.decisionCache.set(req.merchantId, req.entityId, result);
+    }
+
+    // Broadcast to WebSocket clients
+    if (this.decisionGateway) {
+      const broadcastEvent: DecisionBroadcastEvent = {
+        decisionId:      req.requestId,
+        merchantId:      req.merchantId,
+        entityId:        req.entityId,
+        action,
+        riskScore,
+        timestamp:       result.createdAt.toISOString(),
+        topRiskFactors:  riskFactors.slice(0, 3).map((f) => f.signal),
+      };
+      this.decisionGateway.broadcastDecision(broadcastEvent);
+    }
+
+    return result;
   }
 
   // ---------------------------------------------------------------------------
@@ -206,6 +250,48 @@ export class DecisionOrchestratorService {
     } finally {
       span.end();
     }
+  }
+
+  // fetchWithSpan + timing instrumentation
+  private async fetchWithSpanTimed<T>(
+    spanName: string,
+    attributes: Record<string, string>,
+    promise: Promise<T>,
+    signalName: string,
+  ): Promise<T> {
+    const fetchStart = Date.now();
+    const span = this.tracer.startSpan(spanName, { attributes });
+    try {
+      const result = await promise;
+      span.setAttribute('signal.found', result !== null);
+      span.setStatus({ code: SpanStatusCode.OK });
+      const fetchMs = Date.now() - fetchStart;
+      this.recordFetchTiming(signalName, fetchMs);
+      if (fetchMs > 100) {
+        this.logger.warn(`Signal fetch slow: ${signalName} took ${fetchMs}ms`);
+      }
+      return result;
+    } catch (err) {
+      const fetchMs = Date.now() - fetchStart;
+      this.recordFetchTiming(signalName, fetchMs);
+      span.setStatus({ code: SpanStatusCode.ERROR, message: (err as Error)?.message });
+      throw err;
+    } finally {
+      span.end();
+    }
+  }
+
+  // Stores last 100 timings in memory circular buffer
+  private recordFetchTiming(signalName: string, ms: number): void {
+    if (this.fetchTimings.length >= TIMING_BUFFER_SIZE) {
+      this.fetchTimings.shift();
+    }
+    this.fetchTimings.push({ signalName, ms });
+  }
+
+  // Expose timings for testing/monitoring
+  getFetchTimings(): Array<{ signalName: string; ms: number }> {
+    return [...this.fetchTimings];
   }
 
   // ---------------------------------------------------------------------------

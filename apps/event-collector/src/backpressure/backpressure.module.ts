@@ -10,6 +10,7 @@ import { BackpressureService } from './backpressure.service';
 import { FairnessService } from './fairness.service';
 import { RateAdjusterService } from './rate-adjuster.service';
 import { BackpressureGuard } from './backpressure.guard';
+import { IpRateLimitService } from './ip-rate-limit.service';
 
 @Global()
 @Module({
@@ -18,12 +19,14 @@ import { BackpressureGuard } from './backpressure.guard';
     FairnessService,
     RateAdjusterService,
     BackpressureGuard,
+    IpRateLimitService,
   ],
   exports: [
     BackpressureService,
     FairnessService,
     RateAdjusterService,
     BackpressureGuard,
+    IpRateLimitService,
   ],
 })
 export class BackpressureModule {}

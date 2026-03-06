@@ -10,6 +10,7 @@ import {
   TelcoSignal,
 } from '../signal-fetchers';
 import { DecisionRequest } from '../decision.types';
+import { DecisionCacheService } from '../decision-cache.service';
 
 // ---------------------------------------------------------------------------
 // OpenTelemetry mock (must be defined before the module under test is imported,
@@ -52,6 +53,13 @@ const mockSignalFetcher = {
   fetchBehavioralSignal: jest.fn(),
   fetchNetworkSignal:   jest.fn(),
   fetchTelcoSignal:     jest.fn(),
+};
+
+const mockDecisionCache = {
+  get: jest.fn().mockResolvedValue(null),
+  set: jest.fn().mockResolvedValue(undefined),
+  invalidate: jest.fn().mockResolvedValue(undefined),
+  cacheKey: jest.fn(),
 };
 
 // ---------------------------------------------------------------------------
@@ -147,12 +155,15 @@ describe('DecisionOrchestratorService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockDecisionCache.get.mockResolvedValue(null);
+    mockDecisionCache.set.mockResolvedValue(undefined);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         DecisionOrchestratorService,
         { provide: ConfigService,  useValue: mockConfigService },
         { provide: SignalFetcher,  useValue: mockSignalFetcher },
+        { provide: DecisionCacheService, useValue: mockDecisionCache },
       ],
     }).compile();
 
@@ -542,6 +553,122 @@ describe('DecisionOrchestratorService', () => {
       expect(spanNames).toContain('fetch.behavioral-signal');
       expect(spanNames).toContain('fetch.network-signal');
       expect(spanNames).toContain('fetch.telco-signal');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Signal fetch timing instrumentation
+  // -------------------------------------------------------------------------
+
+  describe('signal fetch timing instrumentation', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+      mockStartSpan.mockReturnValue(mockSpan);
+      mockDecisionCache.get.mockResolvedValue(null);
+      mockDecisionCache.set.mockResolvedValue(undefined);
+    });
+
+    it('records timing for each signal name after a decide call', async () => {
+      setupAllSignals();
+
+      await service.decide(makeRequest());
+
+      const timings = service.getFetchTimings();
+      expect(timings.length).toBeGreaterThan(0);
+      const signalNames = timings.map((t) => t.signalName);
+      expect(signalNames).toContain('device');
+      expect(signalNames).toContain('velocity');
+    });
+
+    it('warns when a fetcher takes more than 100ms', async () => {
+      // device signal artificially delayed 110ms
+      mockSignalFetcher.fetchDeviceSignal.mockImplementation(
+        () => new Promise((resolve) => setTimeout(() => resolve(mockDeviceSignal), 110)),
+      );
+      mockSignalFetcher.fetchVelocitySignal.mockResolvedValue(mockVelocitySignal);
+      mockSignalFetcher.fetchBehavioralSignal.mockResolvedValue(mockBehavioralSignal);
+      mockSignalFetcher.fetchNetworkSignal.mockResolvedValue(mockNetworkSignal);
+      mockSignalFetcher.fetchTelcoSignal.mockResolvedValue(mockTelcoSignal);
+
+      const warnSpy = jest.spyOn((service as any).logger, 'warn');
+
+      await service.decide(makeRequest());
+
+      const slowWarnCalls = warnSpy.mock.calls.filter(
+        (args) => typeof args[0] === 'string' && args[0].includes('Signal fetch slow'),
+      );
+      expect(slowWarnCalls.length).toBeGreaterThan(0);
+      expect(slowWarnCalls[0][0]).toContain('device');
+    }, 2000);
+
+    it('does not warn when all fetchers are fast (under 100ms)', async () => {
+      setupAllSignals();
+
+      const warnSpy = jest.spyOn((service as any).logger, 'warn');
+
+      await service.decide(makeRequest());
+
+      const slowWarnCalls = warnSpy.mock.calls.filter(
+        (args) => typeof args[0] === 'string' && args[0].includes('Signal fetch slow'),
+      );
+      expect(slowWarnCalls.length).toBe(0);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Decision cache integration
+  // -------------------------------------------------------------------------
+
+  describe('decision cache integration', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+      mockStartSpan.mockReturnValue(mockSpan);
+    });
+
+    it('returns cached result when cache hits, with cached=true', async () => {
+      const cachedResult = {
+        requestId: 'req-001',
+        merchantId: 'merchant-001',
+        action: 'ALLOW',
+        riskScore: 10,
+        riskFactors: [],
+        appliedRules: [],
+        latencyMs: 5,
+        cached: false,
+        createdAt: new Date(),
+      };
+      mockDecisionCache.get.mockResolvedValue(cachedResult);
+
+      const result = await service.decide(makeRequest());
+
+      expect(result.cached).toBe(true);
+      expect(result.action).toBe('ALLOW');
+      expect(result.riskScore).toBe(10);
+      // Signal fetchers should NOT be called on cache hit
+      expect(mockSignalFetcher.fetchDeviceSignal).not.toHaveBeenCalled();
+      expect(mockSignalFetcher.fetchVelocitySignal).not.toHaveBeenCalled();
+    });
+
+    it('stores result in cache after a fresh decision', async () => {
+      mockDecisionCache.get.mockResolvedValue(null);
+      setupAllSignals();
+
+      await service.decide(makeRequest());
+
+      expect(mockDecisionCache.set).toHaveBeenCalledWith(
+        'merchant-001',
+        'user-001',
+        expect.objectContaining({ action: expect.any(String), riskScore: expect.any(Number) }),
+      );
+    });
+
+    it('checks cache with correct merchantId and entityId', async () => {
+      mockDecisionCache.get.mockResolvedValue(null);
+      setupAllSignals();
+
+      await service.decide(makeRequest({ merchantId: 'merch-x', entityId: 'ent-y' }));
+
+      expect(mockDecisionCache.get).toHaveBeenCalledWith('merch-x', 'ent-y');
     });
   });
 });

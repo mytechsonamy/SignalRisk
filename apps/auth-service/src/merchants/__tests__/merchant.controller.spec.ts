@@ -4,6 +4,7 @@ import * as request from 'supertest';
 import { MerchantController } from '../merchant.controller';
 import { MerchantService } from '../merchant.service';
 import { AdminGuard } from '../guards/admin.guard';
+import { ApiKeyAuditService } from '../api-key-audit.service';
 
 const mockMerchant = {
   id: 'uuid-1234',
@@ -32,9 +33,16 @@ describe('MerchantController', () => {
       rotateApiKey: jest.fn(),
     };
 
+    const mockAuditService: Partial<ApiKeyAuditService> = {
+      getRecentUsage: jest.fn().mockReturnValue([]),
+    };
+
     const builder = Test.createTestingModule({
       controllers: [MerchantController],
-      providers: [{ provide: MerchantService, useValue: mockService }],
+      providers: [
+        { provide: MerchantService, useValue: mockService },
+        { provide: ApiKeyAuditService, useValue: mockAuditService },
+      ],
     });
 
     if (overrideGuard) {
