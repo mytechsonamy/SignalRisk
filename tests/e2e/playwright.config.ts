@@ -5,9 +5,17 @@ export default defineConfig({
   testMatch: '**/*.spec.ts',
   workers: 2,
   use: {
-    baseURL: process.env.BASE_URL || 'http://localhost:5173',
+    baseURL: 'http://localhost:3099',
     screenshot: 'only-on-failure',
     headless: true,
   },
-  reporter: 'list',
+  reporter: [['github'], ['html', { outputFolder: 'playwright-report', open: 'never' }]],
+  webServer: {
+    command: 'npx ts-node mock-server/server.ts',
+    port: 3099,
+    reuseExistingServer: !process.env.CI,
+    env: {
+      PORT: '3099',
+    },
+  },
 });

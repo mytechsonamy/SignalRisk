@@ -102,6 +102,36 @@ app.get('/v1/merchants/:id', (req: Request, res: Response) => {
   res.json({ id: req.params.id, name: 'Test Merchant', email: 'test@merchant.com' });
 });
 
+// Events
+app.post('/v1/events', (_req: Request, res: Response) => {
+  res.status(201).json({ eventId: `evt-${Date.now()}`, status: 'accepted' });
+});
+
+// Decisions
+app.get('/v1/decisions', (_req: Request, res: Response) => {
+  res.json({ decisions: [], total: 0, page: 1, pageSize: 20 });
+});
+
+// Graph Intel
+app.post('/graph-intel/analyze', (_req: Request, res: Response) => {
+  res.json({ riskScore: 10, connectedFraudCount: 0, sharedDeviceCount: 1, sharedIpCount: 1, fraudRingDetected: false });
+});
+
+// Kafka lag metrics
+app.get('/metrics/kafka-lag', (_req: Request, res: Response) => {
+  res.type('text/plain').send('# HELP kafka_consumer_lag Consumer group lag\n# TYPE kafka_consumer_lag gauge\nkafka_consumer_lag{group="fraud-processors",topic="fraud-events",partition="0"} 0\n');
+});
+
+// Network Intel
+app.post('/network-intel/analyze', (_req: Request, res: Response) => {
+  res.json({ riskScore: 15, ipRiskScore: 10, botScore: 5, isDatacenter: false, isTor: false, isProxy: false });
+});
+
+// Telco Intel
+app.post('/telco-intel/analyze', (_req: Request, res: Response) => {
+  res.json({ riskScore: 5, isVoip: false, isDisposable: false, isBurner: false, countryMismatch: false });
+});
+
 // Health
 app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

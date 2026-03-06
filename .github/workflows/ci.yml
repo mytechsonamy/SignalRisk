@@ -119,14 +119,22 @@ jobs:
       - name: Start mock API server
         run: cd tests/e2e/mock-server && npx ts-node server.ts &
         env:
-          PORT: 5174
+          PORT: 3099
 
       - name: Wait for mock server
-        run: npx wait-on http://localhost:5174/health --timeout 15000
+        run: npx wait-on http://localhost:3099/health --timeout 15000
 
-      - name: Run Playwright E2E smoke tests
-        run: cd tests/e2e && MOCK_API_URL=http://localhost:5174 npx playwright test specs/auth.spec.ts --reporter=list
-        continue-on-error: true
+      - name: Run Playwright E2E tests
+        run: cd tests/e2e && npx playwright test
+        env:
+          CI: true
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: tests/e2e/playwright-report/
 
       - name: Upload Playwright screenshots on failure
         if: failure()
