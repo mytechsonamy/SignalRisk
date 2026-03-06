@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAdminStore } from '../../store/admin.store';
 import RuleWeightSlider from './RuleWeightSlider';
 import EditRuleModal from './EditRuleModal';
+import AddRuleModal from './AddRuleModal';
 import type { Rule } from '../../types/admin.types';
 
 const OUTCOME_STYLES: Record<Rule['outcome'], string> = {
@@ -16,8 +17,9 @@ function truncate(str: string, maxLen = 60): string {
 }
 
 export default function RulesTab() {
-  const { rules, isLoadingRules } = useAdminStore();
+  const { rules, isLoadingRules, deleteRule, toggleRuleActive } = useAdminStore();
   const [editingRule, setEditingRule] = useState<Rule | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   if (isLoadingRules) {
     return (
@@ -31,8 +33,14 @@ export default function RulesTab() {
 
   return (
     <div>
-      <div className="mb-4">
+      <div className="mb-4 flex items-center justify-between">
         <h2 className="text-base font-semibold text-text-primary">Rules</h2>
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="rounded-md bg-brand-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-primary/90 transition-colors"
+        >
+          + Add Rule
+        </button>
       </div>
 
       <div className="overflow-x-auto">
@@ -70,19 +78,29 @@ export default function RulesTab() {
                   <RuleWeightSlider ruleId={rule.id} initialWeight={rule.weight} />
                 </td>
                 <td className="py-3">
-                  {rule.isActive ? (
-                    <span className="text-xs font-medium text-green-700">Yes</span>
-                  ) : (
-                    <span className="text-xs font-medium text-text-muted">No</span>
-                  )}
+                  <button
+                    onClick={() => toggleRuleActive(rule.id, !rule.isActive)}
+                    className={`text-xs font-medium transition-colors hover:underline ${rule.isActive ? 'text-green-700' : 'text-text-muted'}`}
+                    aria-label={`Toggle ${rule.name} active`}
+                    title={rule.isActive ? 'Click to deactivate' : 'Click to activate'}
+                  >
+                    {rule.isActive ? 'Yes' : 'No'}
+                  </button>
                 </td>
-                <td className="py-3">
+                <td className="py-3 flex gap-2">
                   <button
                     onClick={() => setEditingRule(rule)}
                     className="rounded-md border border-surface-border px-3 py-1 text-xs font-medium text-text-primary hover:bg-surface-hover transition-colors"
                     aria-label={`Edit rule ${rule.name}`}
                   >
                     Edit
+                  </button>
+                  <button
+                    onClick={() => { if (confirm(`Delete "${rule.name}"?`)) deleteRule(rule.id); }}
+                    className="rounded-md border border-red-200 px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
+                    aria-label={`Delete rule ${rule.name}`}
+                  >
+                    Delete
                   </button>
                 </td>
               </tr>
@@ -100,6 +118,9 @@ export default function RulesTab() {
 
       {editingRule && (
         <EditRuleModal rule={editingRule} onClose={() => setEditingRule(null)} />
+      )}
+      {showAddModal && (
+        <AddRuleModal onClose={() => setShowAddModal(false)} />
       )}
     </div>
   );

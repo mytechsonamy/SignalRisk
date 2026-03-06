@@ -7,6 +7,9 @@ import {
   fetchRules as apiFetchRules,
   updateRuleWeight as apiUpdateRuleWeight,
   updateRuleExpression as apiUpdateRuleExpression,
+  createRule as apiCreateRule,
+  deleteRule as apiDeleteRule,
+  toggleRuleActive as apiToggleRuleActive,
 } from '../api/admin.api';
 import type { AdminState } from '../types/admin.types';
 
@@ -21,6 +24,9 @@ interface AdminStore extends AdminState {
   fetchRules: () => Promise<void>;
   updateRuleWeight: (ruleId: string, weight: number) => Promise<void>;
   updateRuleExpression: (ruleId: string, expression: string) => Promise<void>;
+  createRule: (data: { name: string; expression: string; outcome: 'ALLOW' | 'REVIEW' | 'BLOCK'; weight: number; isActive: boolean }) => Promise<void>;
+  deleteRule: (ruleId: string) => Promise<void>;
+  toggleRuleActive: (ruleId: string, isActive: boolean) => Promise<void>;
 }
 
 export const useAdminStore = create<AdminStore>((set, get) => ({
@@ -125,6 +131,41 @@ export const useAdminStore = create<AdminStore>((set, get) => ({
       }));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to update rule expression';
+      set({ error: message });
+      throw err;
+    }
+  },
+
+  createRule: async (data) => {
+    try {
+      const newRule = await apiCreateRule(data);
+      set((state) => ({ rules: [...state.rules, newRule] }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to create rule';
+      set({ error: message });
+      throw err;
+    }
+  },
+
+  deleteRule: async (ruleId) => {
+    try {
+      await apiDeleteRule(ruleId);
+      set((state) => ({ rules: state.rules.filter((r) => r.id !== ruleId) }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete rule';
+      set({ error: message });
+      throw err;
+    }
+  },
+
+  toggleRuleActive: async (ruleId, isActive) => {
+    try {
+      const updatedRule = await apiToggleRuleActive(ruleId, isActive);
+      set((state) => ({
+        rules: state.rules.map((r) => (r.id === ruleId ? updatedRule : r)),
+      }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to toggle rule';
       set({ error: message });
       throw err;
     }

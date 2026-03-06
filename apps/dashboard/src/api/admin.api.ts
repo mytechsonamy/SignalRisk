@@ -78,3 +78,22 @@ export async function updateRuleExpression(
 ): Promise<Rule> {
   return patchJson<Rule>(`${baseUrl}/v1/admin/rules/${ruleId}`, { expression });
 }
+
+export async function createRule(
+  data: { name: string; expression: string; outcome: Rule['outcome']; weight: number; isActive: boolean },
+  baseUrl = '/api',
+): Promise<Rule> {
+  return postJson<Rule>(`${baseUrl}/v1/admin/rules`, data);
+}
+
+export async function deleteRule(ruleId: string, baseUrl = '/api'): Promise<void> {
+  return deleteRequest(`${baseUrl}/v1/admin/rules/${ruleId}`);
+}
+
+export async function toggleRuleActive(
+  ruleId: string,
+  isActive: boolean,
+  baseUrl = '/api',
+): Promise<Rule> {
+  return patchJson<Rule>(`${baseUrl}/v1/admin/rules/${ruleId}`, { isActive });
+}
