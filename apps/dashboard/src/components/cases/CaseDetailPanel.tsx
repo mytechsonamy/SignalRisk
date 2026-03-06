@@ -153,12 +153,33 @@ export default function CaseDetailPanel({ caseData, onClose }: Props) {
                 />
               </section>
 
-              {/* Timeline */}
+              {/* Evidence Timeline */}
               <section>
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-secondary">
                   Evidence Timeline
                 </h3>
-                <p className="text-sm text-text-muted italic">Timeline coming soon</p>
+                {caseData.evidenceTimeline && caseData.evidenceTimeline.length > 0 ? (
+                  <ol className="relative border-l border-surface-border space-y-4 ml-2">
+                    {caseData.evidenceTimeline.map((item, idx) => (
+                      <li key={idx} className="ml-4">
+                        <div className="absolute -left-1.5 mt-1 h-3 w-3 rounded-full border-2 border-white bg-primary" />
+                        <p className="text-xs text-text-muted font-mono">
+                          {new Date(item.timestamp).toLocaleTimeString()}
+                        </p>
+                        <p className="text-xs font-medium text-text-primary mt-0.5">
+                          {item.description}
+                        </p>
+                        {item.type && (
+                          <span className="inline-block mt-0.5 rounded bg-surface-hover px-1.5 py-0.5 text-xs text-text-secondary">
+                            {item.type}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="text-sm text-text-muted">No evidence recorded</p>
+                )}
               </section>
 
               {/* Resolution Form */}

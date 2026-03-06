@@ -4,7 +4,7 @@
  * Provides HTTP endpoints for querying velocity signals.
  */
 
-import { Controller, Get, Post, Param, Body, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, Headers, HttpCode, HttpStatus } from '@nestjs/common';
 import { VelocityService } from './velocity.service';
 import { BurstService } from '../burst/burst.service';
 import {
@@ -29,10 +29,11 @@ export class VelocityController {
   @Get(':entityId')
   async getVelocity(
     @Param('entityId') entityId: string,
+    @Headers('x-merchant-id') headerMerchantId?: string,
   ): Promise<{ entityId: string; signals: VelocitySignals }> {
-    // In production, merchantId comes from JWT/auth middleware.
-    // For now, use a header-based approach.
-    const merchantId = 'default'; // TODO: extract from auth context
+    // Extract merchantId from X-Merchant-ID header (set by TenantMiddleware or caller).
+    // Falls back to 'default' for backward compatibility in integration tests.
+    const merchantId = headerMerchantId?.trim() || 'default';
     const signals = await this.velocityService.getVelocitySignals(merchantId, entityId);
 
     // Enrich with burst detection

@@ -4,6 +4,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { EventsController } from './events.controller';
 import { EventsService } from './events.service';
+import { ApiKeyService } from './api-key.service';
 import { DlqModule } from '../dlq/dlq.module';
 
 @Module({
@@ -23,6 +24,7 @@ import { DlqModule } from '../dlq/dlq.module';
   controllers: [EventsController],
   providers: [
     EventsService,
+    ApiKeyService,
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,

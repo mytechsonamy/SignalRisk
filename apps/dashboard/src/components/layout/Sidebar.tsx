@@ -93,6 +93,18 @@ function AdminIcon() {
   );
 }
 
+function GraphIntelIcon() {
+  return (
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <circle cx="5" cy="12" r="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="19" cy="5" r="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="19" cy="19" r="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="12" cy="12" r="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M7 12h3m4 0h3M17 6.5l-3 3.5M17 17.5l-3-3.5" />
+    </svg>
+  );
+}
+
 function LiveFeedIcon() {
   return (
     <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -139,6 +151,12 @@ const NAV_ITEMS: NavItem[] = [
     to: '/analytics',
     label: 'Analytics',
     icon: <AnalyticsIcon />,
+  },
+  {
+    to: '/graph-intel',
+    label: 'Graph Intel',
+    icon: <GraphIntelIcon />,
+    roles: ['analyst', 'admin'],
   },
   {
     to: '/live-feed',

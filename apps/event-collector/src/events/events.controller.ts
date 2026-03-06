@@ -21,6 +21,7 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags, ApiHeader } from '@nestjs/swagger';
 import { EventsService, IngestResult } from './events.service';
+import { ApiKeyService } from './api-key.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { BackpressureGuard } from '../backpressure/backpressure.guard';
 
@@ -31,6 +32,7 @@ export class EventsController {
 
   constructor(
     private readonly eventsService: EventsService,
+    private readonly apiKeyService: ApiKeyService,
   ) {}
 
   @ApiOperation({ summary: 'Ingest one or more fraud detection events' })
@@ -74,8 +76,9 @@ export class EventsController {
   }
 
   /**
-   * Validates the API key from the Authorization header.
+   * Extracts and validates the API key from the Authorization header.
    * Expected format: `Bearer <api-key>` or `ApiKey <api-key>`.
+   * Delegates key lookup and format enforcement to ApiKeyService.
    */
   private validateApiKey(authHeader: string | undefined): void {
     if (!authHeader) {
@@ -120,8 +123,8 @@ export class EventsController {
       );
     }
 
-    // In production, this would validate against a merchant API key store.
-    // For now, we accept any non-empty key to allow integration testing.
-    // TODO: Integrate with auth-service for real key validation.
+    // Delegate format validation and key-store lookup to ApiKeyService.
+    // Throws UnauthorizedException on format mismatch or unknown key.
+    this.apiKeyService.validate(apiKey);
   }
 }

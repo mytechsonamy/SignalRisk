@@ -23,6 +23,20 @@ export interface MerchantStat {
   blockRate: number; // 0-1
 }
 
+export interface KpiData {
+  decisionsPerHour: number;
+  blockRatePct: number;
+  reviewRatePct: number;
+  avgLatencyMs: number;
+}
+
+export interface TrendBucket {
+  minute: string;
+  ALLOW: number;
+  REVIEW: number;
+  BLOCK: number;
+}
+
 export interface AnalyticsData {
   trends: DecisionTrend[];     // last 7 days
   velocity: VelocityPoint[];   // last 24 hours

@@ -498,6 +498,84 @@ app.get('/health', (_req: Request, res: Response) => {
 });
 
 // ---------------------------------------------------------------------------
+// Graph Intelligence
+// ---------------------------------------------------------------------------
+
+const mockGraphSummary = {
+  graphData: {
+    nodes: [
+      // Accounts — fraud ring via device_shared_X
+      { id: 'user_001', type: 'account', label: 'user_001', isFraud: true },
+      { id: 'user_002', type: 'account', label: 'user_002', isFraud: true },
+      { id: 'user_003', type: 'account', label: 'user_003', isFraud: false },
+      { id: 'user_004', type: 'account', label: 'user_004', isFraud: false },
+      // Accounts — clean cluster via device_clean
+      { id: 'user_005', type: 'account', label: 'user_005', isFraud: false },
+      { id: 'user_006', type: 'account', label: 'user_006', isFraud: false },
+      // Devices
+      { id: 'device_shared_X', type: 'device', label: 'dev_X', isEmulator: false, trustScore: 0.2, isSuspicious: true },
+      { id: 'device_shared_Y', type: 'device', label: 'dev_Y', isEmulator: true, trustScore: 0.15, isSuspicious: true },
+      { id: 'device_clean',    type: 'device', label: 'dev_clean', isEmulator: false, trustScore: 0.85, isSuspicious: false },
+      { id: 'device_emulator', type: 'device', label: 'dev_emu', isEmulator: true, trustScore: 0.05, isSuspicious: false },
+      // Merchants
+      { id: 'merch_A', type: 'merchant', label: 'Merch A' },
+      { id: 'merch_B', type: 'merchant', label: 'Merch B' },
+      { id: 'merch_C', type: 'merchant', label: 'Merch C' },
+    ],
+    links: [
+      // Fraud ring accounts → shared device
+      { source: 'user_001', target: 'device_shared_X', type: 'USES_DEVICE' },
+      { source: 'user_002', target: 'device_shared_X', type: 'USES_DEVICE' },
+      { source: 'user_003', target: 'device_shared_X', type: 'USES_DEVICE' },
+      { source: 'user_004', target: 'device_shared_X', type: 'USES_DEVICE' },
+      // Second shared device
+      { source: 'user_001', target: 'device_shared_Y', type: 'USES_DEVICE' },
+      { source: 'user_002', target: 'device_shared_Y', type: 'USES_DEVICE' },
+      // Clean cluster
+      { source: 'user_005', target: 'device_clean', type: 'USES_DEVICE' },
+      { source: 'user_006', target: 'device_clean', type: 'USES_DEVICE' },
+      // Emulator
+      { source: 'user_004', target: 'device_emulator', type: 'USES_DEVICE' },
+      // Device → Merchant (cross-merchant sharing)
+      { source: 'device_shared_X', target: 'merch_A', type: 'USED_BY' },
+      { source: 'device_shared_X', target: 'merch_B', type: 'USED_BY' },
+      { source: 'device_shared_X', target: 'merch_C', type: 'USED_BY' },
+      { source: 'device_shared_Y', target: 'merch_A', type: 'USED_BY' },
+      { source: 'device_shared_Y', target: 'merch_B', type: 'USED_BY' },
+      { source: 'device_clean',    target: 'merch_A', type: 'USED_BY' },
+    ],
+  },
+  fraudRings: [
+    {
+      deviceId: 'device_shared_X',
+      fraudAccounts: ['user_001', 'user_002'],
+      allAccounts: ['user_001', 'user_002', 'user_003', 'user_004'],
+      riskScore: 90,
+    },
+  ],
+  suspiciousDevices: [
+    { deviceId: 'device_shared_X', sharedAcrossMerchants: ['merch_A', 'merch_B', 'merch_C'], sharingCount: 3 },
+    { deviceId: 'device_shared_Y', sharedAcrossMerchants: ['merch_A', 'merch_B'], sharingCount: 2 },
+  ],
+};
+
+app.get('/v1/graph/summary', (_req: Request, res: Response) => {
+  res.json(mockGraphSummary);
+});
+
+app.post('/v1/graph/analyze', (req: Request, res: Response) => {
+  const { accountId } = req.body as { accountId: string };
+  const fraudRingAccounts = new Set(['user_001', 'user_002', 'user_003', 'user_004']);
+  const isFraud = ['user_001', 'user_002'].includes(accountId);
+  const inRing = fraudRingAccounts.has(accountId);
+  const connectedFraudCount = inRing && !isFraud ? 2 : isFraud ? 1 : 0;
+  const sharedDeviceCount = inRing ? 3 : ['user_005', 'user_006'].includes(accountId) ? 1 : 0;
+  const fraudRingDetected = inRing && connectedFraudCount >= 2;
+  const riskScore = fraudRingDetected ? 90 : isFraud ? 60 : sharedDeviceCount > 1 ? 30 : 0;
+  res.json({ riskScore, connectedFraudCount, sharedDeviceCount, sharedIpCount: sharedDeviceCount, fraudRingDetected });
+});
+
+// ---------------------------------------------------------------------------
 // 404 fallback
 // ---------------------------------------------------------------------------
 

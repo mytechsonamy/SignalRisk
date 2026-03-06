@@ -29,6 +29,24 @@ const DATACENTER_ASNS = new Set([
 ]);
 
 // ---------------------------------------------------------------------------
+// Known commercial VPN provider ASNs
+// ---------------------------------------------------------------------------
+
+const VPN_PROVIDER_ASNS = new Set([
+  'AS9009',   // M247 (NordVPN, ExpressVPN infrastructure)
+  'AS20860',  // Iomart (VPN hosting)
+  'AS210644', // Mullvad VPN
+  'AS39351',  // 31173 Services (Mullvad colocation)
+  'AS204953', // Surfshark
+  'AS62240',  // Clouvider (used by VPN providers)
+  'AS35041',  // Private Internet Access
+  'AS40065',  // IPVanish
+  'AS9268',   // Leaseweb (CyberGhost)
+  'AS25820',  // IT7 Networks (HideMyAss)
+  'AS53667',  // Frantech Solutions (BulletVPN)
+]);
+
+// ---------------------------------------------------------------------------
 // Known proxy / VPN CIDR ranges (hardcoded for testing / MVP)
 // ---------------------------------------------------------------------------
 
@@ -87,14 +105,27 @@ export class ProxyDetector {
 
   /**
    * Returns true if the ASN matches a known datacenter provider.
-   * The check strips the 'AS' prefix for flexibility and is case-insensitive.
+   * Accepts both 'AS14061' and '14061' formats (case-insensitive).
    */
   isDatacenterIp(asn: string | undefined): boolean {
     if (!asn) return false;
-    const normalized = asn.toUpperCase().trim();
-    // Accept both 'AS14061' and '14061' formats
-    const withPrefix = normalized.startsWith('AS') ? normalized : `AS${normalized}`;
+    const withPrefix = this.normalizeAsn(asn);
     return DATACENTER_ASNS.has(withPrefix);
+  }
+
+  /**
+   * Returns true if the ASN matches a known commercial VPN provider.
+   * Uses a curated list of VPN infrastructure ASNs.
+   */
+  isVpnIp(asn: string | undefined): boolean {
+    if (!asn) return false;
+    const withPrefix = this.normalizeAsn(asn);
+    return VPN_PROVIDER_ASNS.has(withPrefix);
+  }
+
+  private normalizeAsn(asn: string): string {
+    const normalized = asn.toUpperCase().trim();
+    return normalized.startsWith('AS') ? normalized : `AS${normalized}`;
   }
 
   /**

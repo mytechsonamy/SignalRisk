@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { HttpException, HttpStatus } from '@nestjs/common';
 import { EventsController } from '../events.controller';
 import { EventsService, IngestResult } from '../events.service';
+import { ApiKeyService } from '../api-key.service';
 import { EventType } from '../dto/create-event.dto';
 import { BackpressureGuard } from '../../backpressure/backpressure.guard';
 
@@ -58,6 +59,12 @@ describe('EventsController', () => {
           provide: EventsService,
           useValue: {
             ingest: jest.fn().mockResolvedValue(mockIngestResult),
+          },
+        },
+        {
+          provide: ApiKeyService,
+          useValue: {
+            validate: jest.fn(), // no-op: accept any key in tests
           },
         },
       ],

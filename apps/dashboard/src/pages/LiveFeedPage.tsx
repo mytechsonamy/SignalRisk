@@ -31,7 +31,7 @@ interface Counts {
 }
 
 const MAX_EVENTS = 100;
-const WS_URL = (import.meta as { env?: { VITE_WS_URL?: string } }).env?.VITE_WS_URL ?? 'http://localhost:3008';
+const WS_URL = (import.meta as { env?: { VITE_WS_URL?: string } }).env?.VITE_WS_URL ?? 'http://localhost:3000';
 
 function getToken(): string {
   return localStorage.getItem('token') ?? '';

@@ -2,6 +2,13 @@ export type CaseStatus = 'OPEN' | 'IN_REVIEW' | 'RESOLVED' | 'ESCALATED';
 export type CasePriority = 'HIGH' | 'MEDIUM' | 'LOW';
 export type DecisionAction = 'REVIEW' | 'BLOCK';
 
+export interface EvidenceItem {
+  timestamp: string;          // ISO datetime
+  type: string;               // e.g. 'signal', 'rule_hit', 'user_action'
+  description: string;
+  data?: Record<string, unknown>;
+}
+
 export interface Case {
   id: string;
   merchantId: string;
@@ -10,6 +17,7 @@ export interface Case {
   action: DecisionAction;
   riskScore: number;
   riskFactors: RiskFactor[];
+  evidenceTimeline?: EvidenceItem[];
   status: CaseStatus;
   priority: CasePriority;
   slaDeadline: string;        // ISO datetime

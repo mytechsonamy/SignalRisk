@@ -14,6 +14,7 @@ import RulesTab from './components/admin/RulesTab';
 import { useAdminStore } from './store/admin.store';
 
 const LiveFeedPage = lazy(() => import('./pages/LiveFeedPage'));
+const GraphIntelPage = lazy(() => import('./pages/GraphIntelPage'));
 
 function RulesPage() {
   const { fetchRules } = useAdminStore();
@@ -149,6 +150,16 @@ export default function App() {
             }
           />
           <Route path="analytics" element={<AnalyticsPage />} />
+          <Route
+            path="graph-intel"
+            element={
+              <ProtectedRoute allowedRoles={['analyst', 'admin']}>
+                <Suspense fallback={<div className="p-6">Loading…</div>}>
+                  <GraphIntelPage />
+                </Suspense>
+              </ProtectedRoute>
+            }
+          />
           <Route path="settings" element={<SettingsPage />} />
           <Route
             path="live-feed"

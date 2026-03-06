@@ -42,7 +42,8 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
 }
 
 export async function fetchReviewCases(baseUrl = '/api'): Promise<Case[]> {
-  return getJson<Case[]>(`${baseUrl}/v1/cases?status=REVIEW&sort=riskScore:desc`);
+  const result = await getJson<{ cases: Case[] } | Case[]>(`${baseUrl}/v1/cases?action=REVIEW&sort=riskScore:desc`);
+  return Array.isArray(result) ? result : result.cases;
 }
 
 export async function claimCase(caseId: string, baseUrl = '/api'): Promise<Case> {
@@ -64,18 +65,8 @@ export async function submitOutcome(
   });
 }
 
-export async function fetchLabelingStats(_baseUrl = '/api'): Promise<LabelingStats> {
-  // Mock — return computed stats (real stats come from local state)
-  return {
-    today: {
-      labeled: 0,
-      fraudConfirmed: 0,
-      falsePositives: 0,
-      inconclusive: 0,
-      accuracy: 0,
-    },
-    pendingReview: 0,
-  };
+export async function fetchLabelingStats(baseUrl = '/api'): Promise<LabelingStats> {
+  return getJson<LabelingStats>(`${baseUrl}/v1/cases/stats`);
 }
 
 export async function bulkLabelCases(

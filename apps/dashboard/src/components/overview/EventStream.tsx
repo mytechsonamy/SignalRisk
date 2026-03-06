@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { io, type Socket } from 'socket.io-client';
 import { useDashboardStore, type DecisionEvent } from '../../store/dashboard.store';
 import Badge from '../ui/Badge';
 
@@ -16,57 +17,42 @@ function formatTimestamp(ts: string): string {
   }
 }
 
-const WS_URL = 'ws://localhost:3009/ws/events';
-const RECONNECT_DELAY_MS = 5000;
+const WS_URL = (import.meta as { env?: { VITE_WS_URL?: string } }).env?.VITE_WS_URL ?? 'http://localhost:3000';
 
 export default function EventStream() {
   const { events, prependEvent } = useDashboardStore();
   const [wsStatus, setWsStatus] = useState<'connecting' | 'connected' | 'disconnected'>(
     'disconnected',
   );
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const socketRef = useRef<Socket | null>(null);
 
   const connect = () => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    if (socketRef.current?.connected) return;
 
     setWsStatus('connecting');
-    const ws = new WebSocket(WS_URL);
-    wsRef.current = ws;
+    const socket = io(WS_URL, { path: '/socket.io', transports: ['websocket'] });
+    socketRef.current = socket;
 
-    ws.onopen = () => setWsStatus('connected');
+    socket.on('connect', () => setWsStatus('connected'));
 
-    ws.onmessage = (evt: MessageEvent<string>) => {
-      try {
-        const data = JSON.parse(evt.data) as DecisionEvent;
-        prependEvent(data);
-      } catch {
-        // ignore malformed messages
-      }
-    };
+    socket.on('decision', (data: DecisionEvent) => {
+      prependEvent(data);
+    });
 
-    ws.onerror = () => {
-      setWsStatus('disconnected');
-    };
-
-    ws.onclose = () => {
-      setWsStatus('disconnected');
-      reconnectTimerRef.current = setTimeout(connect, RECONNECT_DELAY_MS);
-    };
+    socket.on('disconnect', () => setWsStatus('disconnected'));
+    socket.on('connect_error', () => setWsStatus('disconnected'));
   };
 
   useEffect(() => {
     connect();
     return () => {
-      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-      wsRef.current?.close();
+      socketRef.current?.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleRetry = () => {
-    if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-    wsRef.current?.close();
+    socketRef.current?.disconnect();
     connect();
   };
 

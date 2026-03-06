@@ -25,7 +25,16 @@ export class KeyManager implements OnModuleInit {
   private keys: Map<string, ManagedKey> = new Map();
   private currentKid: string | null = null;
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly configService: ConfigService) {
+    // Generate an ephemeral key immediately so getCurrentSigningKey() is always available
+    // before onModuleInit fires. onModuleInit will replace it if env vars are set.
+    const kid = 'signalrisk-auth-ephemeral';
+    const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+    });
+    this.keys.set(kid, { kid, privateKey, publicKey, createdAt: new Date(), active: true });
+    this.currentKid = kid;
+  }
 
   async onModuleInit(): Promise<void> {
     await this.loadKeys();

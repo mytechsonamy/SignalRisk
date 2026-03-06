@@ -3,6 +3,8 @@ import type {
   VelocityPoint,
   RiskBucket,
   MerchantStat,
+  KpiData,
+  TrendBucket,
 } from '../types/analytics.types';
 
 async function getJson<T>(url: string): Promise<T> {
@@ -30,4 +32,12 @@ export async function fetchRiskBuckets(baseUrl = '/api'): Promise<RiskBucket[]> 
 
 export async function fetchMerchantStats(baseUrl = '/api'): Promise<MerchantStat[]> {
   return getJson<MerchantStat[]>(`${baseUrl}/v1/analytics/merchants`);
+}
+
+export async function fetchKpiStats(baseUrl = '/api'): Promise<KpiData> {
+  return getJson<KpiData>(`${baseUrl}/v1/analytics/kpi`);
+}
+
+export async function fetchMinuteTrend(baseUrl = '/api'): Promise<TrendBucket[]> {
+  return getJson<TrendBucket[]>(`${baseUrl}/v1/analytics/minute-trend`);
 }
