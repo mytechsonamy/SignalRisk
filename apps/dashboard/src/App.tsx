@@ -45,9 +45,14 @@ const SETTING_FIELDS = [
 ] as const;
 
 function SettingsPage() {
-  const [values, setValues] = useState<Record<string, string>>(() =>
-    Object.fromEntries(SETTING_FIELDS.map(f => [f.key, f.defaultValue])),
-  );
+  const [values, setValues] = useState<Record<string, string>>(() => {
+    const defaults = Object.fromEntries(SETTING_FIELDS.map(f => [f.key, f.defaultValue]));
+    try {
+      const stored = localStorage.getItem('signalrisk_settings');
+      if (stored) return { ...defaults, ...JSON.parse(stored) };
+    } catch { /* ignore */ }
+    return defaults;
+  });
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState(false);
 

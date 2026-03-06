@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useCasesStore } from '../store/cases.store';
+import { api } from '../lib/api';
+import type { Case } from '../types/case.types';
 import CaseFilters from '../components/cases/CaseFilters';
 import CasesTable from '../components/cases/CasesTable';
 import BulkActionBar from '../components/cases/BulkActionBar';
@@ -10,13 +12,21 @@ const PAGE_LIMIT = 20;
 export default function CasesPage() {
   const { cases, total, page, loading, fetchCases, setPage, selectedIds } = useCasesStore();
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
+  const [selectedCase, setSelectedCase] = useState<Case | null>(null);
 
   useEffect(() => {
     fetchCases();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const selectedCase = cases.find((c) => c.id === selectedCaseId) ?? null;
+  useEffect(() => {
+    if (!selectedCaseId) { setSelectedCase(null); return; }
+    api.get<Case>(`/v1/cases/${selectedCaseId}`).then(setSelectedCase).catch(() => {
+      setSelectedCase(cases.find((c) => c.id === selectedCaseId) ?? null);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCaseId]);
+
   const totalPages = Math.ceil(total / PAGE_LIMIT);
 
   return (
@@ -67,7 +77,7 @@ export default function CasesPage() {
 
       <CaseDetailPanel
         caseData={selectedCase}
-        onClose={() => setSelectedCaseId(null)}
+        onClose={() => { setSelectedCaseId(null); setSelectedCase(null); }}
       />
     </div>
   );

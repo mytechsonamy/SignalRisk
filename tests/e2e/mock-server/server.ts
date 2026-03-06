@@ -225,7 +225,7 @@ app.get('/v1/cases/stats', (_req: Request, res: Response) => {
       fraudConfirmed,
       falsePositives,
       inconclusive: 0,
-      accuracy: labeled > 0 ? Math.round((fraudConfirmed / labeled) * 100) : 0,
+      accuracy: labeled > 0 ? fraudConfirmed / labeled : 0,
     },
     pendingReview: mockCases.filter(c => c.status === 'OPEN').length,
   });
@@ -433,7 +433,7 @@ app.get('/api/v1/cases/stats', (_req: Request, res: Response) => {
       fraudConfirmed,
       falsePositives,
       inconclusive: 0,
-      accuracy: labeled > 0 ? Math.round((fraudConfirmed / labeled) * 100) : 0,
+      accuracy: labeled > 0 ? fraudConfirmed / labeled : 0,
     },
     pendingReview: mockCases.filter(c => c.status === 'OPEN').length,
   });
