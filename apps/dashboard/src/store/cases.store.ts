@@ -31,7 +31,7 @@ export const useCasesStore = create<CasesState>((set, get) => ({
   cases: [],
   total: 0,
   page: 1,
-  filters: {},
+  filters: { status: 'OPEN' },
   selectedIds: [],
   loading: false,
 
@@ -87,21 +87,19 @@ export const useCasesStore = create<CasesState>((set, get) => ({
 
   resolveCase: async (id, resolution, notes) => {
     await api.put(`/v1/cases/${id}/resolve`, { resolution, notes });
+    // Remove from list — default filter is OPEN, resolved cases leave the active queue
     set((state) => ({
-      cases: state.cases.map((c) =>
-        c.id === id
-          ? { ...c, status: 'RESOLVED' as CaseStatus, resolution, resolutionNotes: notes, resolvedAt: new Date().toISOString() }
-          : c,
-      ),
+      cases: state.cases.filter((c) => c.id !== id),
+      total: Math.max(0, state.total - 1),
     }));
   },
 
   escalateCase: async (id) => {
     await api.put(`/v1/cases/${id}/escalate`, {});
+    // Remove from OPEN queue — escalated cases are handled by senior analysts
     set((state) => ({
-      cases: state.cases.map((c) =>
-        c.id === id ? { ...c, status: 'ESCALATED' as CaseStatus } : c,
-      ),
+      cases: state.cases.filter((c) => c.id !== id),
+      total: Math.max(0, state.total - 1),
     }));
   },
 
@@ -111,11 +109,8 @@ export const useCasesStore = create<CasesState>((set, get) => ({
       selectedIds.map((id) => api.put(`/v1/cases/${id}/resolve`, { resolution, notes: '' })),
     );
     set((state) => ({
-      cases: state.cases.map((c) =>
-        state.selectedIds.includes(c.id)
-          ? { ...c, status: 'RESOLVED' as CaseStatus, resolution, resolvedAt: new Date().toISOString() }
-          : c,
-      ),
+      cases: state.cases.filter((c) => !state.selectedIds.includes(c.id)),
+      total: Math.max(0, state.total - selectedIds.length),
       selectedIds: [],
     }));
   },

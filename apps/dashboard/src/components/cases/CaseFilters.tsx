@@ -1,6 +1,6 @@
 import { useCallback, useRef } from 'react';
 import { useCasesStore } from '../../store/cases.store';
-import type { CaseStatus, CasePriority } from '../../types/case.types';
+import type { CasePriority } from '../../types/case.types';
 
 export default function CaseFilters() {
   const { filters, setFilter } = useCasesStore();
@@ -34,11 +34,10 @@ export default function CaseFilters() {
         className="rounded-md border border-surface-border bg-white px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary"
       >
         <option value="">All Statuses</option>
-        {(['OPEN', 'IN_REVIEW', 'RESOLVED', 'ESCALATED'] as CaseStatus[]).map((s) => (
-          <option key={s} value={s}>
-            {s}
-          </option>
-        ))}
+        <option value="OPEN">Open</option>
+        <option value="IN_REVIEW">In Review</option>
+        <option value="ESCALATED">Escalated</option>
+        <option value="RESOLVED">Resolved</option>
       </select>
 
       <select
