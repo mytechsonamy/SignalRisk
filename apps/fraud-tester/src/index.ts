@@ -9,6 +9,10 @@
 export type { FraudDecision, FraudTestEvent, IFraudSystemAdapter } from './adapters/base.adapter';
 export { SignalRiskAdapter } from './adapters/signalrisk.adapter';
 export type { SignalRiskAdapterConfig } from './adapters/signalrisk.adapter';
+export { MockAdapter } from './adapters/mock.adapter';
+export type { MockAdapterConfig, MockDecisionMode } from './adapters/mock.adapter';
+export { ChaosAdapterWrapper } from './adapters/chaos-wrapper';
+export type { ChaosConfig } from './adapters/chaos-wrapper';
 
 // Scenario types
 export type {
@@ -35,4 +39,9 @@ export { ScenarioRunner } from './orchestrator/orchestrator';
 export type { IFraudTestAgent } from './agents/base.agent';
 export { FraudSimulationAgent } from './agents/fraud-simulation.agent';
 export { AdversarialAgent } from './agents/adversarial.agent';
+export type { AdversarialPattern } from './agents/adversarial.agent';
 export { ChaosAgent } from './agents/chaos.agent';
+export type { ChaosMode } from './agents/chaos.agent';
+
+// Server
+export { createServer } from './api/server';

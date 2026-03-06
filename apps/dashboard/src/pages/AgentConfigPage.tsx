@@ -8,7 +8,6 @@ interface AgentMeta {
   key: keyof AgentConfig;
   name: string;
   description: string;
-  available: boolean;
   icon: React.ReactNode;
 }
 
@@ -41,21 +40,18 @@ const AGENT_META: AgentMeta[] = [
     key: 'fraudSim',
     name: 'Fraud Simulation',
     description: 'Simulates known fraud patterns including device farms, emulator spoofing, and bot checkout flows.',
-    available: true,
     icon: <IconGrid />,
   },
   {
     key: 'adversarial',
     name: 'Adversarial Agent',
     description: 'Uses adaptive evasion techniques to test the robustness of fraud detection under adversarial conditions.',
-    available: false,
     icon: <IconBolt />,
   },
   {
     key: 'chaos',
     name: 'Chaos Agent',
     description: 'Injects random noise and edge-case scenarios to stress-test detection resilience.',
-    available: false,
     icon: <IconChaos />,
   },
 ];
@@ -67,7 +63,145 @@ const SCHEDULES = [
   { value: 'weekly', label: 'Weekly' },
 ] as const;
 
+const ATTACK_PATTERNS = [
+  { value: 'all', label: 'All Patterns' },
+  { value: 'emulator-bypass', label: 'Emulator Bypass' },
+  { value: 'slow-fraud', label: 'Slow Fraud' },
+  { value: 'bot-evasion', label: 'Bot Evasion' },
+] as const;
+
+const CHAOS_MODES = [
+  { value: 'all', label: 'All Modes' },
+  { value: 'timeout', label: 'Timeout Injection' },
+  { value: 'partialFailure', label: 'Partial Failure' },
+  { value: 'stress', label: 'Stress Test' },
+] as const;
+
 // ─── sub-components ───────────────────────────────────────────────────────────
+
+function AdversarialParams({
+  settings,
+  onChange,
+  disabled,
+}: {
+  settings: AgentSettings;
+  onChange: (patch: Partial<AgentSettings>) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="space-y-3 pt-1 border-t border-surface-border">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">Adversarial Parameters</p>
+
+      <div className="space-y-1.5">
+        <label className="block text-xs text-text-secondary">Attack Pattern</label>
+        <select
+          value={settings.attackPattern ?? 'all'}
+          onChange={(e) => onChange({ attackPattern: e.target.value as AgentSettings['attackPattern'] })}
+          disabled={disabled}
+          className="w-full rounded-md border border-surface-border bg-surface-sidebar text-text-primary text-xs px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-40"
+        >
+          {ATTACK_PATTERNS.map((p) => (
+            <option key={p.value} value={p.value}>{p.label}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between text-xs">
+          <label className="text-text-secondary">Intensity</label>
+          <span className="tabular-nums font-semibold text-text-primary">{settings.intensity}/10</span>
+        </div>
+        <input
+          type="range"
+          min={1}
+          max={10}
+          step={1}
+          value={settings.intensity}
+          onChange={(e) => onChange({ intensity: parseInt(e.target.value, 10) })}
+          disabled={disabled}
+          className="w-full accent-primary disabled:opacity-40"
+        />
+        <div className="flex justify-between text-[10px] text-text-muted">
+          <span>Low</span>
+          <span>Medium</span>
+          <span>High</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ChaosParams({
+  settings,
+  onChange,
+  disabled,
+}: {
+  settings: AgentSettings;
+  onChange: (patch: Partial<AgentSettings>) => void;
+  disabled: boolean;
+}) {
+  const chaosMode = settings.chaosMode ?? 'all';
+  const isPartialFailure = chaosMode === 'partialFailure';
+  const isTimeout = chaosMode === 'timeout';
+
+  return (
+    <div className="space-y-3 pt-1 border-t border-surface-border">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">Chaos Parameters</p>
+
+      <div className="space-y-1.5">
+        <label className="block text-xs text-text-secondary">Chaos Mode</label>
+        <select
+          value={chaosMode}
+          onChange={(e) => onChange({ chaosMode: e.target.value as AgentSettings['chaosMode'] })}
+          disabled={disabled}
+          className="w-full rounded-md border border-surface-border bg-surface-sidebar text-text-primary text-xs px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-40"
+        >
+          {CHAOS_MODES.map((m) => (
+            <option key={m.value} value={m.value}>{m.label}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className={`space-y-2 ${!isPartialFailure ? 'opacity-40 pointer-events-none' : ''}`}>
+        <div className="flex items-center justify-between text-xs">
+          <label className="text-text-secondary">Failure Rate</label>
+          <span className="tabular-nums font-semibold text-text-primary">
+            {Math.round((settings.failureRate ?? 0.3) * 100)}%
+          </span>
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={50}
+          step={1}
+          value={Math.round((settings.failureRate ?? 0.3) * 100)}
+          onChange={(e) => onChange({ failureRate: parseInt(e.target.value, 10) / 100 })}
+          disabled={disabled || !isPartialFailure}
+          className="w-full accent-primary disabled:opacity-40"
+        />
+        <div className="flex justify-between text-[10px] text-text-muted">
+          <span>0%</span>
+          <span>25%</span>
+          <span>50%</span>
+        </div>
+      </div>
+
+      <div className={`space-y-1.5 ${!isTimeout ? 'opacity-40 pointer-events-none' : ''}`}>
+        <label className="block text-xs text-text-secondary">Timeout (ms)</label>
+        <input
+          type="number"
+          min={100}
+          max={30000}
+          step={100}
+          value={settings.timeoutMs ?? 5000}
+          onChange={(e) => onChange({ timeoutMs: parseInt(e.target.value, 10) || 5000 })}
+          disabled={disabled || !isTimeout}
+          className="w-full rounded-md border border-surface-border bg-surface-sidebar text-text-primary text-xs px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-40"
+        />
+      </div>
+    </div>
+  );
+}
 
 function AgentCard({
   meta,
@@ -78,14 +212,10 @@ function AgentCard({
   settings: AgentSettings;
   onChange: (patch: Partial<AgentSettings>) => void;
 }) {
-  const isActive = meta.available && settings.enabled;
+  const isActive = settings.enabled;
 
   return (
-    <div
-      className={`rounded-lg bg-surface-card shadow-md p-5 space-y-5 ${
-        !meta.available ? 'opacity-60' : ''
-      }`}
-    >
+    <div className="rounded-lg bg-surface-card shadow-md p-5 space-y-4">
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -97,61 +227,27 @@ function AgentCard({
             {meta.icon}
           </div>
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-text-primary truncate">{meta.name}</h3>
-              {!meta.available && (
-                <span className="flex-shrink-0 rounded-full bg-surface-border px-2 py-0.5 text-[10px] font-semibold text-text-muted">
-                  Sprint 19
-                </span>
-              )}
-            </div>
+            <h3 className="text-sm font-semibold text-text-primary truncate">{meta.name}</h3>
             <p className="text-xs text-text-secondary mt-0.5 line-clamp-2">{meta.description}</p>
           </div>
         </div>
 
         {/* Enable toggle */}
         <button
-          onClick={() => meta.available && onChange({ enabled: !settings.enabled })}
-          disabled={!meta.available}
-          className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:cursor-not-allowed ${
-            settings.enabled && meta.available ? 'bg-primary' : 'bg-surface-border'
+          onClick={() => onChange({ enabled: !settings.enabled })}
+          className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${
+            settings.enabled ? 'bg-primary' : 'bg-surface-border'
           }`}
           role="switch"
-          aria-checked={settings.enabled && meta.available}
+          aria-checked={settings.enabled}
           aria-label={`Toggle ${meta.name}`}
         >
           <span
             className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-              settings.enabled && meta.available ? 'translate-x-4' : 'translate-x-0'
+              settings.enabled ? 'translate-x-4' : 'translate-x-0'
             }`}
           />
         </button>
-      </div>
-
-      {/* Intensity slider */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between text-xs">
-          <label htmlFor={`intensity-${meta.key}`} className="text-text-secondary">
-            Intensity
-          </label>
-          <span className="tabular-nums font-semibold text-text-primary">{settings.intensity}/10</span>
-        </div>
-        <input
-          id={`intensity-${meta.key}`}
-          type="range"
-          min={1}
-          max={10}
-          step={1}
-          value={settings.intensity}
-          onChange={(e) => onChange({ intensity: parseInt(e.target.value, 10) })}
-          disabled={!meta.available || !settings.enabled}
-          className="w-full accent-primary disabled:opacity-40"
-        />
-        <div className="flex justify-between text-[10px] text-text-muted">
-          <span>Low</span>
-          <span>Medium</span>
-          <span>High</span>
-        </div>
       </div>
 
       {/* Schedule */}
@@ -163,7 +259,7 @@ function AgentCard({
           id={`schedule-${meta.key}`}
           value={settings.schedule}
           onChange={(e) => onChange({ schedule: e.target.value as AgentSettings['schedule'] })}
-          disabled={!meta.available || !settings.enabled}
+          disabled={!settings.enabled}
           className="w-full rounded-md border border-surface-border bg-surface-sidebar text-text-primary text-xs px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-40"
         >
           {SCHEDULES.map((s) => (
@@ -171,6 +267,42 @@ function AgentCard({
           ))}
         </select>
       </div>
+
+      {/* Agent-specific params */}
+      {meta.key === 'fraudSim' && (
+        <div className="space-y-2 pt-1 border-t border-surface-border">
+          <div className="flex items-center justify-between text-xs">
+            <label htmlFor={`intensity-${meta.key}`} className="text-text-secondary">
+              Intensity
+            </label>
+            <span className="tabular-nums font-semibold text-text-primary">{settings.intensity}/10</span>
+          </div>
+          <input
+            id={`intensity-${meta.key}`}
+            type="range"
+            min={1}
+            max={10}
+            step={1}
+            value={settings.intensity}
+            onChange={(e) => onChange({ intensity: parseInt(e.target.value, 10) })}
+            disabled={!settings.enabled}
+            className="w-full accent-primary disabled:opacity-40"
+          />
+          <div className="flex justify-between text-[10px] text-text-muted">
+            <span>Low</span>
+            <span>Medium</span>
+            <span>High</span>
+          </div>
+        </div>
+      )}
+
+      {meta.key === 'adversarial' && (
+        <AdversarialParams settings={settings} onChange={onChange} disabled={!settings.enabled} />
+      )}
+
+      {meta.key === 'chaos' && (
+        <ChaosParams settings={settings} onChange={onChange} disabled={!settings.enabled} />
+      )}
 
       {/* Status chip */}
       <div className="flex items-center gap-2">
@@ -180,7 +312,7 @@ function AgentCard({
           }`}
         />
         <span className="text-xs text-text-muted">
-          {!meta.available ? 'Sprint 19' : isActive ? 'Ready' : 'Inactive'}
+          {isActive ? 'Ready' : 'Inactive'}
         </span>
       </div>
     </div>
@@ -249,7 +381,7 @@ export default function AgentConfigPage() {
       </div>
 
       <p className="text-xs text-text-muted">
-        Adversarial and Chaos agents are planned for Sprint 19. Only Fraud Simulation is active in this sprint.
+        All agents are active. Configure parameters per-agent above and save to persist settings.
       </p>
     </div>
   );

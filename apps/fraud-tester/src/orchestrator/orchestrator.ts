@@ -76,6 +76,11 @@ export class ScenarioRunner extends EventEmitter {
     for await (const event of scenario.generate()) {
       if (this._stopped) break;
 
+      // Check again after the generator yield to catch stop() calls that arrive
+      // while the event loop is processing async generator internals.
+      await Promise.resolve();
+      if (this._stopped) break;
+
       try {
         const decision = await adapter.submitEvent(event);
         const detected =

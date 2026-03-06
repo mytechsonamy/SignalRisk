@@ -19,7 +19,7 @@ export interface FraudScenario {
     /** Minimum risk score expected from the target system (0–1). */
     minRiskScore: number;
     /** The decision verdict we expect the system to produce. */
-    decision: 'BLOCK' | 'REVIEW';
+    decision: 'BLOCK' | 'REVIEW' | 'ALLOW';
     /** Minimum fraction of events that must be correctly detected (0–1). */
     minDetectionRate: number;
   };
@@ -64,4 +64,8 @@ export interface BattleReport {
   /** Overall False Positive Rate across all scenarios. */
   overallFpr: number;
   avgLatencyMs: number;
+  /** True when the adversarial agent successfully evaded detection (overallTpr < 0.5). */
+  adversarialSuccess?: boolean;
+  /** Name of the agent that produced this report. */
+  agentName?: string;
 }

@@ -72,4 +72,10 @@ export interface AgentSettings {
   enabled: boolean;
   intensity: number; // 1-10
   schedule: 'manual' | 'hourly' | 'daily' | 'weekly';
+  // Adversarial agent params
+  attackPattern?: 'all' | 'emulator-bypass' | 'slow-fraud' | 'bot-evasion';
+  // Chaos agent params
+  chaosMode?: 'all' | 'timeout' | 'partialFailure' | 'stress';
+  failureRate?: number;  // 0-0.5
+  timeoutMs?: number;    // ms
 }

@@ -29,8 +29,61 @@ function decisionBadge(decision: AttackDecision) {
   );
 }
 
+const ATTACK_AGENTS = [
+  {
+    key: 'fraudSim',
+    label: 'Fraud Sim',
+    icon: (
+      <svg className="h-4 w-4 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" />
+      </svg>
+    ),
+    alwaysActive: true,
+  },
+  {
+    key: 'adversarial',
+    label: 'Adversarial',
+    icon: (
+      <svg className="h-4 w-4 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+      </svg>
+    ),
+    alwaysActive: false,
+  },
+  {
+    key: 'chaos',
+    label: 'Chaos',
+    icon: (
+      <svg className="h-4 w-4 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
+    alwaysActive: false,
+  },
+  {
+    key: 'recon',
+    label: 'Recon',
+    icon: (
+      <svg className="h-4 w-4 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+      </svg>
+    ),
+    alwaysActive: false,
+  },
+  {
+    key: 'replay',
+    label: 'Replay',
+    icon: (
+      <svg className="h-4 w-4 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+      </svg>
+    ),
+    alwaysActive: false,
+  },
+] as const;
+
 function AttackTeamPanel() {
-  const { battleStatus } = useFraudTesterStore();
+  const { battleStatus, agentConfig } = useFraudTesterStore();
   const isRunning = battleStatus === 'running';
 
   return (
@@ -40,45 +93,27 @@ function AttackTeamPanel() {
           Attack Team
         </p>
         <div className="rounded-lg bg-surface-card shadow-md divide-y divide-surface-border">
-          <div className="flex items-center justify-between px-3 py-3">
-            <div className="flex items-center gap-2">
-              <svg className="h-4 w-4 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" />
-              </svg>
-              <span className="text-xs text-text-primary">Fraud Sim</span>
-            </div>
-            {isRunning ? (
-              <span className="rounded-full bg-green-900/40 px-1.5 py-0.5 text-[10px] font-semibold text-green-400">Active</span>
-            ) : (
-              <span className="rounded-full bg-yellow-900/40 px-1.5 py-0.5 text-[10px] font-semibold text-yellow-400">Idle</span>
-            )}
-          </div>
-          <div className="flex items-center justify-between px-3 py-3">
-            <div className="flex items-center gap-2">
-              <svg className="h-4 w-4 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-              <span className="text-xs text-text-primary">Adversar.</span>
-            </div>
-            <span className="rounded-full bg-yellow-900/40 px-1.5 py-0.5 text-[10px] font-semibold text-yellow-400">Idle</span>
-          </div>
-          <div className="flex items-center justify-between px-3 py-3">
-            <div className="flex items-center gap-2">
-              <svg className="h-4 w-4 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span className="text-xs text-text-primary">Velocity</span>
-            </div>
-            <span className="rounded-full bg-yellow-900/40 px-1.5 py-0.5 text-[10px] font-semibold text-yellow-400">Idle</span>
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-text-secondary">Waiting</p>
-        <div className="rounded-lg bg-surface-card shadow-md divide-y divide-surface-border">
-          <div className="px-3 py-2.5 text-xs text-text-secondary">SIM Swap</div>
-          <div className="px-3 py-2.5 text-xs text-text-secondary">Bot Checkout</div>
+          {ATTACK_AGENTS.map((agent) => {
+            const agentEnabled =
+              agent.alwaysActive ||
+              (agent.key in agentConfig
+                ? agentConfig[agent.key as keyof typeof agentConfig].enabled
+                : false);
+            const active = isRunning && agentEnabled;
+            return (
+              <div key={agent.key} className="flex items-center justify-between px-3 py-2.5">
+                <div className="flex items-center gap-2">
+                  {agent.icon}
+                  <span className="text-xs text-text-primary">{agent.label}</span>
+                </div>
+                {active ? (
+                  <span className="rounded-full bg-green-900/40 px-1.5 py-0.5 text-[10px] font-semibold text-green-400">Active</span>
+                ) : (
+                  <span className="rounded-full bg-yellow-900/40 px-1.5 py-0.5 text-[10px] font-semibold text-yellow-400">Idle</span>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

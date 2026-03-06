@@ -113,8 +113,8 @@ export const useFraudTesterStore = create<FraudTesterStore>((set, get) => ({
   },
   agentConfig: {
     fraudSim: { enabled: true, intensity: 5, schedule: 'manual' },
-    adversarial: { enabled: false, intensity: 3, schedule: 'manual' },
-    chaos: { enabled: false, intensity: 1, schedule: 'manual' },
+    adversarial: { enabled: true, intensity: 5, schedule: 'manual', attackPattern: 'all' },
+    chaos: { enabled: true, intensity: 3, schedule: 'manual', chaosMode: 'all', failureRate: 0.3, timeoutMs: 5000 },
   },
 
   startBattle: () => {

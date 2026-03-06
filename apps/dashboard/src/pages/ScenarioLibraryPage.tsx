@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 type ScenarioCategory = 'device' | 'velocity' | 'identity' | 'bot' | 'network';
-type ExpectedDecision = 'BLOCK' | 'REVIEW';
+type ExpectedDecision = 'BLOCK' | 'REVIEW' | 'ALLOW';
 
 interface Scenario {
   id: string;
@@ -10,9 +10,11 @@ interface Scenario {
   category: ScenarioCategory;
   description: string;
   lastRunAgo: string;
-  detectionRate: number;
+  detectionRate: number | null;
   totalRuns: number;
-  expectedDecision: ExpectedDecision;
+  expectedDecision: ExpectedDecision | null;
+  isAdversarial?: boolean;
+  isChaos?: boolean;
 }
 
 const SCENARIOS: Scenario[] = [
@@ -66,6 +68,74 @@ const SCENARIOS: Scenario[] = [
     totalRuns: 5,
     expectedDecision: 'REVIEW',
   },
+  // Adversarial scenarios
+  {
+    id: 'adversarial-emulator-bypass',
+    name: 'Emulator Bypass',
+    category: 'device',
+    description: 'Gerçek cihaz metadatası taklit ederek emulator tespitini atlatmaya çalışır',
+    lastRunAgo: '-',
+    detectionRate: 0.12,
+    totalRuns: 0,
+    expectedDecision: 'ALLOW',
+    isAdversarial: true,
+  },
+  {
+    id: 'adversarial-slow-fraud',
+    name: 'Slow Fraud',
+    category: 'velocity',
+    description: '12 saate yayılmış işlemlerle velocity detection\'ı bypass etmeye çalışır',
+    lastRunAgo: '-',
+    detectionRate: 0.28,
+    totalRuns: 0,
+    expectedDecision: 'ALLOW',
+    isAdversarial: true,
+  },
+  {
+    id: 'adversarial-bot-evasion',
+    name: 'Bot Evasion',
+    category: 'bot',
+    description: 'İnsan benzeri davranış sinyalleriyle bot tespitini atlatmaya çalışır',
+    lastRunAgo: '-',
+    detectionRate: 0.19,
+    totalRuns: 0,
+    expectedDecision: 'ALLOW',
+    isAdversarial: true,
+  },
+  // Chaos scenarios
+  {
+    id: 'chaos-timeout',
+    name: 'Timeout Injection',
+    category: 'network',
+    description: 'Her request\'e timeout inject ederek graceful degradation test eder',
+    lastRunAgo: '-',
+    detectionRate: null,
+    totalRuns: 0,
+    expectedDecision: null,
+    isChaos: true,
+  },
+  {
+    id: 'chaos-partial-failure',
+    name: 'Partial Failure',
+    category: 'network',
+    description: '%30 eventte network hatası inject eder, kalan %70\'in işlenip işlenmediğini doğrular',
+    lastRunAgo: '-',
+    detectionRate: null,
+    totalRuns: 0,
+    expectedDecision: null,
+    isChaos: true,
+  },
+  {
+    id: 'chaos-stress',
+    name: 'Stress Test',
+    category: 'network',
+    description: '500 event/s burst ile backpressure ve rate limiting davranışını gözlemler',
+    lastRunAgo: '-',
+    detectionRate: null,
+    totalRuns: 0,
+    expectedDecision: null,
+    isChaos: true,
+  },
 ];
 
 type FilterCategory = 'all' | ScenarioCategory;
@@ -102,6 +172,13 @@ function expectedBadge(decision: ExpectedDecision) {
       </span>
     );
   }
+  if (decision === 'ALLOW') {
+    return (
+      <span className="inline-flex items-center rounded-full bg-green-900/40 px-2 py-0.5 text-xs font-semibold text-green-400">
+        ALLOW
+      </span>
+    );
+  }
   return (
     <span className="inline-flex items-center rounded-full bg-yellow-900/40 px-2 py-0.5 text-xs font-semibold text-yellow-400">
       REVIEW
@@ -110,15 +187,29 @@ function expectedBadge(decision: ExpectedDecision) {
 }
 
 function ScenarioCard({ scenario, onRun }: { scenario: Scenario; onRun: () => void }) {
-  const pct = Math.round(scenario.detectionRate * 100);
+  const pct = scenario.detectionRate !== null ? Math.round(scenario.detectionRate * 100) : null;
+
   return (
     <div className="rounded-lg bg-surface-card shadow-md p-5 space-y-3">
       <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2 flex-1 min-w-0">
+        <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${CATEGORY_COLORS[scenario.category]}`}>
             {scenario.category}
           </span>
-          <h3 className="text-sm font-semibold text-text-primary truncate">{scenario.name}</h3>
+          {scenario.isAdversarial && (
+            <span
+              className="inline-flex items-center rounded-full bg-red-700/30 border border-red-600/40 px-2 py-0.5 text-xs font-bold text-red-400"
+              title="Bu senaryoda düşük tespit oranı, saldırganın başarılı olduğu anlamına gelir"
+            >
+              ADVERSARIAL
+            </span>
+          )}
+          {scenario.isChaos && (
+            <span className="inline-flex items-center rounded-full bg-purple-700/30 border border-purple-600/40 px-2 py-0.5 text-xs font-bold text-purple-400">
+              CHAOS
+            </span>
+          )}
+          <h3 className="text-sm font-semibold text-text-primary truncate w-full">{scenario.name}</h3>
         </div>
         <button
           onClick={onRun}
@@ -139,24 +230,53 @@ function ScenarioCard({ scenario, onRun }: { scenario: Scenario; onRun: () => vo
       </div>
 
       <div className="space-y-1.5">
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-text-secondary">Algılama</span>
-          <span className="font-semibold tabular-nums text-text-primary">{pct}%</span>
-        </div>
-        <div className="h-2 w-full rounded-full bg-surface-border overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all ${detectionBarColor(scenario.detectionRate)}`}
-            style={{ width: `${pct}%` }}
-            role="progressbar"
-            aria-valuenow={pct}
-            aria-valuemin={0}
-            aria-valuemax={100}
-          />
-        </div>
-        <div className="flex items-center gap-1">
-          <span className="text-[10px] text-text-muted">Beklenen:</span>
-          {expectedBadge(scenario.expectedDecision)}
-        </div>
+        {scenario.isChaos ? (
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-text-secondary">Algılama</span>
+            <span className="font-semibold tabular-nums text-text-muted">N/A</span>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-text-secondary">
+                {scenario.isAdversarial ? 'Kaçış Oranı' : 'Algılama'}
+              </span>
+              <span className="font-semibold tabular-nums text-text-primary">{pct}%</span>
+            </div>
+            <div className="h-2 w-full rounded-full bg-surface-border overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${
+                  scenario.isAdversarial
+                    ? pct !== null && pct <= 20
+                      ? 'bg-red-500'
+                      : pct !== null && pct <= 40
+                      ? 'bg-yellow-400'
+                      : 'bg-green-500'
+                    : detectionBarColor(scenario.detectionRate ?? 0)
+                }`}
+                style={{ width: `${pct ?? 0}%` }}
+                role="progressbar"
+                aria-valuenow={pct ?? 0}
+                aria-valuemin={0}
+                aria-valuemax={100}
+              />
+            </div>
+          </>
+        )}
+        {scenario.expectedDecision && (
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] text-text-muted">Beklenen:</span>
+            {expectedBadge(scenario.expectedDecision)}
+            {scenario.isAdversarial && (
+              <span
+                className="ml-1 text-[10px] text-text-muted cursor-help"
+                title="Bu senaryoda düşük tespit oranı, saldırganın başarılı olduğu anlamına gelir"
+              >
+                (ters metrik)
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -185,7 +305,11 @@ export default function ScenarioLibraryPage() {
     if (search && !s.name.toLowerCase().includes(search) && !s.description.toLowerCase().includes(search)) return false;
     return true;
   }).sort((a, b) => {
-    if (sort === 'detectionRate') return b.detectionRate - a.detectionRate;
+    if (sort === 'detectionRate') {
+      const ra = a.detectionRate ?? -1;
+      const rb = b.detectionRate ?? -1;
+      return rb - ra;
+    }
     if (sort === 'name') return a.name.localeCompare(b.name);
     return 0; // lastRunAgo: keep original order for demo
   });
