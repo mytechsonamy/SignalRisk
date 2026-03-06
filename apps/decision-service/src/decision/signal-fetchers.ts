@@ -6,9 +6,12 @@
  *
  * Graceful degradation: any network error, timeout, or non-2xx response
  * returns null — the orchestrator continues with remaining signals.
+ *
+ * Sprint 14: Added SSRF guard, SignalBundle parallel aggregation, and
+ * per-signal circuit breaker (3 consecutive failures → OPEN for 30s).
  */
 
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 // ---------------------------------------------------------------------------
@@ -81,6 +84,59 @@ export interface TelcoSignal {
 }
 
 // ---------------------------------------------------------------------------
+// SignalBundle — aggregated result of all parallel signal fetches
+// ---------------------------------------------------------------------------
+
+export interface SignalBundle {
+  device:     DeviceSignal | null;
+  behavioral: BehavioralSignal | null;
+  network:    NetworkSignal | null;
+  telco:      TelcoSignal | null;
+  velocity:   VelocitySignal | null;
+}
+
+// ---------------------------------------------------------------------------
+// SSRF guard — rejects any URL whose hostname is not a known internal host
+// ---------------------------------------------------------------------------
+
+/**
+ * Throws if the URL resolves to an external host.
+ * Allowed: localhost, 127.0.0.1, or any *.svc.cluster.local hostname.
+ */
+export function assertInternalHost(url: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`SSRF: invalid URL '${url}'`);
+  }
+
+  const { hostname } = parsed;
+
+  if (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname.endsWith('.svc.cluster.local')
+  ) {
+    return;
+  }
+
+  throw new Error('SSRF: external host rejected');
+}
+
+// ---------------------------------------------------------------------------
+// Circuit breaker state per signal key
+// ---------------------------------------------------------------------------
+
+interface CircuitBreakerState {
+  consecutiveFailures: number;
+  openUntil: number | null; // epoch ms; null = CLOSED
+}
+
+const CIRCUIT_FAILURE_THRESHOLD = 3;
+const CIRCUIT_OPEN_DURATION_MS  = 30_000; // 30 seconds
+
+// ---------------------------------------------------------------------------
 // Internal helper: fetch with AbortController timeout
 // ---------------------------------------------------------------------------
 
@@ -116,7 +172,151 @@ async function fetchWithTimeout<T>(
 
 @Injectable()
 export class SignalFetcher {
+  private readonly logger = new Logger(SignalFetcher.name);
+
+  /** Per-signal circuit breaker state keyed by signal name. */
+  private readonly circuits = new Map<string, CircuitBreakerState>([
+    ['device',     { consecutiveFailures: 0, openUntil: null }],
+    ['velocity',   { consecutiveFailures: 0, openUntil: null }],
+    ['behavioral', { consecutiveFailures: 0, openUntil: null }],
+    ['network',    { consecutiveFailures: 0, openUntil: null }],
+    ['telco',      { consecutiveFailures: 0, openUntil: null }],
+  ]);
+
   constructor(private readonly config: ConfigService) {}
+
+  // -------------------------------------------------------------------------
+  // Circuit breaker helpers
+  // -------------------------------------------------------------------------
+
+  /** Returns true if the circuit is OPEN and the signal should be skipped. */
+  isCircuitOpen(key: string): boolean {
+    const state = this.circuits.get(key);
+    if (!state) return false;
+    if (state.openUntil !== null) {
+      if (Date.now() < state.openUntil) {
+        return true; // still open
+      }
+      // Half-open: reset and try again
+      state.openUntil = null;
+      state.consecutiveFailures = 0;
+    }
+    return false;
+  }
+
+  /** Record a successful call — resets the circuit. */
+  recordSuccess(key: string): void {
+    const state = this.circuits.get(key);
+    if (!state) return;
+    state.consecutiveFailures = 0;
+    state.openUntil = null;
+  }
+
+  /** Record a failed call — opens circuit after threshold. */
+  recordFailure(key: string): void {
+    const state = this.circuits.get(key);
+    if (!state) return;
+    state.consecutiveFailures += 1;
+    if (state.consecutiveFailures >= CIRCUIT_FAILURE_THRESHOLD) {
+      state.openUntil = Date.now() + CIRCUIT_OPEN_DURATION_MS;
+      this.logger.warn(
+        `Circuit breaker OPEN for signal '${key}' after ${state.consecutiveFailures} consecutive failures. ` +
+        `Will retry after ${CIRCUIT_OPEN_DURATION_MS / 1000}s.`,
+      );
+    }
+  }
+
+  /**
+   * Wraps an async signal fetch with circuit breaker accounting.
+   * Returns null immediately if the circuit is open.
+   */
+  private async withCircuitBreaker<T>(
+    key: string,
+    fn: () => Promise<T | null>,
+  ): Promise<T | null> {
+    if (this.isCircuitOpen(key)) {
+      this.logger.warn(`Circuit breaker open — skipping signal '${key}'`);
+      return null;
+    }
+    try {
+      const result = await fn();
+      if (result !== null) {
+        this.recordSuccess(key);
+      } else {
+        this.recordFailure(key);
+      }
+      return result;
+    } catch (err) {
+      this.recordFailure(key);
+      this.logger.warn(`Signal '${key}' threw unexpectedly: ${(err as Error)?.message}`);
+      return null;
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // fetchAllSignals — parallel aggregation of all 5 intel services
+  // -------------------------------------------------------------------------
+
+  /**
+   * Fetches all 5 intelligence signals in parallel via Promise.allSettled.
+   * Each signal is wrapped with its circuit breaker — a null is returned for
+   * any signal that fails, times out, or has its circuit open.
+   *
+   * Weights used downstream:
+   *   device: 25%, behavioral: 20%, velocity: 20%, network: 20%, telco: 15%
+   */
+  async fetchAllSignals(params: {
+    deviceId?:      string;
+    entityId:       string;
+    merchantId:     string;
+    sessionId?:     string;
+    ip?:            string;
+    msisdn?:        string;
+    billingCountry?: string;
+  }): Promise<SignalBundle> {
+    const { deviceId, entityId, merchantId, sessionId, ip, msisdn, billingCountry } = params;
+
+    const [deviceResult, behavioralResult, networkResult, telcoResult, velocityResult] =
+      await Promise.allSettled([
+        this.withCircuitBreaker('device', () =>
+          deviceId
+            ? this.fetchDeviceSignal(deviceId, merchantId)
+            : Promise.resolve(null),
+        ),
+        this.withCircuitBreaker('behavioral', () =>
+          sessionId
+            ? this.fetchBehavioralSignal(sessionId, merchantId)
+            : Promise.resolve(null),
+        ),
+        this.withCircuitBreaker('network', () =>
+          ip
+            ? this.fetchNetworkSignal(ip, merchantId, undefined, billingCountry)
+            : Promise.resolve(null),
+        ),
+        this.withCircuitBreaker('telco', () =>
+          msisdn
+            ? this.fetchTelcoSignal(msisdn, merchantId)
+            : Promise.resolve(null),
+        ),
+        this.withCircuitBreaker('velocity', () =>
+          this.fetchVelocitySignal(entityId, merchantId),
+        ),
+      ]);
+
+    const extractOrNull = <T>(result: PromiseSettledResult<T | null>): T | null => {
+      if (result.status === 'fulfilled') return result.value;
+      this.logger.warn(`Signal fetch rejected: ${(result.reason as Error)?.message}`);
+      return null;
+    };
+
+    return {
+      device:     extractOrNull(deviceResult),
+      behavioral: extractOrNull(behavioralResult),
+      network:    extractOrNull(networkResult),
+      telco:      extractOrNull(telcoResult),
+      velocity:   extractOrNull(velocityResult),
+    };
+  }
 
   // -------------------------------------------------------------------------
   // Device signal — GET /v1/fingerprint/devices/{deviceId}?merchantId={merchantId}

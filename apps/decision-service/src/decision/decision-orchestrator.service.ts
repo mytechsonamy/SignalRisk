@@ -33,6 +33,7 @@ import {
   NetworkSignal,
   TelcoSignal,
   SignalFetcher,
+  SignalBundle,
 } from './signal-fetchers';
 import { DecisionGateway, DecisionBroadcastEvent } from './decision.gateway';
 import { DecisionCacheService } from './decision-cache.service';
@@ -443,6 +444,49 @@ export class DecisionOrchestratorService {
     if (riskScore >= BLOCK_THRESHOLD)  return 'BLOCK';
     if (riskScore >= REVIEW_THRESHOLD) return 'REVIEW';
     return 'ALLOW';
+  }
+
+  /**
+   * Compute a weighted risk score from a SignalBundle.
+   *
+   * Task weights (Sprint 14):
+   *   device:    25%
+   *   behavioral: 20%
+   *   velocity:  20%
+   *   network:   20%
+   *   telco:     15%
+   *
+   * Each signal must expose a `riskScore` property (0-100).  If a signal is
+   * null its weight is redistributed proportionally among the available ones.
+   * When no signals are present a neutral REVIEW score of 50 is returned.
+   */
+  computeWeightedScoreFromBundle(bundle: SignalBundle): number {
+    // Derive per-signal riskScore values
+    const deviceScore     = bundle.device
+      ? this.deviceRiskScore(bundle.device)
+      : null;
+    const behavioralScore = bundle.behavioral
+      ? this.behavioralRiskScore(bundle.behavioral)
+      : null;
+    const velocityScore   = bundle.velocity
+      ? this.velocityRiskScore(bundle.velocity)
+      : null;
+    const networkScore    = bundle.network
+      ? this.networkRiskScore(bundle.network)
+      : null;
+    const telcoScore      = bundle.telco
+      ? this.telcoRiskScore(bundle.telco)
+      : null;
+
+    const scores: Array<{ name: string; score: number | null; weight: number }> = [
+      { name: 'device',     score: deviceScore,     weight: 0.25 },
+      { name: 'behavioral', score: behavioralScore, weight: 0.20 },
+      { name: 'velocity',   score: velocityScore,   weight: 0.20 },
+      { name: 'network',    score: networkScore,    weight: 0.20 },
+      { name: 'telco',      score: telcoScore,      weight: 0.15 },
+    ];
+
+    return this.computeWeightedScore(scores);
   }
 
   // ---------------------------------------------------------------------------
