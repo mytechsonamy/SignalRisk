@@ -1,6 +1,6 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { Redis } from 'ioredis';
-import { REDIS_CLIENT } from '../../../../packages/redis-module/src';
+import { REDIS_CLIENT } from '@signalrisk/redis-module';
 
 @Injectable()
 export class DecisionCacheService {

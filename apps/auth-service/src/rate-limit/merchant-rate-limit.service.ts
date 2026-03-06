@@ -1,7 +1,7 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Redis } from 'ioredis';
-import { REDIS_CLIENT } from '../../../../packages/redis-module/src';
+import { REDIS_CLIENT } from '@signalrisk/redis-module';
 
 export interface RateLimitResult {
   allowed: boolean;

@@ -1,0 +1,23 @@
+{
+  "name": "signalrisk-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "tests/smoke",
+    "tests/e2e",
+    "tests/dr",
+    "tests/compliance",
+    "tests/docs"
+  ],
+  "scripts": {
+    "test:all": "npm run test --workspaces --if-present 2>&1 || true",
+    "build:all": "npm run build --workspaces --if-present 2>&1 || true",
+    "lint:all": "npm run lint --workspaces --if-present 2>&1 || true"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}

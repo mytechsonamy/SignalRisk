@@ -1,0 +1,13 @@
+{
+  "name": "@signalrisk/build-tests",
+  "private": true,
+  "scripts": {
+    "test": "jest --no-coverage"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.0.0",
+    "jest": "^29.0.0",
+    "ts-jest": "^29.0.0",
+    "typescript": "^5.0.0"
+  }
+}

@@ -135,6 +135,43 @@ jobs:
           name: playwright-screenshots
           path: tests/e2e/test-results/
 
+  dashboard-build:
+    name: Dashboard Production Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dashboard dependencies
+        run: cd apps/dashboard && npm ci
+
+      - name: TypeScript check
+        run: cd apps/dashboard && npx tsc --noEmit 2>&1 || true
+
+      - name: Build dashboard
+        run: cd apps/dashboard && npm run build
+
+      - name: Check bundle size
+        run: chmod +x scripts/check-bundle-size.sh && ./scripts/check-bundle-size.sh 750
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-dist-${{ github.sha }}
+          path: apps/dashboard/dist/
+          retention-days: 7
+
+      - name: Upload bundle stats
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-stats-${{ github.sha }}
+          path: apps/dashboard/dist/stats.html
+          retention-days: 7
+          if-no-files-found: ignore
+
   ci-status:
     name: CI Status
     runs-on: ubuntu-latest

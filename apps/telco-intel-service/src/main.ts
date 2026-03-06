@@ -8,7 +8,6 @@ async function bootstrap() {
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
-      forbidNonWhitelisted: true,
       transform: true,
     }),
   );
@@ -17,7 +16,7 @@ async function bootstrap() {
 
   const port = process.env.PORT || 3007;
   await app.listen(port);
-  console.log(`Telco Intel service listening on port ${port}`);
+  console.log(`Telco intel service listening on port ${port}`);
 }
 
 bootstrap();
