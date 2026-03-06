@@ -1,0 +1,20 @@
+{
+  "name": "@signalrisk/mobile-sdk",
+  "version": "0.1.0",
+  "description": "SignalRisk React Native SDK for mobile fraud detection",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest --no-coverage"
+  },
+  "peerDependencies": {
+    "react-native": ">=0.70.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.0.0",
+    "jest": "^29.0.0",
+    "ts-jest": "^29.0.0",
+    "typescript": "^5.0.0"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "@signalrisk/e2e-tests",
+  "private": true,
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:handlers": "jest --no-coverage"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "msw": "^2.0.0",
+    "jest": "^29.0.0",
+    "ts-jest": "^29.0.0",
+    "@types/jest": "^29.0.0",
+    "typescript": "^5.0.0"
+  }
+}

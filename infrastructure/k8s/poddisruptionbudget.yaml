@@ -1,0 +1,145 @@
+# PodDisruptionBudgets for all SignalRisk services
+# decision-service and event-collector get minAvailable: 2 (critical path)
+# all other services get minAvailable: 1
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: decision-service-pdb
+  namespace: signalrisk
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: decision-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: event-collector-pdb
+  namespace: signalrisk
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: event-collector
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: auth-service-pdb
+  namespace: signalrisk
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: auth-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: device-intel-service-pdb
+  namespace: signalrisk
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: device-intel-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: velocity-service-pdb
+  namespace: signalrisk
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: velocity-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: behavioral-service-pdb
+  namespace: signalrisk
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: behavioral-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: network-intel-service-pdb
+  namespace: signalrisk
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: network-intel-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: telco-intel-service-pdb
+  namespace: signalrisk
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: telco-intel-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: case-service-pdb
+  namespace: signalrisk
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: case-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: webhook-service-pdb
+  namespace: signalrisk
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: webhook-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: graph-intel-service-pdb
+  namespace: signalrisk
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: graph-intel-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: rule-engine-service-pdb
+  namespace: signalrisk
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: rule-engine-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: feature-flag-service-pdb
+  namespace: signalrisk
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: feature-flag-service
