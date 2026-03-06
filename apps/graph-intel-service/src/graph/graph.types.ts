@@ -28,3 +28,18 @@ export interface VelocityRing {
   avgTrustScore: number;
   riskLevel: 'LOW' | 'MEDIUM' | 'HIGH'; // HIGH if sharedDeviceCount >= 5
 }
+
+export interface GraphIntelInput {
+  deviceId?: string;
+  ipAddress?: string;
+  accountId: string;
+  merchantId: string;
+}
+
+export interface GraphIntelSignal {
+  riskScore: number;          // 0-100
+  connectedFraudCount: number;
+  sharedDeviceCount: number;
+  sharedIpCount: number;
+  fraudRingDetected: boolean;
+}

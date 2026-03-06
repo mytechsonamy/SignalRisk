@@ -1,7 +1,14 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { Driver } from 'neo4j-driver';
 import { NEO4J_DRIVER } from './graph-driver.provider';
-import { DeviceNode, SessionNode, SharingResult, VelocityRing } from './graph.types';
+import {
+  DeviceNode,
+  SessionNode,
+  SharingResult,
+  VelocityRing,
+  GraphIntelInput,
+  GraphIntelSignal,
+} from './graph.types';
 
 @Injectable()
 export class GraphIntelService {
@@ -10,6 +17,119 @@ export class GraphIntelService {
   constructor(
     @Inject(NEO4J_DRIVER) private readonly driver: Driver,
   ) {}
+
+  async analyze(input: GraphIntelInput): Promise<GraphIntelSignal> {
+    const session = this.driver.session();
+    try {
+      // Merge account node and optionally device/IP nodes, then count connections
+      const mergeQuery = `
+        MERGE (a:Account {accountId: $accountId})
+        SET a.merchantId = $merchantId
+        WITH a
+        ${input.deviceId ? `
+        MERGE (d:Device {deviceId: $deviceId})
+        MERGE (a)-[:USES_DEVICE]->(d)
+        WITH a, d
+        ` : ''}
+        ${input.ipAddress ? `
+        MERGE (ip:IpAddress {address: $ipAddress})
+        MERGE (a)-[:USES_IP]->(ip)
+        WITH a${input.deviceId ? ', d' : ''}
+        ` : ''}
+        RETURN a
+      `;
+
+      await session.run(mergeQuery, {
+        accountId: input.accountId,
+        merchantId: input.merchantId,
+        deviceId: input.deviceId ?? null,
+        ipAddress: input.ipAddress ?? null,
+      });
+
+      // Count connected fraud accounts via shared device
+      let connectedFraudCount = 0;
+      if (input.deviceId) {
+        const fraudResult = await session.run(
+          `MATCH (a:Account {accountId: $accountId})-[:USES_DEVICE]->(d:Device)<-[:USES_DEVICE]-(other:Account)
+           WHERE other.accountId <> $accountId AND other.isFraud = true
+           RETURN count(DISTINCT other) as fraudCount`,
+          { accountId: input.accountId },
+        );
+        if (fraudResult.records.length > 0) {
+          const raw = fraudResult.records[0].get('fraudCount');
+          connectedFraudCount = typeof raw === 'object' && raw !== null && 'toNumber' in raw
+            ? (raw as { toNumber(): number }).toNumber()
+            : Number(raw ?? 0);
+        }
+      }
+
+      // Count accounts sharing the same device
+      let sharedDeviceCount = 0;
+      if (input.deviceId) {
+        const deviceResult = await session.run(
+          `MATCH (a:Account {accountId: $accountId})-[:USES_DEVICE]->(d:Device)<-[:USES_DEVICE]-(other:Account)
+           WHERE other.accountId <> $accountId
+           RETURN count(DISTINCT other) as sharedCount`,
+          { accountId: input.accountId },
+        );
+        if (deviceResult.records.length > 0) {
+          const raw = deviceResult.records[0].get('sharedCount');
+          sharedDeviceCount = typeof raw === 'object' && raw !== null && 'toNumber' in raw
+            ? (raw as { toNumber(): number }).toNumber()
+            : Number(raw ?? 0);
+        }
+      }
+
+      // Count accounts sharing the same IP
+      let sharedIpCount = 0;
+      if (input.ipAddress) {
+        const ipResult = await session.run(
+          `MATCH (a:Account {accountId: $accountId})-[:USES_IP]->(ip:IpAddress)<-[:USES_IP]-(other:Account)
+           WHERE other.accountId <> $accountId
+           RETURN count(DISTINCT other) as sharedCount`,
+          { accountId: input.accountId },
+        );
+        if (ipResult.records.length > 0) {
+          const raw = ipResult.records[0].get('sharedCount');
+          sharedIpCount = typeof raw === 'object' && raw !== null && 'toNumber' in raw
+            ? (raw as { toNumber(): number }).toNumber()
+            : Number(raw ?? 0);
+        }
+      }
+
+      let riskScore = 0;
+      const fraudRingDetected = connectedFraudCount >= 2;
+
+      if (fraudRingDetected) {
+        riskScore += 60;
+      }
+
+      if (sharedDeviceCount >= 3) {
+        riskScore += 30;
+      }
+
+      riskScore = Math.min(riskScore, 100);
+
+      return {
+        riskScore,
+        connectedFraudCount,
+        sharedDeviceCount,
+        sharedIpCount,
+        fraudRingDetected,
+      };
+    } catch (error) {
+      this.logger.error('Graph analysis failed, returning fail-open signal', error);
+      return {
+        riskScore: 0,
+        connectedFraudCount: 0,
+        sharedDeviceCount: 0,
+        sharedIpCount: 0,
+        fraudRingDetected: false,
+      };
+    } finally {
+      await session.close();
+    }
+  }
 
   async upsertDevice(device: DeviceNode): Promise<void> {
     const session = this.driver.session();
