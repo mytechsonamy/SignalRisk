@@ -15,16 +15,13 @@
  *        docker compose -f docker-compose.full.yml up --wait
  *   c) The playwright.config.real.ts webServer block handles the above in CI
  *
- * All tests use test.fixme.  To run for real, remove the fixme marker and
- * ensure the test runner has Docker socket access plus the env var
- * CHAOS_ENABLED=true set.
- *
  * Run with:
  *   CHAOS_ENABLED=true npx playwright test --config tests/e2e/playwright.config.real.ts chaos-redis-down
+ * Skip Docker-dependent tests:
+ *   SKIP_DOCKER=true npx playwright test ...
  */
 
 import { test, expect } from '@playwright/test';
-import { execSync } from 'child_process';
 import {
   AUTH_URL,
   EVENT_URL,
@@ -33,7 +30,12 @@ import {
   getAdminToken,
   generateEventId,
   sleep,
+  execDockerCommand,
 } from './helpers';
+
+const SKIP = process.env.SKIP_DOCKER === 'true';
+
+test.describe.configure({ mode: 'serial' });
 
 // ---------------------------------------------------------------------------
 // Docker control helpers
@@ -47,20 +49,14 @@ const COMPOSE_FILE = 'docker-compose.full.yml';
  * Throws if Docker CLI is not available or the command fails.
  */
 function stopRedis(): void {
-  execSync(`docker compose -f ${COMPOSE_FILE} stop redis`, {
-    cwd: process.cwd(),
-    stdio: 'pipe',
-  });
+  execDockerCommand(`docker compose -f ${COMPOSE_FILE} stop redis`);
 }
 
 /**
  * Start the Redis container using `docker compose start redis`.
  */
 function startRedis(): void {
-  execSync(`docker compose -f ${COMPOSE_FILE} start redis`, {
-    cwd: process.cwd(),
-    stdio: 'pipe',
-  });
+  execDockerCommand(`docker compose -f ${COMPOSE_FILE} start redis`);
 }
 
 /**
@@ -123,7 +119,9 @@ test.describe('Chaos — Redis Down', () => {
    *  4. Repeat the request → 503
    *  5. Start Redis container (cleanup)
    */
-  test.fixme('admin endpoint returns 503 when Redis is unavailable (fail-closed)', async ({ request }) => {
+  test('admin endpoint returns 503 when Redis is unavailable (fail-closed)', async ({ request }) => {
+    test.skip(SKIP, 'Requires Docker services');
+
     // Pre-condition: Redis must be running
     const adminToken = await getAdminToken(request);
 
@@ -164,7 +162,9 @@ test.describe('Chaos — Redis Down', () => {
    *  2. POST /v1/events → expect 202 or 429 (not 500/503)
    *  3. Start Redis
    */
-  test.fixme('event ingestion continues (202 or 429) when Redis is down', async ({ request }) => {
+  test('event ingestion continues (202 or 429) when Redis is down', async ({ request }) => {
+    test.skip(SKIP, 'Requires Docker services');
+
     // Obtain token while Redis is still up
     const merchantToken = await getMerchantToken(request);
 
@@ -209,7 +209,9 @@ test.describe('Chaos — Redis Down', () => {
    *  3. Start Redis
    *  4. Poll GET /v1/admin/merchants until 200 (max 30 s)
    */
-  test.fixme('system recovers within 30s after Redis restart', async ({ request }) => {
+  test('system recovers within 30s after Redis restart', async ({ request }) => {
+    test.skip(SKIP, 'Requires Docker services');
+
     const adminToken = await getAdminToken(request);
 
     // Disrupt and immediately restore
@@ -241,7 +243,9 @@ test.describe('Chaos — Redis Down', () => {
    *
    * This verifies the health check doesn't hard-depend on Redis.
    */
-  test.fixme('health endpoint responds during Redis outage', async () => {
+  test('health endpoint responds during Redis outage', async () => {
+    test.skip(SKIP, 'Requires Docker services');
+
     stopRedis();
     await sleep(2000);
 
@@ -259,7 +263,9 @@ test.describe('Chaos — Redis Down', () => {
    * in a permanently broken state.  After 3 flap cycles the service must
    * recover and serve 200 within 30 s.
    */
-  test.fixme('service survives rapid Redis flapping (3 cycles) and recovers', async ({ request }) => {
+  test('service survives rapid Redis flapping (3 cycles) and recovers', async ({ request }) => {
+    test.skip(SKIP, 'Requires Docker services');
+
     const adminToken = await getAdminToken(request);
 
     for (let cycle = 0; cycle < 3; cycle++) {

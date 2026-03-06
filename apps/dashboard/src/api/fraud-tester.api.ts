@@ -8,6 +8,17 @@ export const fraudTesterApi = {
     api.post<{ battleId: string }>('/v1/fraud-tester/battles', config),
   stopBattle: (id: string) =>
     api.post<void>(`/v1/fraud-tester/battles/${id}/stop`, {}),
-  healthCheck: () =>
-    api.get<{ status: string; latencyMs: number }>('/v1/fraud-tester/health'),
+  healthCheck: (baseUrl?: string, apiKey?: string) => {
+    if (baseUrl) {
+      // Direct fetch to a custom target's health endpoint
+      return fetch(`${baseUrl}/health`, {
+        method: 'GET',
+        headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+        signal: AbortSignal.timeout(5000),
+      })
+        .then((res) => res.ok)
+        .catch(() => false);
+    }
+    return api.get<{ status: string; latencyMs: number }>('/v1/fraud-tester/health');
+  },
 };

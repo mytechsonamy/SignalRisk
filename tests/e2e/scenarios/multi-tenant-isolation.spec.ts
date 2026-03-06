@@ -1,44 +1,39 @@
+/**
+ * Multi-Tenant Isolation E2E — Sprint 20 T24
+ *
+ * Verifies that tenant isolation enforced by TenantMiddleware, AdminGuard,
+ * and PostgreSQL RLS prevents cross-tenant data access.
+ *
+ * Run with:
+ *   npx playwright test --config tests/e2e/playwright.config.real.ts multi-tenant-isolation
+ * Skip Docker-dependent tests:
+ *   SKIP_DOCKER=true npx playwright test ...
+ */
+
 import { test, expect, type APIRequestContext } from '@playwright/test';
+import {
+  AUTH_URL,
+  EVENT_URL,
+  CASE_URL,
+  DECISION_URL,
+  getMerchantTokenFor,
+  getAdminToken,
+} from './helpers';
 
-const AUTH_URL = process.env.AUTH_URL ?? 'http://localhost:3001';
-const CASES_URL = process.env.CASES_URL ?? 'http://localhost:3010';
-const EVENT_URL = process.env.EVENT_URL ?? 'http://localhost:3002';
-const DECISION_URL = process.env.DECISION_URL ?? 'http://localhost:3009';
+const SKIP = process.env.SKIP_DOCKER === 'true';
 
-// Test merchant credentials (dev fixtures)
+test.describe.configure({ mode: 'serial' });
+
+// ---------------------------------------------------------------------------
+// Test fixture credentials (must match docker-compose seed / test DB fixtures)
+// ---------------------------------------------------------------------------
+
 const MERCHANT_A = { clientId: 'merchant-a', clientSecret: 'secret-a', merchantId: 'merchant-001' };
 const MERCHANT_B = { clientId: 'merchant-b', clientSecret: 'secret-b', merchantId: 'merchant-002' };
-const ADMIN = { clientId: 'admin', clientSecret: 'admin-secret' };
 
-/**
- * Obtain a JWT access token via the client_credentials grant.
- * POST /v1/auth/token
- * Body: { grant_type: 'client_credentials', client_id, client_secret }
- *
- * Returns the raw access_token string.
- */
-async function getToken(
-  request: APIRequestContext,
-  credentials: { clientId: string; clientSecret: string },
-): Promise<string> {
-  const response = await request.post(`${AUTH_URL}/v1/auth/token`, {
-    data: {
-      grant_type: 'client_credentials',
-      client_id: credentials.clientId,
-      client_secret: credentials.clientSecret,
-    },
-  });
-
-  if (!response.ok()) {
-    throw new Error(
-      `getToken failed for clientId=${credentials.clientId}: HTTP ${response.status()} — ${await response.text()}`,
-    );
-  }
-
-  const body = await response.json() as { access_token: string };
-  // auth-service TokenResponseDto: { access_token, token_type, expires_in, ... }
-  return body.access_token;
-}
+// ---------------------------------------------------------------------------
+// Test suite
+// ---------------------------------------------------------------------------
 
 test.describe('Multi-Tenant Isolation', () => {
   /**
@@ -46,10 +41,12 @@ test.describe('Multi-Tenant Isolation', () => {
    * The TenantMiddleware validates that the JWT sub (merchantId) matches
    * the X-Merchant-ID request header. A mismatch → 403 Forbidden.
    */
-  test.fixme('Merchant A JWT ile Merchant B cases endpoint → 403', async ({ request }) => {
-    const tokenA = await getToken(request, MERCHANT_A);
+  test('Merchant A JWT ile Merchant B cases endpoint → 403', async ({ request }) => {
+    test.skip(SKIP, 'Requires Docker services');
 
-    const response = await request.get(`${CASES_URL}/v1/cases`, {
+    const tokenA = await getMerchantTokenFor(request, MERCHANT_A);
+
+    const response = await request.get(`${CASE_URL}/v1/cases`, {
       headers: {
         Authorization: `Bearer ${tokenA}`,
         'X-Merchant-ID': MERCHANT_B.merchantId,
@@ -64,9 +61,11 @@ test.describe('Multi-Tenant Isolation', () => {
    * Sending it with X-Merchant-ID: merchant-002 must be rejected with 401
    * by the event-collector ApiKeyService (timing-safe comparison of merchantId).
    */
-  test.fixme('Merchant A API key ile Merchant B event gönderme → 401', async ({ request }) => {
+  test('Merchant A API key ile Merchant B event gönderme → 401', async ({ request }) => {
+    test.skip(SKIP, 'Requires Docker services');
+
     // Obtain a JWT for Merchant A to provision an API key
-    const tokenA = await getToken(request, MERCHANT_A);
+    const tokenA = await getMerchantTokenFor(request, MERCHANT_A);
 
     // Issue an API key for Merchant A via the merchant onboarding endpoint
     const keyResp = await request.post(
@@ -104,9 +103,11 @@ test.describe('Multi-Tenant Isolation', () => {
    * scoped to the authenticated merchant. The response must be either
    * 403 Forbidden or an empty decisions array.
    */
-  test.fixme('Cross-merchant decision query boş array döner', async ({ request }) => {
-    const tokenA = await getToken(request, MERCHANT_A);
-    const tokenB = await getToken(request, MERCHANT_B);
+  test('Cross-merchant decision query boş array döner', async ({ request }) => {
+    test.skip(SKIP, 'Requires Docker services');
+
+    const tokenA = await getMerchantTokenFor(request, MERCHANT_A);
+    const tokenB = await getMerchantTokenFor(request, MERCHANT_B);
 
     // First, create a known event for Merchant A to ensure there are decisions to query
     const eventResp = await request.post(`${EVENT_URL}/v1/events`, {
@@ -155,11 +156,13 @@ test.describe('Multi-Tenant Isolation', () => {
    * Merchant B endpoints without restriction.
    * POST /v1/auth/token with admin credentials → role=admin in JWT claims.
    */
-  test.fixme('Admin token tüm merchant verilerine erişir → 200', async ({ request }) => {
-    const adminToken = await getToken(request, ADMIN);
+  test('Admin token tüm merchant verilerine erişir → 200', async ({ request }) => {
+    test.skip(SKIP, 'Requires Docker services');
+
+    const adminToken = await getAdminToken(request);
 
     // Admin reads Merchant A cases
-    const respA = await request.get(`${CASES_URL}/v1/cases`, {
+    const respA = await request.get(`${CASE_URL}/v1/cases`, {
       headers: {
         Authorization: `Bearer ${adminToken}`,
         'X-Merchant-ID': MERCHANT_A.merchantId,
@@ -168,7 +171,7 @@ test.describe('Multi-Tenant Isolation', () => {
     expect(respA.status()).toBe(200);
 
     // Admin reads Merchant B cases
-    const respB = await request.get(`${CASES_URL}/v1/cases`, {
+    const respB = await request.get(`${CASE_URL}/v1/cases`, {
       headers: {
         Authorization: `Bearer ${adminToken}`,
         'X-Merchant-ID': MERCHANT_B.merchantId,
@@ -182,18 +185,20 @@ test.describe('Multi-Tenant Isolation', () => {
    * rejected at the gateway/middleware level with 400 Bad Request before
    * reaching any business logic.
    */
-  test.fixme('Invalid tenant header → 400', async ({ request }) => {
-    const tokenA = await getToken(request, MERCHANT_A);
+  test('Invalid tenant header → 400', async ({ request }) => {
+    test.skip(SKIP, 'Requires Docker services');
+
+    const tokenA = await getMerchantTokenFor(request, MERCHANT_A);
 
     // Missing X-Merchant-ID header entirely
-    const missingResp = await request.get(`${CASES_URL}/v1/cases`, {
+    const missingResp = await request.get(`${CASE_URL}/v1/cases`, {
       headers: { Authorization: `Bearer ${tokenA}` },
       // X-Merchant-ID intentionally omitted
     });
     expect(missingResp.status()).toBe(400);
 
     // Malformed (non-UUID, non-slug) X-Merchant-ID
-    const malformedResp = await request.get(`${CASES_URL}/v1/cases`, {
+    const malformedResp = await request.get(`${CASE_URL}/v1/cases`, {
       headers: {
         Authorization: `Bearer ${tokenA}`,
         'X-Merchant-ID': '../../etc/passwd', // path-traversal probe

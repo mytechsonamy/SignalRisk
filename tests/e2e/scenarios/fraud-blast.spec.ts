@@ -1,19 +1,17 @@
 /**
- * Fraud Blast E2E — Sprint 18 T9
+ * Fraud Blast E2E — Sprint 20 T22
  *
  * Verifies that high-velocity traffic from a single device fingerprint is
  * detected and blocked by the velocity-service, and that a REVIEW/BLOCK case
  * is created in the case-service.
  *
  * Scenario:
- *   1. Send 50 events sharing the same deviceId in parallel from a single merchant
- *   2. Assert that the velocity threshold is breached and at least the later
- *      decisions carry action=BLOCK (or REVIEW for borderline scores)
- *   3. Confirm that a case record is created in the case-service for the blasted entity
- *   4. Verify that a separate device with normal traffic still receives ALLOW
- *      (no cross-contamination between device fingerprints)
+ *   1. Send 50 events sharing the same deviceId in parallel → velocity rule fires → BLOCK
+ *   2. 51st event from same deviceId → immediately BLOCK (velocity cache hit)
+ *   3. After the blast, a case record must exist in case-service for the entity
+ *   4. A different device with normal traffic still receives ALLOW (no cross-contamination)
  *
- * All tests use test.fixme — real services must be running via docker-compose.
+ * Tests are skipped when SKIP_DOCKER=true (no running services required).
  * Run with:
  *   npx playwright test --config tests/e2e/playwright.config.real.ts fraud-blast
  */
@@ -22,12 +20,20 @@ import { test, expect, type APIRequestContext } from '@playwright/test';
 import {
   EVENT_URL,
   CASE_URL,
+  DECISION_URL,
   TEST_MERCHANT,
   getMerchantToken,
   pollDecision,
   generateEventId,
   sleep,
 } from './helpers';
+
+const SKIP = process.env.SKIP_DOCKER === 'true';
+test.describe.configure({ mode: 'serial' });
+
+// Shared state for the blast device — set during test 1, used in tests 2 & 3
+let sharedBlastDeviceId: string;
+let blastToken: string;
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -87,14 +93,16 @@ test.describe('Fraud Blast E2E', () => {
    * We poll the decision for the last event's requestId and assert action=BLOCK
    * or action=REVIEW (both signal the rule fired).
    */
-  test.fixme('50 events from same device triggers BLOCK via velocity', async ({ request }) => {
-    const token          = await getMerchantToken(request);
-    const sharedDeviceId = `blast-device-${Date.now()}`;
+  test('50 events from same device triggers BLOCK via velocity rule', async ({ request }) => {
+    test.skip(SKIP, 'Requires Docker services (set SKIP_DOCKER=true to skip)');
+
+    blastToken       = await getMerchantToken(request);
+    sharedBlastDeviceId = `blast-device-${Date.now()}`;
     const BLAST_COUNT    = 50;
 
     // Fire all 50 events in parallel
     const promises = Array.from({ length: BLAST_COUNT }, (_, i) =>
-      blastEvent(request, token, sharedDeviceId, i),
+      blastEvent(request, blastToken, sharedBlastDeviceId, i),
     );
     const statuses = await Promise.all(promises);
 
@@ -109,8 +117,8 @@ test.describe('Fraud Blast E2E', () => {
 
     // Poll the decision for the final event (highest index seen)
     // The decision for the last batch item should reflect the velocity breach
-    const lastRequestId = `${sharedDeviceId}-evt-${BLAST_COUNT - 1}`;
-    const decision = await pollDecision(request, lastRequestId, token, 30, 300);
+    const lastRequestId = `${sharedBlastDeviceId}-evt-${BLAST_COUNT - 1}`;
+    const decision = await pollDecision(request, lastRequestId, blastToken, 30, 300);
 
     // Velocity breach → BLOCK or REVIEW
     expect(['BLOCK', 'REVIEW']).toContain(decision.action);
@@ -119,21 +127,57 @@ test.describe('Fraud Blast E2E', () => {
   });
 
   /**
+   * 51st event from the same device fingerprint must be immediately BLOCK
+   * because the velocity counter is already over threshold (cache hit).
+   */
+  test('51st event from same fingerprint is immediately BLOCK', async ({ request }) => {
+    test.skip(SKIP, 'Requires Docker services (set SKIP_DOCKER=true to skip)');
+
+    // sharedBlastDeviceId is set by the first test (serial mode)
+    const token = blastToken ?? await getMerchantToken(request);
+    const deviceId = sharedBlastDeviceId ?? `blast-device-fallback-${Date.now()}`;
+
+    const eventId = `${deviceId}-evt-50`; // index 50 = the 51st event
+
+    const response = await request.post(`${EVENT_URL}/v1/events`, {
+      headers: {
+        Authorization:  `Bearer ${token}`,
+        'X-Merchant-ID': TEST_MERCHANT.merchantId,
+      },
+      data: buildEventPayload(deviceId, 50),
+    });
+
+    // Must be accepted or immediately rate-limited
+    expect([202, 429]).toContain(response.status());
+
+    // Allow pipeline to process
+    await sleep(500);
+
+    // Decision must be BLOCK — velocity counter already over threshold
+    const decision = await pollDecision(request, eventId, token, 30, 300);
+    expect(decision.action).toBe('BLOCK');
+    expect(decision.riskScore).toBeGreaterThan(40);
+  });
+
+  /**
    * After the blast, at least one case record should exist in the case-service
    * for the blasted device / entity.
    * GET /v1/cases?merchantId=...&search=<deviceId>
    */
-  test.fixme('blast creates a REVIEW or BLOCK case in case-service', async ({ request }) => {
-    const token          = await getMerchantToken(request);
-    const sharedDeviceId = `blast-case-device-${Date.now()}`;
-    const BLAST_COUNT    = 50;
+  test('blast creates a REVIEW or BLOCK case in case-service', async ({ request }) => {
+    test.skip(SKIP, 'Requires Docker services (set SKIP_DOCKER=true to skip)');
 
-    // Send the blast
-    await Promise.all(
-      Array.from({ length: BLAST_COUNT }, (_, i) =>
-        blastEvent(request, token, sharedDeviceId, i),
-      ),
-    );
+    const token          = blastToken ?? await getMerchantToken(request);
+    const deviceId       = sharedBlastDeviceId ?? `blast-case-device-${Date.now()}`;
+
+    // If running in isolation (sharedBlastDeviceId not set), run a fresh blast
+    if (!sharedBlastDeviceId) {
+      await Promise.all(
+        Array.from({ length: 50 }, (_, i) =>
+          blastEvent(request, token, deviceId, i),
+        ),
+      );
+    }
 
     // Wait for case creation — case-service consumes from Kafka asynchronously
     await sleep(2000);
@@ -146,7 +190,7 @@ test.describe('Fraud Blast E2E', () => {
       },
       params: {
         merchantId: TEST_MERCHANT.merchantId,
-        search:     sharedDeviceId,
+        search:     deviceId,
       },
     });
 
@@ -176,7 +220,9 @@ test.describe('Fraud Blast E2E', () => {
    * after the blast should still receive ALLOW decisions.
    * The velocity window must be scoped per-device, not per-merchant.
    */
-  test.fixme('normal traffic after blast is not affected for a different device', async ({ request }) => {
+  test('normal traffic from a different fingerprint is not affected (ALLOW)', async ({ request }) => {
+    test.skip(SKIP, 'Requires Docker services (set SKIP_DOCKER=true to skip)');
+
     const token          = await getMerchantToken(request);
     const blastDeviceId  = `blast-contamination-src-${Date.now()}`;
     const cleanDeviceId  = `clean-device-${Date.now()}`;
@@ -218,37 +264,5 @@ test.describe('Fraud Blast E2E', () => {
     expect(cleanDecision.action).toBe('ALLOW');
     // Risk score must stay in low-risk territory
     expect(cleanDecision.riskScore).toBeLessThan(40);
-  });
-
-  /**
-   * Rate-limit boundary: a single event from a fresh device must be accepted
-   * with 202 (sanity check to confirm the blast tests are not poisoning the
-   * event-collector's global rate limiter).
-   */
-  test.fixme('single event from fresh device is accepted with 202', async ({ request }) => {
-    const token    = await getMerchantToken(request);
-    const deviceId = `fresh-device-${Date.now()}`;
-    const eventId  = generateEventId();
-
-    const response = await request.post(`${EVENT_URL}/v1/events`, {
-      headers: {
-        Authorization:  `Bearer ${token}`,
-        'X-Merchant-ID': TEST_MERCHANT.merchantId,
-      },
-      data: {
-        events: [
-          {
-            merchantId: TEST_MERCHANT.merchantId,
-            deviceId,
-            sessionId:  `sess-fresh-${Date.now()}`,
-            type:       'PAYMENT',
-            payload:    { amount: 15, currency: 'TRY' },
-            eventId,
-          },
-        ],
-      },
-    });
-
-    expect(response.status()).toBe(202);
   });
 });

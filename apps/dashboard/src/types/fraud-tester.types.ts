@@ -79,3 +79,15 @@ export interface AgentSettings {
   failureRate?: number;  // 0-0.5
   timeoutMs?: number;    // ms
 }
+
+export interface AdapterTarget {
+  id: string;
+  name: string;
+  type: 'signalrisk' | 'custom';
+  baseUrl: string;
+  apiKey?: string;
+  merchantId?: string;
+  isDefault?: boolean;
+  connectionStatus?: 'unknown' | 'connected' | 'failed' | 'testing';
+  lastTestedAt?: Date;
+}

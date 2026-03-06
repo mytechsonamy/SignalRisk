@@ -13,9 +13,10 @@
  *   POST /v1/auth/token        — client_credentials grant
  *   POST /v1/auth/logout       — revokes the Bearer token in the Authorization header
  *
- * All tests use test.fixme — real services + Redis must be running.
  * Run with:
  *   npx playwright test --config tests/e2e/playwright.config.real.ts jwt-revoke
+ * Skip Docker-dependent tests:
+ *   SKIP_DOCKER=true npx playwright test ...
  */
 
 import { test, expect, type APIRequestContext } from '@playwright/test';
@@ -25,7 +26,12 @@ import {
   TEST_ADMIN,
   getMerchantToken,
   getAdminToken,
+  EVENT_URL,
 } from './helpers';
+
+const SKIP = process.env.SKIP_DOCKER === 'true';
+
+test.describe.configure({ mode: 'serial' });
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -70,18 +76,12 @@ async function logout(request: APIRequestContext, accessToken: string): Promise<
 
 /**
  * Call a protected admin endpoint using the given token and return the status.
- * GET /v1/admin/users is protected by AdminGuard which checks jti in Redis.
- * If that endpoint doesn't exist, fall back to GET /v1/auth/token/introspect.
+ * GET /v1/admin/merchants is protected by AdminGuard which checks jti in Redis.
  */
 async function callProtectedEndpoint(
   request: APIRequestContext,
   accessToken: string,
 ): Promise<number> {
-  // POST /v1/auth/token/introspect is available without AdminGuard and will
-  // return 200 with { active: true } for valid tokens, or behave according to
-  // the introspect implementation.  For jti-denylist verification we need an
-  // endpoint that actually checks the denylist — use /v1/admin/merchants which
-  // is guarded by AdminGuard (requires role=admin + live Redis check).
   const response = await request.get(`${AUTH_URL}/v1/admin/merchants`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -103,7 +103,9 @@ test.describe('JWT Revoke (jti Denylist)', () => {
    * 503 = fail-closed (AdminGuard caught a Redis error or found the jti key)
    * 401 = token expired between logout and re-use (also acceptable)
    */
-  test.fixme('revoked token is rejected on admin endpoints (401 or 503)', async ({ request }) => {
+  test('revoked token is rejected on admin endpoints (401 or 503)', async ({ request }) => {
+    test.skip(SKIP, 'Requires Docker services');
+
     // Step 1: Login
     const { access_token: accessToken } = await loginAs(
       request,
@@ -132,7 +134,9 @@ test.describe('JWT Revoke (jti Denylist)', () => {
    * token with a different jti — and that new token must work on protected
    * endpoints.
    */
-  test.fixme('fresh token obtained after logout is valid and accepted', async ({ request }) => {
+  test('fresh token obtained after logout is valid and accepted', async ({ request }) => {
+    test.skip(SKIP, 'Requires Docker services');
+
     // First login and logout cycle
     const { access_token: firstToken } = await loginAs(
       request,
@@ -159,7 +163,9 @@ test.describe('JWT Revoke (jti Denylist)', () => {
    * verification fails before the Redis denylist is even consulted).
    * This ensures 401 and 503 are semantically distinct.
    */
-  test.fixme('tampered token returns 401 not 503', async ({ request }) => {
+  test('tampered token returns 401 not 503', async ({ request }) => {
+    test.skip(SKIP, 'Requires Docker services');
+
     // Build a plausibly structured but invalid JWT by modifying the signature
     const fakeToken = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9'
       + '.eyJzdWIiOiJub3QtYS1yZWFsLXVzZXIiLCJqdGkiOiJmYWtlLWp0aSIsImlhdCI6MTcwMDAwMDAwMCwiZXhwIjo5OTk5OTk5OTk5fQ'
@@ -177,7 +183,9 @@ test.describe('JWT Revoke (jti Denylist)', () => {
    * Logging out without providing an Authorization header must return 401
    * (the logout endpoint itself validates the presence of a bearer token).
    */
-  test.fixme('logout without Authorization header returns 401', async ({ request }) => {
+  test('logout without Authorization header returns 401', async ({ request }) => {
+    test.skip(SKIP, 'Requires Docker services');
+
     const response = await request.post(`${AUTH_URL}/v1/auth/logout`, {
       // no Authorization header
     });
@@ -190,7 +198,9 @@ test.describe('JWT Revoke (jti Denylist)', () => {
    * not only admin tokens.  After logout, the merchant token must be rejected
    * when attempting to ingest events.
    */
-  test.fixme('revoked merchant token is rejected on event-collector (401 or 503)', async ({ request }) => {
+  test('revoked merchant token is rejected on event-collector (401 or 503)', async ({ request }) => {
+    test.skip(SKIP, 'Requires Docker services');
+
     const merchantToken = await getMerchantToken(request);
     expect(typeof merchantToken).toBe('string');
 
@@ -199,8 +209,7 @@ test.describe('JWT Revoke (jti Denylist)', () => {
     expect(logoutStatus).toBe(200);
 
     // Attempt to use the revoked token on event-collector
-    const { EVENT_URL: evtUrl } = await import('./helpers');
-    const response = await request.post(`${evtUrl}/v1/events`, {
+    const response = await request.post(`${EVENT_URL}/v1/events`, {
       headers: {
         Authorization:  `Bearer ${merchantToken}`,
         'X-Merchant-ID': TEST_MERCHANT.merchantId,
@@ -226,7 +235,9 @@ test.describe('JWT Revoke (jti Denylist)', () => {
    * files) must work for protected admin routes before any logout is issued.
    * This serves as a smoke-test for the helper itself.
    */
-  test.fixme('getAdminToken helper returns a valid working token', async ({ request }) => {
+  test('getAdminToken helper returns a valid working token', async ({ request }) => {
+    test.skip(SKIP, 'Requires Docker services');
+
     const adminToken = await getAdminToken(request);
     expect(typeof adminToken).toBe('string');
     expect(adminToken.split('.').length).toBe(3); // header.payload.sig

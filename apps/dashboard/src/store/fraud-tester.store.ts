@@ -8,6 +8,7 @@ import type {
   AttackDecision,
   BattleReport,
   AgentConfig,
+  AdapterTarget,
 } from '../types/fraud-tester.types';
 
 interface FraudTesterStore {
@@ -18,10 +19,16 @@ interface FraudTesterStore {
   config: BattleConfig;
   activeBattleId: string | null;
   agentConfig: AgentConfig;
+  targets: AdapterTarget[];
+  activeTargetId: string;
   startBattle: () => void;
   stopBattle: () => void;
   updateConfig: (partial: Partial<BattleConfig>) => void;
   updateAgentConfig: (partial: Partial<AgentConfig>) => void;
+  addTarget: (target: Omit<AdapterTarget, 'id'>) => void;
+  removeTarget: (id: string) => void;
+  setActiveTarget: (id: string) => void;
+  updateTargetStatus: (id: string, status: AdapterTarget['connectionStatus']) => void;
   _addResult: (result: AttackResult) => void;
   _completeBattle: (report: BattleReport) => void;
 }
@@ -116,6 +123,17 @@ export const useFraudTesterStore = create<FraudTesterStore>((set, get) => ({
     adversarial: { enabled: true, intensity: 5, schedule: 'manual', attackPattern: 'all' },
     chaos: { enabled: true, intensity: 3, schedule: 'manual', chaosMode: 'all', failureRate: 0.3, timeoutMs: 5000 },
   },
+  targets: [
+    {
+      id: 'signalrisk-default',
+      name: 'SignalRisk',
+      type: 'signalrisk',
+      baseUrl: 'http://localhost:3002',
+      isDefault: true,
+      connectionStatus: 'unknown',
+    },
+  ],
+  activeTargetId: 'signalrisk-default',
 
   startBattle: () => {
     set({
@@ -125,7 +143,8 @@ export const useFraudTesterStore = create<FraudTesterStore>((set, get) => ({
       stats: { detectionRate: 0, tpr: 0, fpr: 0, avgLatencyMs: 0, totalAttacks: 0, blocked: 0, detected: 0, missed: 0 },
     });
 
-    const { config } = get();
+    const { config, activeTargetId } = get();
+    const battleConfig = { ...config, targetAdapter: activeTargetId };
 
     function startMockBattle() {
       stopMockInterval();
@@ -177,7 +196,7 @@ export const useFraudTesterStore = create<FraudTesterStore>((set, get) => ({
           fetch(`${FRAUD_TESTER_URL}/v1/fraud-tester/battles`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(config),
+            body: JSON.stringify(battleConfig),
           })
             .then((r) => r.json() as Promise<{ battleId: string }>)
             .then(({ battleId }) => {
@@ -253,6 +272,34 @@ export const useFraudTesterStore = create<FraudTesterStore>((set, get) => ({
 
   updateAgentConfig: (partial) => {
     set((state) => ({ agentConfig: { ...state.agentConfig, ...partial } }));
+  },
+
+  addTarget: (target) => {
+    const id = `target-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    set((state) => ({
+      targets: [...state.targets, { ...target, id }],
+    }));
+  },
+
+  removeTarget: (id) => {
+    set((state) => ({
+      targets: state.targets.filter((t) => t.id !== id),
+      activeTargetId: state.activeTargetId === id ? 'signalrisk-default' : state.activeTargetId,
+    }));
+  },
+
+  setActiveTarget: (id) => {
+    set({ activeTargetId: id });
+  },
+
+  updateTargetStatus: (id, status) => {
+    set((state) => ({
+      targets: state.targets.map((t) =>
+        t.id === id
+          ? { ...t, connectionStatus: status, lastTestedAt: status === 'connected' || status === 'failed' ? new Date() : t.lastTestedAt }
+          : t,
+      ),
+    }));
   },
 
   _addResult: (result) => {

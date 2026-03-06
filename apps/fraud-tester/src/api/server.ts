@@ -27,6 +27,7 @@ import express from 'express';
 import { Server as SocketServer } from 'socket.io';
 import { FraudSimulationAgent } from '../agents/fraud-simulation.agent';
 import { SignalRiskAdapter } from '../adapters/signalrisk.adapter';
+import { MockAdapter } from '../adapters/mock.adapter';
 import type { BattleReport, ScenarioResult } from '../scenarios/types';
 import type { AttackResult } from '../scenarios/types';
 
@@ -41,6 +42,7 @@ interface BattleEntry {
 }
 
 interface BattleConfig {
+  targetAdapter?: string;
   targetName?: string;
   baseUrl?: string;
   decisionUrl?: string;
@@ -49,6 +51,8 @@ interface BattleConfig {
   duration?: string;
   intensity?: string;
   enabledScenarios?: string[];
+  scenarioIds?: string[];
+  durationMs?: number;
 }
 
 // ─── In-memory store ──────────────────────────────────────────────────────────
@@ -61,6 +65,10 @@ const battles = new Map<string, {
 // ─── Factory ──────────────────────────────────────────────────────────────────
 
 function createAdapter(config: BattleConfig) {
+  // Use mock adapter when explicitly requested or no SignalRisk URL is configured
+  if (config.targetAdapter === 'mock' || (config.targetAdapter !== 'signalrisk' && !process.env['SIGNALRISK_BASE_URL'])) {
+    return new MockAdapter({ mode: 'threshold', fixedLatencyMs: 50 });
+  }
   return new SignalRiskAdapter({
     baseUrl: config.baseUrl ?? process.env['SIGNALRISK_BASE_URL'] ?? 'http://localhost:3002',
     decisionUrl: config.decisionUrl ?? process.env['SIGNALRISK_DECISION_URL'] ?? 'http://localhost:3009',
@@ -147,6 +155,14 @@ export function createServer(port = 3020): http.Server {
 
   // Start battle
   app.post('/v1/fraud-tester/battles', (req, res) => {
+    // Concurrent battle guard — only 1 battle running at a time
+    for (const { entry } of battles.values()) {
+      if (entry.status === 'running') {
+        res.status(409).json({ error: 'A battle is already running' });
+        return;
+      }
+    }
+
     const config: BattleConfig = (req.body as BattleConfig) ?? {};
     const battleId = `battle-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
 
@@ -159,6 +175,9 @@ export function createServer(port = 3020): http.Server {
     const agent = new FraudSimulationAgent();
 
     battles.set(battleId, { entry, agent });
+
+    // Emit battle:start to all connected clients
+    io.emit('battle:start', { battleId, config, timestamp: new Date().toISOString() });
 
     // Enforce FIFO cap of 100 battles
     if (battles.size > 100) {
@@ -217,6 +236,7 @@ export function createServer(port = 3020): http.Server {
     }
     battle.entry.status = 'stopped';
     battle.entry.completedAt = new Date().toISOString();
+    io.emit('battle:stopped', { battleId: req.params['id'] });
     res.json({ ok: true });
   });
 

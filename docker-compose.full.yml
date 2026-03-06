@@ -203,7 +203,7 @@ services:
       - neo4j_data:/data
       - neo4j_logs:/logs
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 > /dev/null 2>&1"]
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:7474 || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 10
@@ -236,7 +236,7 @@ services:
       ALLOWED_SIGNAL_HOSTS: localhost,127.0.0.1,event-collector
     depends_on: *depends-infra
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3001/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health > /dev/null 2>&1 || exit 1"]
       <<: *app-healthcheck
     networks:
       - signalrisk-network
@@ -270,7 +270,7 @@ services:
       auth-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3002/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3002/health > /dev/null 2>&1 || exit 1"]
       <<: *app-healthcheck
     networks:
       - signalrisk-network
@@ -301,7 +301,7 @@ services:
       auth-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3003/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3003/health > /dev/null 2>&1 || exit 1"]
       <<: *app-healthcheck
     networks:
       - signalrisk-network
@@ -327,7 +327,7 @@ services:
       auth-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3004/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3004/health > /dev/null 2>&1 || exit 1"]
       <<: *app-healthcheck
     networks:
       - signalrisk-network
@@ -353,7 +353,7 @@ services:
       auth-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3005/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3005/health > /dev/null 2>&1 || exit 1"]
       <<: *app-healthcheck
     networks:
       - signalrisk-network
@@ -382,7 +382,7 @@ services:
       auth-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3006/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3006/health > /dev/null 2>&1 || exit 1"]
       <<: *app-healthcheck
     networks:
       - signalrisk-network
@@ -411,7 +411,7 @@ services:
       auth-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3007/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3007/health > /dev/null 2>&1 || exit 1"]
       <<: *app-healthcheck
     networks:
       - signalrisk-network
@@ -442,7 +442,7 @@ services:
       auth-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3008/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3008/health > /dev/null 2>&1 || exit 1"]
       <<: *app-healthcheck
     networks:
       - signalrisk-network
@@ -471,7 +471,7 @@ services:
       auth-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3012/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3012/health > /dev/null 2>&1 || exit 1"]
       <<: *app-healthcheck
     networks:
       - signalrisk-network
@@ -524,7 +524,7 @@ services:
       rule-engine-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3009/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3009/health > /dev/null 2>&1 || exit 1"]
       <<: *app-healthcheck
     networks:
       - signalrisk-network
@@ -560,7 +560,7 @@ services:
       decision-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3010/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3010/health > /dev/null 2>&1 || exit 1"]
       <<: *app-healthcheck
     networks:
       - signalrisk-network
@@ -594,7 +594,7 @@ services:
       decision-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3011/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3011/health > /dev/null 2>&1 || exit 1"]
       <<: *app-healthcheck
     networks:
       - signalrisk-network
@@ -622,7 +622,7 @@ services:
       PORT: "3013"
     depends_on: *depends-infra
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3013/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3013/health > /dev/null 2>&1 || exit 1"]
       <<: *app-healthcheck
     networks:
       - signalrisk-network
@@ -652,7 +652,7 @@ services:
       auth-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3014/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3014/health > /dev/null 2>&1 || exit 1"]
       <<: *app-healthcheck
     networks:
       - signalrisk-network

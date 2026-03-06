@@ -5,6 +5,7 @@
  * credential fixtures, and utility functions.
  */
 
+import { execSync } from 'child_process';
 import type { APIRequestContext } from '@playwright/test';
 
 // ---------------------------------------------------------------------------
@@ -40,7 +41,8 @@ export const TEST_ADMIN = {
 // ---------------------------------------------------------------------------
 
 /**
- * Obtain a JWT access token for a merchant via the client_credentials grant.
+ * Obtain a JWT access token for the default test merchant via the
+ * client_credentials grant.
  *
  * POST /v1/auth/token
  * Body: { grant_type: 'client_credentials', client_id, client_secret }
@@ -58,6 +60,35 @@ export async function getMerchantToken(request: APIRequestContext): Promise<stri
   if (!response.ok()) {
     throw new Error(
       `getMerchantToken failed: HTTP ${response.status()} — ${await response.text()}`,
+    );
+  }
+
+  const body = (await response.json()) as { access_token: string };
+  return body.access_token;
+}
+
+/**
+ * Obtain a JWT access token for an arbitrary merchant using explicit credentials.
+ * Used by multi-tenant isolation tests to authenticate as different merchants.
+ *
+ * @param request     Playwright APIRequestContext
+ * @param credentials Merchant credentials: { clientId, clientSecret }
+ */
+export async function getMerchantTokenFor(
+  request: APIRequestContext,
+  credentials: { clientId: string; clientSecret: string },
+): Promise<string> {
+  const response = await request.post(`${AUTH_URL}/v1/auth/token`, {
+    data: {
+      grant_type:    'client_credentials',
+      client_id:     credentials.clientId,
+      client_secret: credentials.clientSecret,
+    },
+  });
+
+  if (!response.ok()) {
+    throw new Error(
+      `getMerchantTokenFor(${credentials.clientId}) failed: HTTP ${response.status()} — ${await response.text()}`,
     );
   }
 
@@ -87,6 +118,29 @@ export async function getAdminToken(request: APIRequestContext): Promise<string>
 
   const body = (await response.json()) as { access_token: string };
   return body.access_token;
+}
+
+// ---------------------------------------------------------------------------
+// Docker CLI helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Execute a Docker CLI command synchronously from the repository root.
+ *
+ * Used by chaos tests to stop/start containers (e.g. `docker compose stop redis`).
+ * Throws if Docker CLI is unavailable or the command exits with a non-zero code.
+ *
+ * Container naming convention:
+ *   - compose project prefix: `signalrisk`
+ *   - Redis container name:   `signalrisk-redis-1`
+ *
+ * @param cmd Shell command string to execute (e.g. `docker compose -f docker-compose.full.yml stop redis`)
+ */
+export function execDockerCommand(cmd: string): void {
+  execSync(cmd, {
+    cwd: process.cwd(),
+    stdio: 'pipe',
+  });
 }
 
 // ---------------------------------------------------------------------------
