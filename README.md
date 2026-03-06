@@ -1,4 +1,44 @@
-# SignalRisk
+# SignalRisk — Real-Time Fraud Detection
+
+Real-time fraud decision engine for wallet and carrier billing platforms. Processes 5,000+ events/sec with p99 < 100ms.
+
+## Quick Start
+
+```bash
+# Clone and install
+git clone https://github.com/signalrisk/signalrisk.git
+cd signalrisk
+npm install
+
+# Start all services (requires Docker)
+docker-compose up -d
+
+# Run compliance check
+bash scripts/compliance-check.sh
+
+# Run all tests
+npm run test:all
+```
+
+## Services
+
+| Service | Port | Description |
+|---------|------|-------------|
+| auth-service | 3001 | JWT + API key auth, rate limiting |
+| event-collector | 3000 | Event ingestion, Kafka publishing |
+| decision-service | 3002 | Fraud scoring orchestrator |
+| device-intel | 3003 | Device fingerprint analysis |
+| velocity-engine | 3004 | Transaction velocity counters |
+| behavioral-service | 3005 | ML-based behavioral biometrics |
+| network-intel | 3006 | IP reputation, bot detection |
+| telco-intel | 3007 | Phone number risk scoring |
+| graph-intel | 3012 | Neo4j fraud ring detection |
+| rule-engine | 3008 | DSL-based fraud rules, hot-reload |
+| case-service | 3010 | Case management |
+| webhook-service | 3011 | HMAC-SHA256 webhook delivery |
+| feature-flag | 3013 | Feature flags, rule rollout |
+
+---
 
 **Real-time fraud decision engine for wallet and carrier billing platforms.**
 
@@ -174,6 +214,14 @@ Current Phase: ARCHITECTURE
 
 ## Documentation
 
+- [Architecture Overview](docs/architecture/system-overview.md)
+- [API Reference](docs/dev/api-reference.md)
+- [Getting Started](docs/dev/getting-started.md)
+- [Disaster Recovery](docs/runbooks/disaster-recovery.md)
+- [Load Testing](docs/runbooks/load-testing.md)
+- [Go-Live Checklist](docs/runbooks/go-live-checklist.md)
+- [PCI-DSS Scoping](docs/compliance/pci-dss-scoping.md)
+- [GDPR Data Flow](docs/compliance/gdpr-data-flow.md)
 - [Requirements v4](docs/01-requirements/requirements-v4.md)
 - [Wireframes v3](docs/02-design/wireframes-v3.md)
 - [Component Map v2](docs/02-design/component-map-v2.md)
