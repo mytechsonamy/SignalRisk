@@ -6,10 +6,11 @@ import { DslModule } from './dsl/dsl.module';
 import { RegistryModule } from './registry/registry.module';
 import { EvaluationModule } from './evaluation/evaluation.module';
 import { ChargebackModule } from './chargeback/chargeback.module';
+import { RulesModule } from './rules/rules.module';
 import { RuleRegistryService } from './registry/rule-registry.service';
 
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true }), DslModule, RegistryModule, EvaluationModule, ChargebackModule],
+  imports: [ConfigModule.forRoot({ isGlobal: true }), DslModule, RegistryModule, EvaluationModule, ChargebackModule, RulesModule],
 })
 export class AppModule implements OnModuleInit {
   private readonly logger = new Logger(AppModule.name);
