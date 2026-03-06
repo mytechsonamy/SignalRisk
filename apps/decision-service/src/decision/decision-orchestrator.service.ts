@@ -19,6 +19,7 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { trace, SpanStatusCode } from '@opentelemetry/api';
 import {
   DecisionRequest,
   DecisionResult,
@@ -54,6 +55,7 @@ const REVIEW_THRESHOLD = 40;
 export class DecisionOrchestratorService {
   private readonly logger = new Logger(DecisionOrchestratorService.name);
   private readonly signalTimeoutMs: number;
+  private readonly tracer = trace.getTracer('decision-orchestrator', '1.0.0');
 
   constructor(
     private readonly configService: ConfigService,
@@ -70,38 +72,58 @@ export class DecisionOrchestratorService {
   async decide(req: DecisionRequest): Promise<DecisionResult> {
     const startedAt = Date.now();
 
-    // Fetch all signals in parallel with per-signal timeout
+    // Fetch all signals in parallel with per-signal timeout, each wrapped in a span
     const [device, velocity, behavioral, network, telco] = await Promise.allSettled([
       this.withTimeout(
-        req.deviceId
-          ? this.signalFetcher.fetchDeviceSignal(req.deviceId, req.merchantId)
-          : Promise.resolve(null),
+        this.fetchWithSpan(
+          'fetch.device-signal',
+          { 'signal.type': 'device', 'merchant.id': req.merchantId },
+          req.deviceId
+            ? this.signalFetcher.fetchDeviceSignal(req.deviceId, req.merchantId)
+            : Promise.resolve(null),
+        ),
         this.signalTimeoutMs,
         'device',
       ),
       this.withTimeout(
-        this.signalFetcher.fetchVelocitySignal(req.entityId, req.merchantId),
+        this.fetchWithSpan(
+          'fetch.velocity-signal',
+          { 'signal.type': 'velocity', 'merchant.id': req.merchantId },
+          this.signalFetcher.fetchVelocitySignal(req.entityId, req.merchantId),
+        ),
         this.signalTimeoutMs,
         'velocity',
       ),
       this.withTimeout(
-        req.sessionId
-          ? this.signalFetcher.fetchBehavioralSignal(req.sessionId, req.merchantId)
-          : Promise.resolve(null),
+        this.fetchWithSpan(
+          'fetch.behavioral-signal',
+          { 'signal.type': 'behavioral', 'merchant.id': req.merchantId },
+          req.sessionId
+            ? this.signalFetcher.fetchBehavioralSignal(req.sessionId, req.merchantId)
+            : Promise.resolve(null),
+        ),
         this.signalTimeoutMs,
         'behavioral',
       ),
       this.withTimeout(
-        req.ip
-          ? this.signalFetcher.fetchNetworkSignal(req.ip, req.merchantId, undefined, req.billingCountry)
-          : Promise.resolve(null),
+        this.fetchWithSpan(
+          'fetch.network-signal',
+          { 'signal.type': 'network', 'merchant.id': req.merchantId },
+          req.ip
+            ? this.signalFetcher.fetchNetworkSignal(req.ip, req.merchantId, undefined, req.billingCountry)
+            : Promise.resolve(null),
+        ),
         this.signalTimeoutMs,
         'network',
       ),
       this.withTimeout(
-        req.msisdn
-          ? this.signalFetcher.fetchTelcoSignal(req.msisdn, req.merchantId)
-          : Promise.resolve(null),
+        this.fetchWithSpan(
+          'fetch.telco-signal',
+          { 'signal.type': 'telco', 'merchant.id': req.merchantId },
+          req.msisdn
+            ? this.signalFetcher.fetchTelcoSignal(req.msisdn, req.merchantId)
+            : Promise.resolve(null),
+        ),
         this.signalTimeoutMs,
         'telco',
       ),
@@ -161,6 +183,29 @@ export class DecisionOrchestratorService {
       cached:       false,
       createdAt:    new Date(),
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Per-signal span wrapper
+  // ---------------------------------------------------------------------------
+
+  private async fetchWithSpan<T>(
+    spanName: string,
+    attributes: Record<string, string>,
+    promise: Promise<T>,
+  ): Promise<T> {
+    const span = this.tracer.startSpan(spanName, { attributes });
+    try {
+      const result = await promise;
+      span.setAttribute('signal.found', result !== null);
+      span.setStatus({ code: SpanStatusCode.OK });
+      return result;
+    } catch (err) {
+      span.setStatus({ code: SpanStatusCode.ERROR, message: (err as Error)?.message });
+      throw err;
+    } finally {
+      span.end();
+    }
   }
 
   // ---------------------------------------------------------------------------

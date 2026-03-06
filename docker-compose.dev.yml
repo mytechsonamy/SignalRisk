@@ -233,3 +233,19 @@ services:
       <<: *dev-env
       SERVICE_NAME: auth-service
       PORT: "3015"
+
+  # ---------------------------------------------------------------------------
+  # Observability — Jaeger distributed tracing (all-in-one)
+  # ---------------------------------------------------------------------------
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.50
+    container_name: signalrisk-jaeger
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "4317:4317"    # OTLP gRPC
+      - "4318:4318"    # OTLP HTTP
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - signalrisk-network

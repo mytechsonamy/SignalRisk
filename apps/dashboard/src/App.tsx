@@ -4,6 +4,7 @@ import OverviewPage from './pages/OverviewPage';
 import CasesPage from './pages/CasesPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import AdminPage from './pages/AdminPage';
+import FraudOpsPage from './pages/FraudOpsPage';
 import NotFoundPage from './pages/NotFoundPage';
 import UnauthorizedPage from './pages/UnauthorizedPage';
 import AppShell from './components/layout/AppShell';
@@ -47,6 +48,14 @@ export default function App() {
             element={
               <ProtectedRoute allowedRoles={['admin']}>
                 <RulesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="fraud-ops"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'analyst']}>
+                <FraudOpsPage />
               </ProtectedRoute>
             }
           />

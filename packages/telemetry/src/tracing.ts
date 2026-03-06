@@ -8,6 +8,11 @@ import { PgInstrumentation } from '@opentelemetry/instrumentation-pg';
 import { IORedisInstrumentation } from '@opentelemetry/instrumentation-ioredis';
 import { Resource } from '@opentelemetry/resources';
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
+import {
+  CompositePropagator,
+  W3CTraceContextPropagator,
+  W3CBaggagePropagator,
+} from '@opentelemetry/core';
 
 export interface TracingConfig {
   serviceName: string;
@@ -32,6 +37,8 @@ export function initTracing(config: TracingConfig): NodeSDK {
     'deployment.environment': process.env.NODE_ENV || 'development',
   });
 
+  // Use OTLP/gRPC exporter — points to Jaeger when OTEL_EXPORTER_OTLP_ENDPOINT is set,
+  // or falls back to the otel-collector default.
   const traceExporter = new OTLPTraceExporter({ url: otlpEndpoint });
 
   const metricReader = new PeriodicExportingMetricReader({
@@ -39,10 +46,15 @@ export function initTracing(config: TracingConfig): NodeSDK {
     exportIntervalMillis: metricsIntervalMs,
   });
 
+  const propagator = new CompositePropagator({
+    propagators: [new W3CTraceContextPropagator(), new W3CBaggagePropagator()],
+  });
+
   sdk = new NodeSDK({
     resource,
     traceExporter,
     metricReader,
+    textMapPropagator: propagator,
     instrumentations: [
       new HttpInstrumentation({
         ignoreIncomingRequestHook: (req) => {

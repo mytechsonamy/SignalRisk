@@ -36,6 +36,29 @@ export class ChargebackConsumerService implements OnModuleInit {
     }
   }
 
+  async processEvent(event: ChargebackEvent): Promise<void> {
+    this.logger.debug(
+      `Processing chargeback event: caseId=${event.caseId} outcome=${event.outcome} rules=${event.firedRuleIds.length}`,
+    );
+
+    const adjustments = await this.weightAdjustmentService.adjustWeightsForChargeback(event);
+
+    for (const adjustment of adjustments) {
+      try {
+        await this.weightAuditService.logAdjustment(adjustment);
+      } catch (auditErr) {
+        this.logger.error(
+          `Failed to log audit for rule=${adjustment.ruleId} case=${adjustment.caseId}`,
+          auditErr,
+        );
+      }
+    }
+
+    this.logger.log(
+      `Processed chargeback caseId=${event.caseId}: adjusted ${adjustments.length} rule weights`,
+    );
+  }
+
   async handleMessage(payload: EachMessagePayload): Promise<void> {
     const { message } = payload;
     try {
@@ -46,26 +69,7 @@ export class ChargebackConsumerService implements OnModuleInit {
       }
 
       const event: ChargebackEvent = JSON.parse(raw);
-      this.logger.debug(
-        `Processing chargeback event: caseId=${event.caseId} outcome=${event.outcome} rules=${event.firedRuleIds.length}`,
-      );
-
-      const adjustments = await this.weightAdjustmentService.adjustWeightsForChargeback(event);
-
-      for (const adjustment of adjustments) {
-        try {
-          await this.weightAuditService.logAdjustment(adjustment);
-        } catch (auditErr) {
-          this.logger.error(
-            `Failed to log audit for rule=${adjustment.ruleId} case=${adjustment.caseId}`,
-            auditErr,
-          );
-        }
-      }
-
-      this.logger.log(
-        `Processed chargeback caseId=${event.caseId}: adjusted ${adjustments.length} rule weights`,
-      );
+      await this.processEvent(event);
     } catch (err) {
       this.logger.error('Error processing chargeback message', err);
       // Never throw - consumer must continue processing

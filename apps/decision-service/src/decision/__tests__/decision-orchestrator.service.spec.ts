@@ -12,6 +12,28 @@ import {
 import { DecisionRequest } from '../decision.types';
 
 // ---------------------------------------------------------------------------
+// OpenTelemetry mock (must be defined before the module under test is imported,
+// but the module is already imported above so we set up the mock via the
+// mockStartSpan helper captured in the factory below)
+// ---------------------------------------------------------------------------
+const mockSpanEnd = jest.fn();
+const mockSpanSetAttribute = jest.fn();
+const mockSpanSetStatus = jest.fn();
+const mockSpan = {
+  end: mockSpanEnd,
+  setAttribute: mockSpanSetAttribute,
+  setStatus: mockSpanSetStatus,
+};
+const mockStartSpan = jest.fn(() => mockSpan);
+
+jest.mock('@opentelemetry/api', () => ({
+  trace: {
+    getTracer: jest.fn(() => ({ startSpan: mockStartSpan })),
+  },
+  SpanStatusCode: { OK: 1, ERROR: 2 },
+}));
+
+// ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
 
@@ -398,6 +420,128 @@ describe('DecisionOrchestratorService', () => {
 
       expect(mockSignalFetcher.fetchDeviceSignal).not.toHaveBeenCalled();
       expect(result.riskScore).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Per-signal span instrumentation
+  // -------------------------------------------------------------------------
+
+  describe('per-signal span instrumentation', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+      // Re-configure mockStartSpan after clearAllMocks
+      mockStartSpan.mockReturnValue(mockSpan);
+      setupAllSignals();
+    });
+
+    it('creates a span for device signal fetch with correct attributes', async () => {
+      await service.decide(makeRequest());
+
+      const allCalls = mockStartSpan.mock.calls as unknown as Array<[string, Record<string, unknown>]>;
+      const deviceSpanCall = allCalls.find((call) => call[0] === 'fetch.device-signal');
+      expect(deviceSpanCall).toBeDefined();
+      expect(deviceSpanCall![1]).toMatchObject({
+        attributes: expect.objectContaining({
+          'signal.type': 'device',
+          'merchant.id': 'merchant-001',
+        }),
+      });
+    });
+
+    it('creates a span for velocity signal fetch with correct attributes', async () => {
+      await service.decide(makeRequest());
+
+      const allCalls = mockStartSpan.mock.calls as unknown as Array<[string, Record<string, unknown>]>;
+      const velocitySpanCall = allCalls.find((call) => call[0] === 'fetch.velocity-signal');
+      expect(velocitySpanCall).toBeDefined();
+      expect(velocitySpanCall![1]).toMatchObject({
+        attributes: expect.objectContaining({
+          'signal.type': 'velocity',
+          'merchant.id': 'merchant-001',
+        }),
+      });
+    });
+
+    it('creates a span for behavioral signal fetch with correct attributes', async () => {
+      await service.decide(makeRequest());
+
+      const allCalls = mockStartSpan.mock.calls as unknown as Array<[string, Record<string, unknown>]>;
+      const behavioralSpanCall = allCalls.find((call) => call[0] === 'fetch.behavioral-signal');
+      expect(behavioralSpanCall).toBeDefined();
+      expect(behavioralSpanCall![1]).toMatchObject({
+        attributes: expect.objectContaining({
+          'signal.type': 'behavioral',
+          'merchant.id': 'merchant-001',
+        }),
+      });
+    });
+
+    it('creates a span for network signal fetch with correct attributes', async () => {
+      await service.decide(makeRequest());
+
+      const allCalls = mockStartSpan.mock.calls as unknown as Array<[string, Record<string, unknown>]>;
+      const networkSpanCall = allCalls.find((call) => call[0] === 'fetch.network-signal');
+      expect(networkSpanCall).toBeDefined();
+      expect(networkSpanCall![1]).toMatchObject({
+        attributes: expect.objectContaining({
+          'signal.type': 'network',
+          'merchant.id': 'merchant-001',
+        }),
+      });
+    });
+
+    it('creates a span for telco signal fetch with correct attributes', async () => {
+      await service.decide(makeRequest());
+
+      const allCalls = mockStartSpan.mock.calls as unknown as Array<[string, Record<string, unknown>]>;
+      const telcoSpanCall = allCalls.find((call) => call[0] === 'fetch.telco-signal');
+      expect(telcoSpanCall).toBeDefined();
+      expect(telcoSpanCall![1]).toMatchObject({
+        attributes: expect.objectContaining({
+          'signal.type': 'telco',
+          'merchant.id': 'merchant-001',
+        }),
+      });
+    });
+
+    it('calls span.end() for every signal fetch span (5 total)', async () => {
+      await service.decide(makeRequest());
+
+      // 5 spans = device, velocity, behavioral, network, telco
+      expect(mockSpanEnd).toHaveBeenCalledTimes(5);
+    });
+
+    it('calls span.end() even when a signal fetch throws an error', async () => {
+      mockSignalFetcher.fetchDeviceSignal.mockRejectedValue(new Error('fetch failed'));
+
+      await service.decide(makeRequest());
+
+      // span.end() must still be called for the device span that errored
+      expect(mockSpanEnd).toHaveBeenCalled();
+    });
+
+    it('sets signal.found=false attribute when signal returns null', async () => {
+      // device fetch returns null (no deviceId in request)
+      await service.decide(makeRequest({ deviceId: undefined }));
+
+      // The device span should set signal.found=false
+      const attrCalls = mockSpanSetAttribute.mock.calls as unknown as Array<[string, unknown]>;
+      const signalFoundCalls = attrCalls.filter((call) => call[0] === 'signal.found');
+      expect(signalFoundCalls.some((call) => call[1] === false)).toBe(true);
+    });
+
+    it('creates 5 spans for a full request with all optional fields populated', async () => {
+      await service.decide(makeRequest());
+
+      // Each of the 5 signal types gets one span
+      const allCalls = mockStartSpan.mock.calls as unknown as Array<[string, Record<string, unknown>]>;
+      const spanNames = allCalls.map((call) => call[0]);
+      expect(spanNames).toContain('fetch.device-signal');
+      expect(spanNames).toContain('fetch.velocity-signal');
+      expect(spanNames).toContain('fetch.behavioral-signal');
+      expect(spanNames).toContain('fetch.network-signal');
+      expect(spanNames).toContain('fetch.telco-signal');
     });
   });
 });

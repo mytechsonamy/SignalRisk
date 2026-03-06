@@ -1,4 +1,5 @@
 export { initTracing, shutdownTracing, TracingConfig } from './tracing';
+export { injectTraceContext, extractTraceContext, startConsumerSpan } from './kafka-propagation';
 export {
   initMetrics,
   getMetrics,
