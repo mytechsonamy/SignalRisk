@@ -5,12 +5,14 @@ import { DecisionStoreService } from './decision-store.service';
 import { DecisionCacheService } from './decision-cache.service';
 import { SignalFetcher } from './signal-fetchers';
 import { DecisionGateway, WsJwtGuard } from './decision.gateway';
+import { DecisionProfiler } from './decision-profiler';
+import { DecisionMetricsController } from './decision-metrics.controller';
 import { IdempotencyModule } from '../idempotency/idempotency.module';
 import { RedisModule } from '@signalrisk/redis-module';
 
 @Module({
   imports: [IdempotencyModule, RedisModule.forRoot()],
-  controllers: [DecisionController],
+  controllers: [DecisionController, DecisionMetricsController],
   providers: [
     DecisionOrchestratorService,
     DecisionStoreService,
@@ -18,7 +20,8 @@ import { RedisModule } from '@signalrisk/redis-module';
     SignalFetcher,
     DecisionGateway,
     WsJwtGuard,
+    DecisionProfiler,
   ],
-  exports: [DecisionGateway],
+  exports: [DecisionGateway, DecisionProfiler],
 })
 export class DecisionModule {}

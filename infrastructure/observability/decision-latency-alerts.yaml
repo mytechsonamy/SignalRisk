@@ -1,0 +1,19 @@
+# Prometheus alert rules for decision engine latency SLA
+groups:
+  - name: decision_latency
+    rules:
+      - alert: DecisionLatencyP99Exceeded
+        expr: decision_phase_duration_ms{phase="total",quantile="0.99"} > 50
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Decision engine p99 latency exceeds 50ms SLA"
+          description: "p99={{ $value }}ms"
+      - alert: DecisionLatencyP99Critical
+        expr: decision_phase_duration_ms{phase="total",quantile="0.99"} > 100
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Decision engine p99 latency critically high (>100ms)"
