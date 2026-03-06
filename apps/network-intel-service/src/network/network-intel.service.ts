@@ -69,7 +69,12 @@ export class NetworkIntelService {
     // 2. Proxy / VPN / Tor / Datacenter detection
     const isTor = this.proxyDetector.isTorExitNode(ip);
     const isProxy = this.proxyDetector.isKnownProxy(ip);
-    const isVpn = false; // Extended VPN detection requires commercial DB; placeholder
+    // VPN detection uses known commercial VPN provider ASN list
+    // Skip when ENABLE_VPN_DETECTION is explicitly set to 'false'
+    const isVpn =
+      process.env.ENABLE_VPN_DETECTION !== 'false'
+        ? this.proxyDetector.isVpnIp(asn)
+        : false;
     const isDatacenter = this.proxyDetector.isDatacenterIp(asn);
 
     // 3. Geo mismatch scoring

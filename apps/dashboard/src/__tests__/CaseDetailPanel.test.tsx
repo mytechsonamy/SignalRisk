@@ -122,4 +122,27 @@ describe('CaseDetailPanel', () => {
       expect(mockEscalateCase).toHaveBeenCalledWith('case-001');
     });
   });
+
+  it('evidenceTimeline with 3 items renders 3 list items', () => {
+    const caseWithEvidence: Case = {
+      ...mockCase,
+      evidenceTimeline: [
+        { timestamp: new Date(Date.now() - 3000).toISOString(), type: 'signal', description: 'High velocity detected' },
+        { timestamp: new Date(Date.now() - 2000).toISOString(), type: 'rule_hit', description: 'Rule blocked transaction' },
+        { timestamp: new Date(Date.now() - 1000).toISOString(), type: 'user_action', description: 'Analyst flagged account' },
+      ],
+    };
+    render(<CaseDetailPanel caseData={caseWithEvidence} onClose={vi.fn()} />);
+    const listItems = screen.getAllByRole('listitem');
+    expect(listItems).toHaveLength(3);
+  });
+
+  it('evidenceTimeline undefined shows "No evidence recorded"', () => {
+    const caseWithoutEvidence: Case = {
+      ...mockCase,
+      evidenceTimeline: undefined,
+    };
+    render(<CaseDetailPanel caseData={caseWithoutEvidence} onClose={vi.fn()} />);
+    expect(screen.getByText('No evidence recorded')).toBeInTheDocument();
+  });
 });

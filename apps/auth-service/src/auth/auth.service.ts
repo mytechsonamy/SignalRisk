@@ -170,13 +170,20 @@ export class AuthService {
         // Revoke old refresh token (rotation)
         this.refreshTokenStore.revokeById(stored.id);
 
+        // Look up the merchant's stored role instead of hardcoding 'merchant'
+        const merchant = this.merchantsService.findById(stored.userId);
+        if (!merchant) throw new UnauthorizedException('Account not found');
+        const ROLE_PRIORITY = ['admin', 'analyst', 'merchant'];
+        const role = ROLE_PRIORITY.find(r => merchant.roles.includes(r)) ?? 'merchant';
+        const permissions = merchant.roles;
+
         // Issue new token pair
         const { accessToken, expiresIn, jti } =
           await this.jwtTokenService.signAccessToken({
             userId: stored.userId,
             merchantId: stored.merchantId,
-            role: 'merchant', // In production, look up from DB
-            permissions: ['merchant'],
+            role,
+            permissions,
           });
 
         const newRefresh = this.jwtTokenService.generateRefreshToken(

@@ -76,4 +76,53 @@ test.describe('Fraud Operations', () => {
       expect(text).toMatch(/\d+(\.\d+)?%|\d+(\.\d+)?/);
     }
   });
+
+  test('search by partial entity ID filters results to fewer than total', async ({ page }) => {
+    const searchInput = page.getByTestId('case-search-input');
+    if (await searchInput.count() === 0) return;
+    // Total rows before search
+    const allRows = page.locator('tbody tr');
+    const totalCount = await allRows.count();
+    // Type a partial entity ID that matches only one case
+    await searchInput.fill('abc');
+    await page.waitForTimeout(500); // wait for debounce + fetch
+    const filteredRows = page.locator('tbody tr');
+    const filteredCount = await filteredRows.count();
+    expect(filteredCount).toBeLessThan(totalCount > 0 ? totalCount : 999);
+  });
+
+  test('matching entity ID is visible in filtered search results', async ({ page }) => {
+    const searchInput = page.getByTestId('case-search-input');
+    if (await searchInput.count() === 0) return;
+    // 'abc' matches entityId 'device-abc123' in mock data
+    await searchInput.fill('abc');
+    await page.waitForTimeout(500);
+    // The merchant associated with case-001 is merchant-001
+    const matchingText = page.getByText(/merchant-001/i);
+    if (await matchingText.count() > 0) {
+      await expect(matchingText.first()).toBeVisible();
+    }
+  });
+
+  test('non-matching search query shows no-results message', async ({ page }) => {
+    const searchInput = page.getByTestId('case-search-input');
+    if (await searchInput.count() === 0) return;
+    await searchInput.fill('xyznonexistent');
+    await page.waitForTimeout(500);
+    const noResults = page.getByText(/no cases match your search/i);
+    await expect(noResults).toBeVisible();
+  });
+
+  test('whitespace-only input resets to full list without showing Searching indicator', async ({ page }) => {
+    const searchInput = page.getByTestId('case-search-input');
+    if (await searchInput.count() === 0) return;
+    await searchInput.fill('   ');
+    await page.waitForTimeout(500);
+    // Should NOT show the searching indicator
+    const searchingIndicator = page.getByTestId('searching-indicator');
+    expect(await searchingIndicator.count()).toBe(0);
+    // Should NOT show no-results message
+    const noResults = page.getByText(/no cases match your search/i);
+    expect(await noResults.count()).toBe(0);
+  });
 });

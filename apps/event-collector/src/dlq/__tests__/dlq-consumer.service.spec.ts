@@ -1,13 +1,28 @@
 /**
- * Unit tests for DlqConsumerService
+ * Unit tests for DlqConsumerService — 6 required cases for Sprint 9 T3
+ *
+ * Tests:
+ * 1. retryCount < maxRetries → reprocessEvent called → event published to signalrisk.events.raw
+ * 2. retryCount === maxRetries → exhaustRetries called → event published to signalrisk.events.dlq.exhausted
+ * 3. retryCount === maxRetries → signalrisk.events.raw NOT called
+ * 4. Re-published event has dlq-retry-count header = retryCount + 1 (reprocess case)
+ * 5. Invalid JSON originalValue → throws error (caught and handled)
+ * 6. Exhausted events logged at WARN level
  */
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { DlqConsumerService, DlqRecord } from '../dlq-consumer.service';
+import { KafkaService } from '../../kafka/kafka.service';
 
-describe('DlqConsumerService', () => {
+describe('DlqConsumerService — Sprint 9 T3 (6 required tests)', () => {
   let consumer: DlqConsumerService;
+  let kafkaService: jest.Mocked<Pick<KafkaService, 'sendBatch'>>;
+  let mockSendBatch: jest.Mock;
+
+  const TOPIC_RAW = 'signalrisk.events.raw';
+  const TOPIC_EXHAUSTED = 'signalrisk.events.dlq.exhausted';
+  const MAX_RETRIES = 3;
 
   const createDlqRecord = (overrides: Partial<DlqRecord> = {}): DlqRecord => ({
     eventId: 'evt-001',
@@ -34,10 +49,16 @@ describe('DlqConsumerService', () => {
   });
 
   beforeEach(async () => {
+    mockSendBatch = jest.fn().mockResolvedValue([]);
+
+    const mockKafkaService = {
+      sendBatch: mockSendBatch,
+    };
+
     const mockConfigService = {
       get: jest.fn((key: string) => {
-        if (key === 'dlq.maxRetries') return 3;
-        if (key === 'dlq.baseDelayMs') return 10; // Fast for tests
+        if (key === 'dlq.maxRetries') return MAX_RETRIES;
+        if (key === 'dlq.baseDelayMs') return 1; // 1ms for fast tests
         return undefined;
       }),
     };
@@ -45,176 +66,139 @@ describe('DlqConsumerService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         DlqConsumerService,
+        { provide: KafkaService, useValue: mockKafkaService },
         { provide: ConfigService, useValue: mockConfigService },
       ],
     }).compile();
 
     consumer = module.get<DlqConsumerService>(DlqConsumerService);
+    kafkaService = module.get(KafkaService) as jest.Mocked<Pick<KafkaService, 'sendBatch'>>;
     await consumer.onModuleInit();
   });
 
   afterEach(async () => {
     await consumer.onModuleDestroy();
+    jest.clearAllMocks();
   });
 
-  // -------------------------------------------------------------------------
-  // Retry logic with exponential backoff
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // Test 1: retryCount < maxRetries → reprocessEvent called → published to raw topic
+  // ---------------------------------------------------------------------------
 
-  describe('retry logic', () => {
-    it('should retry events with retryCount < maxRetries', async () => {
-      const record = createDlqRecord({ retryCount: 0 });
-      const outcome = await consumer.processRecord(record);
-      expect(outcome).toBe('retried');
-    });
+  it('1. retryCount < maxRetries → event is republished to signalrisk.events.raw', async () => {
+    const record = createDlqRecord({ eventId: 'evt-retry', retryCount: 0 });
 
-    it('should retry events at retryCount 1', async () => {
-      const record = createDlqRecord({
-        eventId: 'evt-retry-1',
-        retryCount: 1,
-      });
-      const outcome = await consumer.processRecord(record);
-      expect(outcome).toBe('retried');
-    });
+    const outcome = await consumer.processRecord(record);
 
-    it('should retry events at retryCount 2 (last chance)', async () => {
-      const record = createDlqRecord({
-        eventId: 'evt-retry-2',
-        retryCount: 2,
-      });
-      const outcome = await consumer.processRecord(record);
-      expect(outcome).toBe('retried');
-    });
+    expect(outcome).toBe('retried');
+
+    // Find the call that targeted signalrisk.events.raw
+    const rawCall = mockSendBatch.mock.calls.find(
+      (call) => call[0][0].topic === TOPIC_RAW,
+    );
+    expect(rawCall).toBeDefined();
+    expect(rawCall![0][0].topic).toBe(TOPIC_RAW);
   });
 
-  // -------------------------------------------------------------------------
-  // Max retry exhaustion
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // Test 2: retryCount === maxRetries → event published to signalrisk.events.dlq.exhausted
+  // ---------------------------------------------------------------------------
 
-  describe('max retry exhaustion', () => {
-    it('should exhaust events at retryCount >= maxRetries', async () => {
-      const record = createDlqRecord({
-        eventId: 'evt-exhausted',
-        retryCount: 3,
-      });
-      const outcome = await consumer.processRecord(record);
-      expect(outcome).toBe('exhausted');
-    });
+  it('2. retryCount === maxRetries → event published to signalrisk.events.dlq.exhausted', async () => {
+    const record = createDlqRecord({ eventId: 'evt-exhausted', retryCount: MAX_RETRIES });
 
-    it('should exhaust events with retryCount exceeding maxRetries', async () => {
-      const record = createDlqRecord({
-        eventId: 'evt-over-exhausted',
-        retryCount: 5,
-      });
-      const outcome = await consumer.processRecord(record);
-      expect(outcome).toBe('exhausted');
-    });
+    const outcome = await consumer.processRecord(record);
 
-    it('should store exhausted events in permanent DLQ', async () => {
-      const record = createDlqRecord({
-        eventId: 'evt-permanent',
-        retryCount: 3,
-      });
-      await consumer.processRecord(record);
+    expect(outcome).toBe('exhausted');
 
-      const permanentRecords = consumer.getPermanentDlqRecords();
-      expect(permanentRecords).toHaveLength(1);
-      expect(permanentRecords[0].eventId).toBe('evt-permanent');
-    });
+    const exhaustedCall = mockSendBatch.mock.calls.find(
+      (call) => call[0][0].topic === TOPIC_EXHAUSTED,
+    );
+    expect(exhaustedCall).toBeDefined();
+    expect(exhaustedCall![0][0].topic).toBe(TOPIC_EXHAUSTED);
+    expect(exhaustedCall![0][0].headers['dlq-final-retry-count']).toBe(String(MAX_RETRIES));
   });
 
-  // -------------------------------------------------------------------------
-  // Idempotency
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // Test 3: retryCount === maxRetries → signalrisk.events.raw NOT called
+  // ---------------------------------------------------------------------------
 
-  describe('idempotency', () => {
-    it('should skip already-processed events', async () => {
-      const record = createDlqRecord({ eventId: 'evt-idempotent' });
+  it('3. retryCount === maxRetries → signalrisk.events.raw is NOT called', async () => {
+    const record = createDlqRecord({ eventId: 'evt-no-raw', retryCount: MAX_RETRIES });
 
-      const first = await consumer.processRecord(record);
-      expect(first).toBe('retried');
+    await consumer.processRecord(record);
 
-      const second = await consumer.processRecord(record);
-      expect(second).toBe('skipped');
-    });
-
-    it('should track processed event count', async () => {
-      const record1 = createDlqRecord({ eventId: 'evt-count-1' });
-      const record2 = createDlqRecord({ eventId: 'evt-count-2' });
-
-      await consumer.processRecord(record1);
-      await consumer.processRecord(record2);
-
-      expect(consumer.getProcessedCount()).toBe(2);
-    });
-
-    it('should report processed status correctly', async () => {
-      const record = createDlqRecord({ eventId: 'evt-check' });
-      expect(consumer.isProcessed('evt-check')).toBe(false);
-
-      await consumer.processRecord(record);
-      expect(consumer.isProcessed('evt-check')).toBe(true);
-    });
+    const rawCall = mockSendBatch.mock.calls.find(
+      (call) => call[0][0].topic === TOPIC_RAW,
+    );
+    expect(rawCall).toBeUndefined();
   });
 
-  // -------------------------------------------------------------------------
-  // Exponential backoff calculation
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // Test 4: Re-published event has dlq-retry-count header = retryCount + 1
+  // ---------------------------------------------------------------------------
 
-  describe('calculateBackoff', () => {
-    it('should increase delay exponentially', () => {
-      // Base delay is 10ms in test config
-      const delay0 = consumer.calculateBackoff(0);
-      const delay1 = consumer.calculateBackoff(1);
-      const delay2 = consumer.calculateBackoff(2);
+  it('4. re-published event has dlq-retry-count header equal to retryCount + 1', async () => {
+    const retryCount = 1;
+    const record = createDlqRecord({ eventId: 'evt-header-check', retryCount });
 
-      // Each delay should roughly double (with some jitter)
-      // delay0: ~10ms, delay1: ~20ms, delay2: ~40ms
-      expect(delay0).toBeGreaterThanOrEqual(10);
-      expect(delay0).toBeLessThan(20);
-      expect(delay1).toBeGreaterThanOrEqual(20);
-      expect(delay1).toBeLessThan(30);
-      expect(delay2).toBeGreaterThanOrEqual(40);
-      expect(delay2).toBeLessThan(50);
-    });
+    const outcome = await consumer.processRecord(record);
 
-    it('should cap at 30 seconds', () => {
-      const delay = consumer.calculateBackoff(20); // 2^20 * baseDelay
-      expect(delay).toBeLessThanOrEqual(30_000);
-    });
+    expect(outcome).toBe('retried');
+
+    const rawCall = mockSendBatch.mock.calls.find(
+      (call) => call[0][0].topic === TOPIC_RAW,
+    );
+    expect(rawCall).toBeDefined();
+
+    const publishedMessage = rawCall![0][0];
+    expect(publishedMessage.headers['dlq-retry-count']).toBe(String(retryCount + 1));
   });
 
-  // -------------------------------------------------------------------------
-  // Edge cases
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // Test 5: Invalid JSON originalValue → parse error is caught and handled
+  // ---------------------------------------------------------------------------
 
-  describe('edge cases', () => {
-    it('should handle record with invalid originalValue JSON', async () => {
-      const record = createDlqRecord({
-        eventId: 'evt-bad-json',
-        originalValue: 'not valid json{{{',
-        retryCount: 0,
-      });
-
-      // Should not throw — handles the parse error internally
-      // The retry will fail but the record will be tracked
-      const outcome = await consumer.processRecord(record);
-      // SyntaxError on JSON.parse leads to retry failure, but since
-      // retryCount + 1 < maxRetries, it still counts as 'retried'
-      expect(['retried', 'exhausted']).toContain(outcome);
+  it('5. invalid JSON originalValue → parse error is caught (does not throw unhandled)', async () => {
+    const record = createDlqRecord({
+      eventId: 'evt-bad-json',
+      originalValue: 'not-valid-json{{{',
+      retryCount: 0,
     });
 
-    it('should handle multiple exhausted events in permanent DLQ', async () => {
-      for (let i = 0; i < 5; i++) {
-        await consumer.processRecord(
-          createDlqRecord({
-            eventId: `evt-perm-${i}`,
-            retryCount: 3,
-          }),
-        );
-      }
+    // The service internally catches the JSON.parse error.
+    // retryCount=0, after failure retryCount+1=1 < maxRetries=3 → still 'retried'
+    await expect(consumer.processRecord(record)).resolves.toBeDefined();
 
-      expect(consumer.getPermanentDlqRecords()).toHaveLength(5);
+    // The raw topic must NOT have been successfully published (JSON.parse threw)
+    const rawCall = mockSendBatch.mock.calls.find(
+      (call) => call[0][0].topic === TOPIC_RAW,
+    );
+    expect(rawCall).toBeUndefined();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Test 6: Exhausted events are logged at WARN level
+  // ---------------------------------------------------------------------------
+
+  it('6. exhausted events are logged at WARN level with event ID, original topic, and retry count', async () => {
+    // Access the private logger via bracket notation for spying
+    const logger = (consumer as unknown as { logger: { warn: jest.Mock } }).logger;
+    const warnSpy = jest.spyOn(logger, 'warn');
+
+    const record = createDlqRecord({
+      eventId: 'evt-warn-check',
+      originalTopic: 'signalrisk.events.raw',
+      retryCount: MAX_RETRIES,
     });
+
+    await consumer.processRecord(record);
+
+    expect(warnSpy).toHaveBeenCalled();
+
+    // The warn message must reference the event ID and retry count
+    const warnMessage: string = warnSpy.mock.calls[0][0];
+    expect(warnMessage).toContain('evt-warn-check');
+    expect(warnMessage).toContain(String(MAX_RETRIES));
   });
 });

@@ -2,13 +2,21 @@ import {
   Controller,
   Post,
   Body,
+  Headers,
+  Res,
   HttpCode,
   HttpStatus,
   BadRequestException,
+  UnauthorizedException,
+  Inject,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Response } from 'express';
+import { Redis } from 'ioredis';
+import { REDIS_CLIENT } from '@signalrisk/redis-module';
 import { AuthService } from './auth.service';
+import { JwtTokenService } from '../jwt/jwt.service';
 import {
   TokenRequestDto,
   RefreshTokenRequestDto,
@@ -23,7 +31,11 @@ import { Public } from './decorators/public.decorator';
 @ApiTags('auth')
 @Controller('v1/auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly jwtTokenService: JwtTokenService,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
+  ) {}
 
   /**
    * POST /v1/auth/token
@@ -123,5 +135,34 @@ export class AuthController {
     @Body() dto: IntrospectTokenRequestDto,
   ): Promise<IntrospectResponseDto> {
     return this.authService.introspectToken(dto.token, dto.token_type_hint);
+  }
+
+  /**
+   * POST /v1/auth/logout
+   * Invalidate the current access token by adding its jti to the Redis denylist.
+   * TTL = remaining lifetime of the token so the key auto-expires.
+   */
+  @ApiOperation({ summary: 'Logout — revoke the current access token (jti denylist)' })
+  @ApiResponse({ status: 200, description: 'Logged out successfully' })
+  @ApiResponse({ status: 401, description: 'Missing or invalid token' })
+  @Post('logout')
+  @Public()
+  async logout(
+    @Headers('authorization') authHeader: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const token = authHeader?.replace('Bearer ', '');
+    if (!token) {
+      throw new UnauthorizedException('Authorization header with Bearer token required');
+    }
+
+    const payload = await this.jwtTokenService.verifyAccessToken(token);
+
+    const ttl = payload.exp - Math.floor(Date.now() / 1000);
+    if (ttl > 0) {
+      await this.redis.set(`jwt:revoked:${payload.jti}`, '1', 'EX', ttl);
+    }
+
+    res.status(200).json({ message: 'Logged out successfully' });
   }
 }

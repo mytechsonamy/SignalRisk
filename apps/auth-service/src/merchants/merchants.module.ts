@@ -5,6 +5,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 // Legacy in-memory controller + service (kept for backwards compatibility)
 import { MerchantsController } from './merchants.controller';
 import { MerchantsService } from './merchants.service';
+import { AdminGuard } from './guards/admin.guard';
 
 // New PostgreSQL-backed merchant management API
 import { MerchantController } from './merchant.controller';
@@ -22,6 +23,8 @@ export const PG_POOL = 'PG_POOL';
   providers: [
     // Legacy in-memory service
     MerchantsService,
+    // AdminGuard registered here so JwtTokenService (global) is resolved via DI
+    AdminGuard,
     // API Key Audit service
     ApiKeyAuditService,
     // pg Pool factory

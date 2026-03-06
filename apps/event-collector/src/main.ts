@@ -2,7 +2,7 @@ import { initTracing } from './tracing';
 initTracing();
 
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import helmet from 'helmet';
@@ -39,6 +39,14 @@ async function bootstrap() {
   SwaggerModule.setup('api/docs', app, document);
 
   app.enableShutdownHooks();
+
+  const logger = new Logger('Bootstrap');
+  const flags = {
+    jti: process.env.ENABLE_JTI_DENYLIST !== 'false',
+    vpn: process.env.ENABLE_VPN_DETECTION !== 'false',
+    apiKey: process.env.ENABLE_API_KEY_VALIDATION !== 'false',
+  };
+  logger.log(`Feature flags: jti=${flags.jti} vpn=${flags.vpn} apiKey=${flags.apiKey}`);
 
   const port = process.env.PORT || 3001;
   await app.listen(port);

@@ -1,5 +1,14 @@
+import { useState, useRef, useCallback } from 'react';
 import { useFraudOpsStore } from '../../store/fraud-ops.store';
 import type { Case } from '../../types/case.types';
+
+function debounce<T extends (...args: Parameters<T>) => void>(fn: T, ms: number): T {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  return ((...args: Parameters<T>) => {
+    if (timer !== null) clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), ms);
+  }) as T;
+}
 
 function riskScoreColor(score: number): string {
   if (score >= 80) return 'text-red-600 font-bold';
@@ -29,10 +38,68 @@ export default function CaseReviewQueue() {
     openOutcomeModal,
   } = useFraudOpsStore();
 
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Case[] | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const doSearch = useCallback(
+    debounce((query: string) => {
+      const trimmed = query.trim();
+      if (!trimmed) {
+        abortRef.current?.abort();
+        abortRef.current = null;
+        setSearchResults(null);
+        setSearching(false);
+        setSearchError(null);
+        return;
+      }
+      abortRef.current?.abort();
+      abortRef.current = new AbortController();
+      setSearching(true);
+      setSearchError(null);
+      fetch(`/api/v1/cases?action=REVIEW&search=${encodeURIComponent(trimmed)}`, {
+        signal: abortRef.current.signal,
+      })
+        .then((r) => r.json())
+        .then((data: { cases?: Case[] } | Case[]) => {
+          const cases = Array.isArray(data) ? data : (data.cases ?? []);
+          setSearchResults(cases);
+        })
+        .catch((e: Error) => {
+          if (e.name !== 'AbortError') {
+            setSearchError(e.message);
+          }
+        })
+        .finally(() => {
+          setSearching(false);
+        });
+    }, 300),
+    [],
+  );
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchQuery(value);
+    if (!value.trim()) {
+      abortRef.current?.abort();
+      abortRef.current = null;
+      setSearchResults(null);
+      setSearching(false);
+      setSearchError(null);
+    } else {
+      doSearch(value);
+    }
+  };
+
+  const displayedCases = searchResults !== null ? searchResults : reviewCases;
+  const hasActiveQuery = searchQuery.trim().length > 0;
+
   if (isLoading) {
     return (
       <div className="rounded-lg border border-surface-border bg-surface-card overflow-hidden" data-testid="case-review-queue">
-        <div className="px-4 py-3 border-b border-surface-border">
+        <div className="px-4 py-3 border-b border-surface-border flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-sm font-semibold text-text-primary">Review Queue</h2>
         </div>
         <table className="w-full text-sm">
@@ -56,7 +123,7 @@ export default function CaseReviewQueue() {
     );
   }
 
-  if (reviewCases.length === 0) {
+  if (reviewCases.length === 0 && !hasActiveQuery) {
     return (
       <div className="rounded-lg border border-surface-border bg-surface-card overflow-hidden" data-testid="case-review-queue">
         <div className="px-4 py-3 border-b border-surface-border">
@@ -71,11 +138,44 @@ export default function CaseReviewQueue() {
 
   return (
     <div className="rounded-lg border border-surface-border bg-surface-card overflow-hidden" data-testid="case-review-queue">
-      <div className="px-4 py-3 border-b border-surface-border">
+      <div className="px-4 py-3 border-b border-surface-border flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-sm font-semibold text-text-primary">
-          Review Queue ({reviewCases.length})
+          Review Queue ({displayedCases.length})
         </h2>
+        <div className="relative flex items-center gap-2">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={handleSearchChange}
+            placeholder="Search by entity, merchant, or case ID…"
+            aria-label="Search cases"
+            data-testid="case-search-input"
+            className="w-64 rounded-md border border-surface-border bg-surface-card px-3 py-1.5 text-xs text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-2 focus:ring-brand-primary"
+          />
+          {searching && (
+            <span
+              className="text-xs text-text-secondary animate-pulse"
+              data-testid="searching-indicator"
+            >
+              Searching…
+            </span>
+          )}
+          {searchError && (
+            <span className="text-xs text-red-600" data-testid="search-error">
+              {searchError}
+            </span>
+          )}
+        </div>
       </div>
+      {hasActiveQuery && !searching && displayedCases.length === 0 && (
+        <div
+          className="flex flex-col items-center justify-center py-10 text-text-secondary text-sm"
+          data-testid="no-search-results"
+        >
+          <p>No cases match your search</p>
+        </div>
+      )}
+      {(displayedCases.length > 0 || (!hasActiveQuery && !searching)) && (
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-surface-hover">
@@ -89,7 +189,7 @@ export default function CaseReviewQueue() {
             </tr>
           </thead>
           <tbody className="divide-y divide-surface-border">
-            {reviewCases.map((c: Case) => {
+            {displayedCases.map((c: Case) => {
               const isSelected = selectedCaseIds.includes(c.id);
               const isInReview = c.status === 'IN_REVIEW';
               const slaDate = new Date(c.slaDeadline);
@@ -155,6 +255,7 @@ export default function CaseReviewQueue() {
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }

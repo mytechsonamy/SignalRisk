@@ -8,6 +8,7 @@
 
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { KafkaService } from '../kafka/kafka.service';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -54,12 +55,19 @@ export class DlqConsumerService implements OnModuleInit, OnModuleDestroy {
    */
   private readonly processedEvents: Map<string, ProcessedEvent> = new Map();
 
-  /** Permanent dead letter storage (in-memory for now). */
-  private readonly permanentDlq: DlqRecord[] = [];
+  /** Exhausted event cache (in-memory, capped at 1000 FIFO). */
+  private readonly exhaustedEventCache: DlqRecord[] = [];
+
+  private static readonly CACHE_CAP = 1000;
 
   private running = false;
 
-  constructor(private readonly configService: ConfigService) {
+  private static readonly TOPIC_RAW = 'signalrisk.events.raw';
+
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly kafkaService: KafkaService,
+  ) {
     this.maxRetries = this.configService.get<number>('dlq.maxRetries') ?? 3;
     this.baseDelayMs = this.configService.get<number>('dlq.baseDelayMs') ?? 1000;
   }
@@ -96,7 +104,7 @@ export class DlqConsumerService implements OnModuleInit, OnModuleDestroy {
 
     // Check retry count
     if (record.retryCount >= this.maxRetries) {
-      return this.exhaustRetries(record);
+      return await this.exhaustRetries(record);
     }
 
     // Calculate exponential backoff delay
@@ -130,7 +138,7 @@ export class DlqConsumerService implements OnModuleInit, OnModuleDestroy {
 
       // If this was the last attempt, exhaust
       if (record.retryCount + 1 >= this.maxRetries) {
-        return this.exhaustRetries(record);
+        return await this.exhaustRetries(record);
       }
 
       // Mark as processed (this attempt) to avoid duplicate processing
@@ -157,10 +165,10 @@ export class DlqConsumerService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Get all permanently dead-lettered records (for monitoring/debugging).
+   * Get all exhausted (permanently dead-lettered) records (for monitoring/debugging).
    */
   getPermanentDlqRecords(): DlqRecord[] {
-    return [...this.permanentDlq];
+    return [...this.exhaustedEventCache];
   }
 
   /**
@@ -175,41 +183,90 @@ export class DlqConsumerService implements OnModuleInit, OnModuleDestroy {
   // ---------------------------------------------------------------------------
 
   /**
-   * Move an event to permanent dead letter storage after max retries.
+   * Move an event to the exhausted Kafka topic and the in-memory cache after max retries.
+   * Publishes to signalrisk.events.dlq.exhausted, then appends to exhaustedEventCache (FIFO, capped at 1000).
    */
-  private exhaustRetries(record: DlqRecord): 'exhausted' {
+  private async exhaustRetries(record: DlqRecord): Promise<'exhausted'> {
+    const eventId =
+      (record as unknown as { headers?: Record<string, unknown> }).headers?.[
+        'event-id'
+      ]?.toString() ?? record.eventId;
+
+    const originalTopic =
+      (record as unknown as { headers?: Record<string, unknown> }).headers?.[
+        'dlq-original-topic'
+      ]?.toString() ?? record.originalTopic ?? '';
+
+    const retryCount = record.retryCount;
+
+    // 1. Publish to the exhausted Kafka topic
+    await this.kafkaService.sendBatch([
+      {
+        topic: 'signalrisk.events.dlq.exhausted',
+        key: record.eventId,
+        value: record.originalValue,
+        headers: {
+          'dlq-event-id': eventId,
+          'dlq-original-topic': originalTopic,
+          'dlq-final-retry-count': String(retryCount),
+        },
+      },
+    ]);
+
+    // 2. Append to the in-memory cache with FIFO cap at 1000
+    if (this.exhaustedEventCache.length >= DlqConsumerService.CACHE_CAP) {
+      this.exhaustedEventCache.shift();
+    }
+    this.exhaustedEventCache.push(record);
+
+    // 3. Warn with event ID, original topic, and final retry count
     this.logger.warn(
-      `DLQ event ${record.eventId} exhausted ${this.maxRetries} retries. ` +
-        `Moving to permanent dead letter storage. ` +
-        `Reason: ${record.failureReason}, Error: ${record.errorMessage}`,
+      `DLQ event ${record.eventId} exhausted after ${retryCount} retries. ` +
+        `Published to signalrisk.events.dlq.exhausted. ` +
+        `originalTopic=${originalTopic}, finalRetryCount=${retryCount}`,
     );
 
-    this.permanentDlq.push(record);
     this.markProcessed(record.eventId, 'exhausted');
     return 'exhausted';
   }
 
   /**
-   * Re-process the original event. In production, this would re-submit
-   * the event to the ingestion pipeline or target topic.
+   * Re-process the original event by republishing it to the raw events topic.
+   *
+   * Uses the partition key from the original record metadata (merchantId:sessionId
+   * pattern) so that events for the same session remain ordered on the same partition.
    */
   private async reprocessEvent(
     originalEvent: unknown,
-    _dlqRecord: DlqRecord,
+    dlqRecord: DlqRecord,
   ): Promise<void> {
-    // In production, this would:
-    // 1. Re-validate the event
-    // 2. Send it back to the original topic (e.g., signalrisk.events.raw)
-    // 3. Update the retry count in the DLQ message
-
-    // For now, we validate that the original event can be parsed
     if (!originalEvent || typeof originalEvent !== 'object') {
       throw new Error('Cannot reprocess: original event is not a valid object');
     }
 
-    this.logger.debug(
-      `Reprocessing event from ${_dlqRecord.originalTopic}`,
+    const event = originalEvent as Record<string, unknown>;
+    const merchantId = String(event['merchantId'] ?? 'unknown');
+    const sessionId = String(event['sessionId'] ?? 'unknown');
+    const partitionKey = `${merchantId}:${sessionId}`;
+
+    this.logger.log(
+      `Republishing DLQ event ${dlqRecord.eventId} to ${DlqConsumerService.TOPIC_RAW} ` +
+        `(attempt ${dlqRecord.retryCount + 1}, originalTopic=${dlqRecord.originalTopic})`,
     );
+
+    await this.kafkaService.sendBatch([
+      {
+        topic: DlqConsumerService.TOPIC_RAW,
+        key: partitionKey,
+        value: dlqRecord.originalValue,
+        headers: {
+          'event-id': dlqRecord.eventId,
+          'merchant-id': merchantId,
+          'dlq-retry-count': String(dlqRecord.retryCount + 1),
+          'dlq-original-topic': dlqRecord.originalTopic,
+        },
+      },
+    ]);
   }
 
   /**

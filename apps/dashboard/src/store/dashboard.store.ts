@@ -1,13 +1,9 @@
 import { create } from 'zustand';
+import { fetchKpiStats, fetchMinuteTrend } from '../api/analytics.api';
+import type { KpiData, TrendBucket } from '../types/analytics.types';
 
+export type { KpiData, TrendBucket };
 export type DecisionAction = 'ALLOW' | 'REVIEW' | 'BLOCK';
-
-export interface KpiData {
-  decisionsPerHour: number;
-  blockRatePct: number;
-  reviewRatePct: number;
-  avgLatencyMs: number;
-}
 
 export interface DecisionEvent {
   id: string;
@@ -17,22 +13,19 @@ export interface DecisionEvent {
   latencyMs: number;
 }
 
-export interface TrendBucket {
-  minute: string;
-  ALLOW: number;
-  REVIEW: number;
-  BLOCK: number;
-}
-
 interface DashboardState {
   kpi: KpiData;
   events: DecisionEvent[];
   trend: TrendBucket[];
   isLoading: boolean;
+  isStale: boolean;
+  lastUpdated: number; // timestamp ms, 0 = never
   setKpi: (kpi: KpiData) => void;
   prependEvent: (event: DecisionEvent) => void;
   setTrend: (trend: TrendBucket[]) => void;
   setLoading: (loading: boolean) => void;
+  setStale: (isStale: boolean, lastUpdated?: number) => void;
+  fetchOverviewData: () => Promise<void>;
 }
 
 const INITIAL_KPI: KpiData = {
@@ -62,6 +55,8 @@ export const useDashboardStore = create<DashboardState>((set) => ({
   events: [],
   trend: generateMockTrend(),
   isLoading: false,
+  isStale: false,
+  lastUpdated: 0,
 
   setKpi: (kpi) => set({ kpi }),
 
@@ -73,4 +68,24 @@ export const useDashboardStore = create<DashboardState>((set) => ({
   setTrend: (trend) => set({ trend }),
 
   setLoading: (isLoading) => set({ isLoading }),
+
+  setStale: (isStale, lastUpdated) =>
+    set((state) => ({
+      isStale,
+      lastUpdated: lastUpdated ?? state.lastUpdated,
+    })),
+
+  fetchOverviewData: async () => {
+    set({ isLoading: true });
+    try {
+      const [kpi, trend] = await Promise.all([
+        fetchKpiStats(),
+        fetchMinuteTrend(),
+      ]);
+      set({ kpi, trend, isLoading: false });
+    } catch {
+      // Keep existing data on failure; dashboard remains usable
+      set({ isLoading: false });
+    }
+  },
 }));

@@ -76,7 +76,7 @@ describe('Token Flow (issue, refresh, revoke)', () => {
 
     merchantsService = {
       findByClientId: jest.fn().mockReturnValue(mockMerchant),
-      findById: jest.fn(),
+      findById: jest.fn().mockReturnValue(mockMerchant),
     } as any;
 
     authService = new AuthService(jwtTokenService, configService, merchantsService);
