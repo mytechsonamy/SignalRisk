@@ -1,0 +1,41 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: signalrisk
+  namespace: argocd
+spec:
+  description: SignalRisk fraud detection platform
+  sourceRepos:
+    - https://github.com/signalrisk/signalrisk.git
+  destinations:
+    - namespace: signalrisk-staging
+      server: https://kubernetes.default.svc
+    - namespace: signalrisk-production
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: apps
+      kind: Deployment
+    - group: ''
+      kind: Service
+    - group: ''
+      kind: ConfigMap
+    - group: ''
+      kind: Secret
+    - group: autoscaling
+      kind: HorizontalPodAutoscaler
+    - group: policy
+      kind: PodDisruptionBudget
+    - group: argoproj.io
+      kind: Application
+  roles:
+    - name: deploy-staging
+      description: Can sync staging
+      policies:
+        - p, proj:signalrisk:deploy-staging, applications, sync, signalrisk/signalrisk-staging, allow
+    - name: deploy-production
+      description: Can sync production (requires manual approval)
+      policies:
+        - p, proj:signalrisk:deploy-production, applications, sync, signalrisk/signalrisk-production, allow

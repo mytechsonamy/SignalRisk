@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: signalrisk-production
+  namespace: argocd
+spec:
+  project: signalrisk
+  source:
+    repoURL: https://github.com/signalrisk/signalrisk.git
+    targetRevision: HEAD  # Updated by release pipeline
+    path: infrastructure/helm/signalrisk
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-production.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: signalrisk-production
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+    # NO automated sync for production — manual approval required
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
