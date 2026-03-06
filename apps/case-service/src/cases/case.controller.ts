@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { CaseService } from './case.service';
+import { CaseExportService } from './case-export.service';
 import { UpdateCaseDto } from './dto/update-case.dto';
 import { BulkActionDto } from './dto/bulk-action.dto';
 import { CasePriority, CaseStatus } from './case.types';
@@ -22,7 +23,10 @@ import { CasePriority, CaseStatus } from './case.types';
 export class CaseController {
   private readonly logger = new Logger(CaseController.name);
 
-  constructor(private readonly caseService: CaseService) {}
+  constructor(
+    private readonly caseService: CaseService,
+    private readonly caseExportService: CaseExportService,
+  ) {}
 
   @ApiOperation({ summary: 'List fraud cases for a merchant with optional filters' })
   @ApiQuery({ name: 'merchantId', required: true, example: 'merchant-001' })
@@ -58,6 +62,18 @@ export class CaseController {
       page: safePage,
       limit: safeLimit,
     });
+  }
+
+  @ApiOperation({ summary: 'Export all cases for an entity (GDPR Art. 15)' })
+  @ApiQuery({ name: 'merchantId', required: true, example: 'merchant-001' })
+  @ApiQuery({ name: 'entityId', required: true, example: 'user-123' })
+  @ApiResponse({ status: 200, description: 'List of all cases for the entity' })
+  @Get('export')
+  async exportCases(
+    @Query('merchantId') merchantId: string,
+    @Query('entityId') entityId: string,
+  ) {
+    return this.caseExportService.exportEntityCases(merchantId, entityId);
   }
 
   @ApiOperation({ summary: 'Get a single fraud case by ID' })

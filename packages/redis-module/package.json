@@ -1,0 +1,26 @@
+{
+  "name": "@signalrisk/redis-module",
+  "version": "1.0.0",
+  "description": "Shared NestJS Redis module for SignalRisk services",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": { "build": "tsc", "test": "jest --no-coverage" },
+  "dependencies": {
+    "ioredis": "^5.0.0",
+    "@nestjs/common": "^10.0.0",
+    "@nestjs/config": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.0.0",
+    "@nestjs/testing": "^10.0.0",
+    "jest": "^29.0.0",
+    "ts-jest": "^29.0.0",
+    "typescript": "^5.0.0",
+    "reflect-metadata": "^0.1.13"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^10.0.0",
+    "@nestjs/config": "^3.0.0",
+    "ioredis": "^5.0.0"
+  }
+}

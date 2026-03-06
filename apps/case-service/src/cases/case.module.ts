@@ -4,6 +4,7 @@ import { Pool } from 'pg';
 import { CaseController } from './case.controller';
 import { CaseService } from './case.service';
 import { CaseRepository } from './case.repository';
+import { CaseExportService } from './case-export.service';
 
 const PG_POOL_TOKEN = 'PG_POOL';
 
@@ -35,7 +36,12 @@ const PG_POOL_TOKEN = 'PG_POOL';
       useFactory: (pool: Pool) => new CaseRepository(pool),
     },
     CaseService,
+    {
+      provide: CaseExportService,
+      useFactory: (pool: Pool) => new CaseExportService(pool),
+      inject: [PG_POOL_TOKEN],
+    },
   ],
-  exports: [CaseService, CaseRepository],
+  exports: [CaseService, CaseRepository, CaseExportService],
 })
 export class CaseModule {}

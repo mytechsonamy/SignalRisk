@@ -6,9 +6,10 @@ import { DecisionCacheService } from './decision-cache.service';
 import { SignalFetcher } from './signal-fetchers';
 import { DecisionGateway, WsJwtGuard } from './decision.gateway';
 import { IdempotencyModule } from '../idempotency/idempotency.module';
+import { RedisModule } from '../../../../packages/redis-module/src';
 
 @Module({
-  imports: [IdempotencyModule],
+  imports: [IdempotencyModule, RedisModule.forRoot()],
   controllers: [DecisionController],
   providers: [
     DecisionOrchestratorService,

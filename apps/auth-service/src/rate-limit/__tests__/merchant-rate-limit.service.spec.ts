@@ -1,23 +1,10 @@
 import { MerchantRateLimitService } from '../merchant-rate-limit.service';
 import { ConfigService } from '@nestjs/config';
 
-// Mock ioredis
 const mockEval = jest.fn();
 const mockGet = jest.fn();
 const mockTtl = jest.fn();
-const mockQuit = jest.fn().mockResolvedValue('OK');
-const mockOn = jest.fn();
-
-jest.mock('ioredis', () => {
-  const mockConstructor = jest.fn().mockImplementation(() => ({
-    eval: mockEval,
-    get: mockGet,
-    ttl: mockTtl,
-    quit: mockQuit,
-    on: mockOn,
-  }));
-  return { Redis: mockConstructor, default: mockConstructor };
-});
+const mockRedis = { eval: mockEval, get: mockGet, ttl: mockTtl };
 
 describe('MerchantRateLimitService', () => {
   let service: MerchantRateLimitService;
@@ -39,12 +26,7 @@ describe('MerchantRateLimitService', () => {
       }),
     } as unknown as ConfigService;
 
-    service = new MerchantRateLimitService(configService);
-    await service.onModuleInit();
-  });
-
-  afterEach(async () => {
-    await service.onModuleDestroy();
+    service = new MerchantRateLimitService(configService, mockRedis as any);
   });
 
   describe('checkAndConsume', () => {
@@ -146,13 +128,6 @@ describe('MerchantRateLimitService', () => {
 
       expect(result.remaining).toBe(0);
       expect(result.allowed).toBe(false);
-    });
-  });
-
-  describe('onModuleDestroy', () => {
-    it('should quit the Redis client', async () => {
-      await service.onModuleDestroy();
-      expect(mockQuit).toHaveBeenCalled();
     });
   });
 });

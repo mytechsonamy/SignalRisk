@@ -1,24 +1,13 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject } from '@nestjs/common';
 import { Redis } from 'ioredis';
-import { ConfigService } from '@nestjs/config';
+import { REDIS_CLIENT } from '../../../../packages/redis-module/src';
 
 @Injectable()
 export class DecisionCacheService {
   private readonly logger = new Logger(DecisionCacheService.name);
   private readonly TTL_SECONDS = 5;
-  private redis: Redis;
 
-  constructor(private readonly configService: ConfigService) {}
-
-  onModuleInit() {
-    this.redis = new Redis({
-      host: this.configService.get('REDIS_HOST', 'localhost'),
-      port: this.configService.get('REDIS_PORT', 6379),
-      lazyConnect: false,
-    });
-  }
-
-  async onModuleDestroy() { await this.redis.quit(); }
+  constructor(@Inject(REDIS_CLIENT) private readonly redis: Redis) {}
 
   cacheKey(merchantId: string, entityId: string): string {
     return `decision:cache:${merchantId}:${entityId}`;

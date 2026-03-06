@@ -1,6 +1,7 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Redis } from 'ioredis';
+import { REDIS_CLIENT } from '../../../../packages/redis-module/src';
 
 export interface RateLimitResult {
   allowed: boolean;
@@ -24,15 +25,17 @@ export interface RateLimitResult {
  * Default: 1000 req/min per merchant. Burst multiplier applies to burst tier.
  */
 @Injectable()
-export class MerchantRateLimitService implements OnModuleInit, OnModuleDestroy {
+export class MerchantRateLimitService {
   private readonly logger = new Logger(MerchantRateLimitService.name);
-  private redis!: Redis;
 
   private readonly windowSeconds = 60;
   private readonly defaultLimit: number;
   private readonly burstMultiplier: number;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
+  ) {
     this.defaultLimit = this.configService.get<number>(
       'rateLimit.defaultPerMinute',
       1000,
@@ -41,31 +44,6 @@ export class MerchantRateLimitService implements OnModuleInit, OnModuleDestroy {
       'rateLimit.burstMultiplier',
       2,
     );
-  }
-
-  async onModuleInit(): Promise<void> {
-    this.redis = new Redis({
-      host: this.configService.get<string>('REDIS_HOST', 'localhost'),
-      port: this.configService.get<number>('REDIS_PORT', 6379),
-      password: this.configService.get<string>('REDIS_PASSWORD') || undefined,
-      db: this.configService.get<number>('REDIS_DB', 0),
-      connectTimeout: 5000,
-      maxRetriesPerRequest: 3,
-      lazyConnect: false,
-    });
-
-    this.redis.on('error', (err) => {
-      this.logger.error(`Redis connection error: ${err.message}`);
-    });
-
-    this.logger.log('MerchantRateLimitService: Redis client connected');
-  }
-
-  async onModuleDestroy(): Promise<void> {
-    if (this.redis) {
-      await this.redis.quit();
-      this.logger.log('MerchantRateLimitService: Redis client disconnected');
-    }
   }
 
   /**

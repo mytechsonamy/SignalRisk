@@ -11,12 +11,14 @@ import { MerchantController } from './merchant.controller';
 import { MerchantService } from './merchant.service';
 import { MerchantRepository } from './merchant.repository';
 import { ApiKeyAuditService } from './api-key-audit.service';
+import { DataExportService } from './data-export.service';
+import { DataExportController } from './data-export.controller';
 
 export const PG_POOL = 'PG_POOL';
 
 @Module({
   imports: [ConfigModule],
-  controllers: [MerchantsController, MerchantController],
+  controllers: [MerchantsController, MerchantController, DataExportController],
   providers: [
     // Legacy in-memory service
     MerchantsService,
@@ -42,7 +44,13 @@ export const PG_POOL = 'PG_POOL';
     },
     // Service
     MerchantService,
+    // Data Export (GDPR Art. 15)
+    {
+      provide: DataExportService,
+      useFactory: (pool: Pool) => new DataExportService(pool),
+      inject: [PG_POOL],
+    },
   ],
-  exports: [MerchantsService, MerchantService, ApiKeyAuditService],
+  exports: [MerchantsService, MerchantService, ApiKeyAuditService, DataExportService],
 })
 export class MerchantsModule {}

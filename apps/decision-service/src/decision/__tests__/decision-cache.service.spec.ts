@@ -1,45 +1,17 @@
 import { DecisionCacheService } from '../decision-cache.service';
-import { ConfigService } from '@nestjs/config';
 
-// Mock ioredis
 const mockGet = jest.fn();
 const mockSet = jest.fn();
 const mockDel = jest.fn();
-const mockQuit = jest.fn().mockResolvedValue('OK');
-
-jest.mock('ioredis', () => {
-  const mockConstructor = jest.fn().mockImplementation(() => ({
-    get: mockGet,
-    set: mockSet,
-    del: mockDel,
-    quit: mockQuit,
-  }));
-  return { Redis: mockConstructor, default: mockConstructor };
-});
+const mockRedis = { get: mockGet, set: mockSet, del: mockDel };
 
 describe('DecisionCacheService', () => {
   let service: DecisionCacheService;
-  let configService: ConfigService;
 
   beforeEach(async () => {
     jest.clearAllMocks();
 
-    configService = {
-      get: jest.fn().mockImplementation((key: string, defaultVal?: unknown) => {
-        const config: Record<string, unknown> = {
-          REDIS_HOST: 'localhost',
-          REDIS_PORT: 6379,
-        };
-        return config[key] ?? defaultVal;
-      }),
-    } as unknown as ConfigService;
-
-    service = new DecisionCacheService(configService);
-    service.onModuleInit();
-  });
-
-  afterEach(async () => {
-    await service.onModuleDestroy();
+    service = new DecisionCacheService(mockRedis as any);
   });
 
   // -------------------------------------------------------------------------
