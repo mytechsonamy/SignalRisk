@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-feature-flag-service-config
+data:
+  PORT: "3013"
+  NODE_ENV: "production"
+  {{- range $key, $val := .Values.featureFlagService.env }}
+  {{ $key }}: {{ $val | quote }}
+  {{- end }}

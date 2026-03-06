@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-device-intel-service-config
+data:
+  PORT: "3003"
+  NODE_ENV: "production"
+  {{- range $key, $val := .Values.deviceIntelService.env }}
+  {{ $key }}: {{ $val | quote }}
+  {{- end }}

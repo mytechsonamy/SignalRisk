@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-device-intel-service
+spec:
+  type: ClusterIP
+  selector:
+    app: device-intel-service
+  ports:
+    - port: 3003
+      targetPort: 3003
+      protocol: TCP

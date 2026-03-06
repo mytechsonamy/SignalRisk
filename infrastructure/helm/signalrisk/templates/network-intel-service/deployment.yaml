@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-network-intel-service
+  labels:
+    app: network-intel-service
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+spec:
+  replicas: {{ .Values.networkIntelService.replicaCount | default .Values.defaults.replicaCount }}
+  selector:
+    matchLabels:
+      app: network-intel-service
+  template:
+    metadata:
+      labels:
+        app: network-intel-service
+    spec:
+      containers:
+        - name: network-intel-service
+          image: "{{ .Values.global.imageRegistry }}/network-intel-service:{{ .Values.global.imageTag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: 3006
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3006
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3006
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.defaults.resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-network-intel-service-config
+            - secretRef:
+                name: {{ .Release.Name }}-network-intel-service-secrets
+                optional: true

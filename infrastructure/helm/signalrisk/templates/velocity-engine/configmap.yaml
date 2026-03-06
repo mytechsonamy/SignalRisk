@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-velocity-engine-config
+data:
+  PORT: "3004"
+  NODE_ENV: "production"
+  {{- range $key, $val := .Values.velocityEngine.env }}
+  {{ $key }}: {{ $val | quote }}
+  {{- end }}

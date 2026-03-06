@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-graph-intel-service
+  labels:
+    app: graph-intel-service
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+spec:
+  replicas: {{ .Values.graphIntelService.replicaCount | default .Values.defaults.replicaCount }}
+  selector:
+    matchLabels:
+      app: graph-intel-service
+  template:
+    metadata:
+      labels:
+        app: graph-intel-service
+    spec:
+      containers:
+        - name: graph-intel-service
+          image: "{{ .Values.global.imageRegistry }}/graph-intel-service:{{ .Values.global.imageTag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: 3012
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3012
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3012
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.defaults.resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-graph-intel-service-config
+            - secretRef:
+                name: {{ .Release.Name }}-graph-intel-service-secrets
+                optional: true

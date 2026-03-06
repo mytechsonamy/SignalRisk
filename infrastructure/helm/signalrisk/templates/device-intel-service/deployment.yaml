@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-device-intel-service
+  labels:
+    app: device-intel-service
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+spec:
+  replicas: {{ .Values.deviceIntelService.replicaCount | default .Values.defaults.replicaCount }}
+  selector:
+    matchLabels:
+      app: device-intel-service
+  template:
+    metadata:
+      labels:
+        app: device-intel-service
+    spec:
+      containers:
+        - name: device-intel-service
+          image: "{{ .Values.global.imageRegistry }}/device-intel-service:{{ .Values.global.imageTag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: 3003
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3003
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3003
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.defaults.resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-device-intel-service-config
+            - secretRef:
+                name: {{ .Release.Name }}-device-intel-service-secrets
+                optional: true

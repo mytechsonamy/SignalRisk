@@ -1,0 +1,8 @@
+global:
+  imageTag: "staging"
+
+defaults:
+  replicaCount: 1
+  autoscaling:
+    minReplicas: 1
+    maxReplicas: 3

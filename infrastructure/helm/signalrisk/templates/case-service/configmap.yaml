@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-case-service-config
+data:
+  PORT: "3010"
+  NODE_ENV: "production"
+  {{- range $key, $val := .Values.caseService.env }}
+  {{ $key }}: {{ $val | quote }}
+  {{- end }}

@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-rule-engine-service
+  labels:
+    app: rule-engine-service
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+spec:
+  replicas: {{ .Values.ruleEngineService.replicaCount | default .Values.defaults.replicaCount }}
+  selector:
+    matchLabels:
+      app: rule-engine-service
+  template:
+    metadata:
+      labels:
+        app: rule-engine-service
+    spec:
+      containers:
+        - name: rule-engine-service
+          image: "{{ .Values.global.imageRegistry }}/rule-engine-service:{{ .Values.global.imageTag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: 3008
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3008
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3008
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.defaults.resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-rule-engine-service-config
+            - secretRef:
+                name: {{ .Release.Name }}-rule-engine-service-secrets
+                optional: true

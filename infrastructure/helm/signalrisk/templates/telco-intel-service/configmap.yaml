@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-telco-intel-service-config
+data:
+  PORT: "3007"
+  NODE_ENV: "production"
+  {{- range $key, $val := .Values.telcoIntelService.env }}
+  {{ $key }}: {{ $val | quote }}
+  {{- end }}

@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-webhook-service
+  labels:
+    app: webhook-service
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+spec:
+  replicas: {{ .Values.webhookService.replicaCount | default .Values.defaults.replicaCount }}
+  selector:
+    matchLabels:
+      app: webhook-service
+  template:
+    metadata:
+      labels:
+        app: webhook-service
+    spec:
+      containers:
+        - name: webhook-service
+          image: "{{ .Values.global.imageRegistry }}/webhook-service:{{ .Values.global.imageTag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: 3011
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3011
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3011
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.defaults.resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-webhook-service-config
+            - secretRef:
+                name: {{ .Release.Name }}-webhook-service-secrets
+                optional: true

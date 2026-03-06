@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-network-intel-service-config
+data:
+  PORT: "3006"
+  NODE_ENV: "production"
+  {{- range $key, $val := .Values.networkIntelService.env }}
+  {{ $key }}: {{ $val | quote }}
+  {{- end }}

@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-event-collector
+spec:
+  type: ClusterIP
+  selector:
+    app: event-collector
+  ports:
+    - port: 3000
+      targetPort: 3000
+      protocol: TCP

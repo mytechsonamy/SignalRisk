@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-event-collector-config
+data:
+  PORT: "3000"
+  NODE_ENV: "production"
+  {{- range $key, $val := .Values.eventCollector.env }}
+  {{ $key }}: {{ $val | quote }}
+  {{- end }}

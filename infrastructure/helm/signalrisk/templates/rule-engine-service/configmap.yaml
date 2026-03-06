@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-rule-engine-service-config
+data:
+  PORT: "3008"
+  NODE_ENV: "production"
+  {{- range $key, $val := .Values.ruleEngineService.env }}
+  {{ $key }}: {{ $val | quote }}
+  {{- end }}

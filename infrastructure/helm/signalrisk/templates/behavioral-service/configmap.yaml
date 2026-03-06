@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-behavioral-service-config
+data:
+  PORT: "3005"
+  NODE_ENV: "production"
+  {{- range $key, $val := .Values.behavioralService.env }}
+  {{ $key }}: {{ $val | quote }}
+  {{- end }}

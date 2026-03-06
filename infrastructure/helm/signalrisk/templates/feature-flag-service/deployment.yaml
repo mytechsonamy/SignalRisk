@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-feature-flag-service
+  labels:
+    app: feature-flag-service
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+spec:
+  replicas: {{ .Values.featureFlagService.replicaCount | default .Values.defaults.replicaCount }}
+  selector:
+    matchLabels:
+      app: feature-flag-service
+  template:
+    metadata:
+      labels:
+        app: feature-flag-service
+    spec:
+      containers:
+        - name: feature-flag-service
+          image: "{{ .Values.global.imageRegistry }}/feature-flag-service:{{ .Values.global.imageTag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: 3013
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3013
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3013
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.defaults.resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-feature-flag-service-config
+            - secretRef:
+                name: {{ .Release.Name }}-feature-flag-service-secrets
+                optional: true

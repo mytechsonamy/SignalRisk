@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-webhook-service-config
+data:
+  PORT: "3011"
+  NODE_ENV: "production"
+  {{- range $key, $val := .Values.webhookService.env }}
+  {{ $key }}: {{ $val | quote }}
+  {{- end }}

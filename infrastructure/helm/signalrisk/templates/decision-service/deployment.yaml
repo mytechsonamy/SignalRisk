@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-decision-service
+  labels:
+    app: decision-service
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+spec:
+  replicas: {{ .Values.decisionService.replicaCount | default .Values.defaults.replicaCount }}
+  selector:
+    matchLabels:
+      app: decision-service
+  template:
+    metadata:
+      labels:
+        app: decision-service
+    spec:
+      containers:
+        - name: decision-service
+          image: "{{ .Values.global.imageRegistry }}/decision-service:{{ .Values.global.imageTag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: 3002
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3002
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3002
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.defaults.resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-decision-service-config
+            - secretRef:
+                name: {{ .Release.Name }}-decision-service-secrets
+                optional: true
