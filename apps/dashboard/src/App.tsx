@@ -15,6 +15,12 @@ import { useAdminStore } from './store/admin.store';
 
 const LiveFeedPage = lazy(() => import('./pages/LiveFeedPage'));
 const GraphIntelPage = lazy(() => import('./pages/GraphIntelPage'));
+const FraudTesterOverviewPage = lazy(() => import('./pages/FraudTesterOverviewPage'));
+const BattleArenaPage = lazy(() => import('./pages/BattleArenaPage'));
+const ScenarioLibraryPage = lazy(() => import('./pages/ScenarioLibraryPage'));
+const DetectionReportPage = lazy(() => import('./pages/DetectionReportPage'));
+const AgentConfigPage = lazy(() => import('./pages/AgentConfigPage'));
+const TargetManagementPage = lazy(() => import('./pages/TargetManagementPage'));
 
 function RulesPage() {
   const { fetchRules } = useAdminStore();
@@ -177,6 +183,56 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+          <Route path="fraud-tester">
+            <Route
+              index
+              element={
+                <Suspense fallback={<div className="p-6">Loading…</div>}>
+                  <FraudTesterOverviewPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="battle-arena"
+              element={
+                <Suspense fallback={<div className="p-6">Loading…</div>}>
+                  <BattleArenaPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="scenarios"
+              element={
+                <Suspense fallback={<div className="p-6">Loading…</div>}>
+                  <ScenarioLibraryPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="reports"
+              element={
+                <Suspense fallback={<div className="p-6">Loading…</div>}>
+                  <DetectionReportPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="agents"
+              element={
+                <Suspense fallback={<div className="p-6">Loading…</div>}>
+                  <AgentConfigPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="targets"
+              element={
+                <Suspense fallback={<div className="p-6">Loading…</div>}>
+                  <TargetManagementPage />
+                </Suspense>
+              }
+            />
+          </Route>
         </Route>
 
         <Route path="*" element={<NotFoundPage />} />
