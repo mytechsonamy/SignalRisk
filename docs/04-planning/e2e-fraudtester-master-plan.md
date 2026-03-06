@@ -1,0 +1,278 @@
+# E2E Altyapisi + FraudTester — Master Plan
+
+**Olusturulma:** 2026-03-07
+**SDLC Project ID:** ceff3f38-d2cd-4e46-8a02-9b5083382f2a
+**Sprint Araligi:** Sprint 17-20+
+
+---
+
+## Genel Bagllam
+
+Sprint 11 sonunda ~990 unit test ve brownfield gap analizi tamamlandi. Ancak 12 servis hic birlikte ayaga kaldirilmadi — tum E2E testler gercek servislere degil mock server'a karsi calisiyordu. Paralelde, roadmap klasorunde bir "FraudTester" urun vizyonu tanimlanmisti.
+
+**Cozulen problem:** SignalRisk'in gercek E2E guvencesi yok; FraudTester vizyon olarak var ama kod yok.
+**Hedef:** (A) Gercek E2E altyapisi — 18 servis Docker Compose'da ayaga kalksın, 5+ kritik senaryo test.fixme'den ciksın. (B) FraudTester scaffold → calisan agent → adversarial/chaos.
+
+---
+
+## Iki Paralel Stream
+
+```
+STREAM A: SignalRisk E2E Altyapisi
+  Sprint 17: docker-compose.full.yml + E2E skeleton + Playwright real config
+  Sprint 18: E2E tam implementasyon + CI/CD + performance gate
+  Sprint 20: E2E test.fixme → gercek testler (Docker gerektirir)
+
+STREAM B: FraudTester
+  Sprint 17: Adapter interface + scaffold + UI skeleton
+  Sprint 18: FraudSimulationAgent calisiyor + backend API + Detection Report UI
+  Sprint 19: AdversarialAgent + ChaosAgent + MockAdapter + standalone karar
+  Sprint 20: WebSocket gercek battle + 2. adapter + integration tests
+```
+
+---
+
+## Tamamlananlar
+
+### [DONE] Sprint 17 — E2E Foundation + FraudTester Scaffold
+**Commit:** c4de485
+**SDLC Sprinti:** 17 (COMPLETED)
+
+| Dosya | Durum |
+|-------|-------|
+| docker-compose.full.yml | DONE — 18 servis (4 infra + 14 app), KRaft Kafka, healthcheck chain |
+| tests/e2e/playwright.config.real.ts | DONE — Gercek servislere karsi Playwright config, SKIP_DOCKER guard |
+| tests/e2e/scenarios/happy-path.spec.ts | DONE — test.fixme skeleton |
+| tests/e2e/scenarios/fraud-blast.spec.ts | DONE — test.fixme skeleton |
+| tests/e2e/scenarios/jwt-revoke.spec.ts | DONE — test.fixme skeleton |
+| tests/e2e/scenarios/chaos-redis-down.spec.ts | DONE — test.fixme skeleton |
+| tests/e2e/scenarios/multi-tenant-isolation.spec.ts | DONE — test.fixme skeleton |
+| apps/fraud-tester/src/adapters/base.adapter.ts | DONE — IFraudSystemAdapter interface |
+| apps/fraud-tester/src/adapters/signalrisk.adapter.ts | DONE — SignalRisk adapter (fetch + polling) |
+| apps/fraud-tester/src/scenarios/types.ts | DONE — FraudScenario, ScenarioResult, BattleReport types |
+| apps/fraud-tester/src/scenarios/catalog/device-farm.scenario.ts | DONE |
+| apps/fraud-tester/src/scenarios/catalog/bot-checkout.scenario.ts | DONE |
+| apps/fraud-tester/src/scenarios/catalog/velocity-evasion.scenario.ts | DONE |
+| apps/fraud-tester/src/scenarios/catalog/emulator-spoof.scenario.ts | DONE |
+| apps/fraud-tester/src/scenarios/catalog/sim-swap.scenario.ts | DONE |
+| apps/fraud-tester/src/agents/fraud-simulation.agent.ts | DONE (Sprint 17 stub) |
+| apps/fraud-tester/src/agents/adversarial.agent.ts | DONE (Sprint 17 stub) |
+| apps/fraud-tester/src/agents/chaos.agent.ts | DONE (Sprint 17 stub) |
+| apps/fraud-tester/src/orchestrator/orchestrator.ts | DONE — ScenarioRunner + EventEmitter + stop() |
+| apps/fraud-tester/src/reporter/detection-reporter.ts | DONE — TP/FP/FN/TN + FPR/TPR |
+| apps/fraud-tester/package.json | DONE |
+| apps/fraud-tester/README.md | DONE (Sprint 17 ilk versiyon) |
+| apps/dashboard/src/App.tsx | DONE — /fraud-tester/* routes |
+| apps/dashboard/src/components/layout/Sidebar.tsx | DONE — FRAUD TESTER nav section |
+| apps/dashboard/src/pages/FraudTesterOverviewPage.tsx | DONE |
+| apps/dashboard/src/pages/BattleArenaPage.tsx | DONE (Sprint 17 skeleton) |
+| apps/dashboard/src/pages/ScenarioLibraryPage.tsx | DONE (Sprint 17 — 5 senaryo) |
+| apps/dashboard/src/pages/DetectionReportPage.tsx | DONE (Sprint 17 skeleton) |
+| apps/dashboard/src/pages/AgentConfigPage.tsx | DONE (Sprint 17 skeleton) |
+| apps/dashboard/src/pages/TargetManagementPage.tsx | DONE (Sprint 17 skeleton) |
+| apps/dashboard/src/store/fraud-tester.store.ts | DONE — Zustand store |
+| apps/dashboard/src/types/fraud-tester.types.ts | DONE |
+| docs/agents/e2e-engineer.md | DONE |
+| docs/agents/fraudtester-backend.md | DONE |
+| docs/agents/fraudtester-ui.md | DONE |
+| .claude/skills/e2e-real-services.md | DONE |
+| .claude/skills/fraud-simulation.md | DONE |
+| .claude/skills/fraudtester-adapter.md | DONE |
+| .claude/skills/fraudtester-ui.md | DONE |
+| .claude/skills/docker-compose-e2e.md | DONE |
+
+---
+
+### [DONE] Sprint 18 — E2E Tam Implementasyon + FraudTester Ilk Agent
+**Commit:** 8835358
+**SDLC Sprinti:** 18 (COMPLETED)
+
+| Dosya | Durum |
+|-------|-------|
+| tests/e2e/scenarios/helpers.ts | DONE — AUTH_URL, EVENT_URL sabitler, getMerchantToken(), pollDecision() |
+| tests/e2e/scenarios/happy-path.spec.ts | DONE — Tam implementasyon (5 test, test.fixme) |
+| tests/e2e/scenarios/fraud-blast.spec.ts | DONE — Tam implementasyon (4 test, test.fixme) |
+| tests/e2e/scenarios/jwt-revoke.spec.ts | DONE — Tam implementasyon (6 test, test.fixme) |
+| tests/e2e/scenarios/chaos-redis-down.spec.ts | DONE — Tam implementasyon (5 test, test.fixme) |
+| tests/e2e/scenarios/multi-tenant-isolation.spec.ts | DONE — Tam implementasyon (5 test, test.fixme) |
+| tests/e2e/scenarios/performance-gate.spec.ts | DONE — p99 < 200ms, 100 concurrent (3 test, test.fixme) |
+| .github/workflows/e2e.yml | DONE — Docker layer cache, --workers 2, artifacts upload |
+| apps/fraud-tester/src/agents/fraud-simulation.agent.ts | DONE — Tam implementasyon (EventEmitter, 5 default senaryo) |
+| apps/fraud-tester/src/api/server.ts | DONE — Express + Socket.io, port 3020, REST + WebSocket |
+| apps/fraud-tester/src/__tests__/fraud-simulation.spec.ts | DONE — 8 test |
+| apps/fraud-tester/src/__tests__/signalrisk-adapter.spec.ts | DONE |
+| apps/fraud-tester/src/__tests__/orchestrator.spec.ts | DONE |
+| apps/fraud-tester/src/__tests__/detection-reporter.spec.ts | DONE |
+| apps/fraud-tester/src/__tests__/catalog.spec.ts | DONE |
+| apps/dashboard/src/pages/BattleArenaPage.tsx | DONE — Tam implementasyon (RadialBarChart, Socket.io + mock fallback) |
+| apps/dashboard/src/pages/DetectionReportPage.tsx | DONE — Tam implementasyon (battle list + KPI + tablo + Recharts) |
+| apps/dashboard/src/pages/AgentConfigPage.tsx | DONE — 3 agent toggle+slider |
+| apps/dashboard/src/pages/TargetManagementPage.tsx | DONE — SignalRisk card + Test Connection |
+| apps/dashboard/src/api/fraud-tester.api.ts | DONE — getBattles, startBattle, stopBattle, healthCheck |
+| apps/dashboard/vite.config.ts | DONE — /fraud-tester proxy to localhost:3020 |
+
+---
+
+### [DONE] Sprint 19 — Adversarial + Chaos Agents + Standalone Karar
+**Commit:** 899f744
+**SDLC Sprinti:** 19 (COMPLETED)
+
+| Dosya | Durum |
+|-------|-------|
+| apps/fraud-tester/src/scenarios/catalog/adversarial/emulator-bypass.scenario.ts | DONE — 30 event, Apple M2 metadata |
+| apps/fraud-tester/src/scenarios/catalog/adversarial/slow-fraud.scenario.ts | DONE — 24 event, 12 saate yayilmis |
+| apps/fraud-tester/src/scenarios/catalog/adversarial/bot-evasion.scenario.ts | DONE — 20 event, mouse_movement_entropy 0.75-0.95 |
+| apps/fraud-tester/src/agents/adversarial.agent.ts | DONE — pattern parametresi, adversarialSuccess ters metrik |
+| apps/fraud-tester/src/adapters/chaos-wrapper.ts | DONE — timeout/partialFailure/stress, Promise.race |
+| apps/fraud-tester/src/agents/chaos.agent.ts | DONE — mode parametresi, chaosSuccess %50 threshold |
+| apps/fraud-tester/src/adapters/mock.adapter.ts | DONE — 6 mod (always-block/allow/review, random, threshold, custom) |
+| apps/fraud-tester/src/__tests__/adversarial.spec.ts | DONE — 6 test |
+| apps/fraud-tester/src/__tests__/chaos.spec.ts | DONE — 6 test |
+| apps/fraud-tester/src/__tests__/mock-adapter.spec.ts | DONE — 6 test |
+| apps/fraud-tester/src/index.ts | DONE — Complete exports |
+| apps/fraud-tester/README.md | DONE — Final versiyon |
+| apps/dashboard/src/pages/AgentConfigPage.tsx | DONE — Adversarial attack pattern + chaos mode/failureRate/timeoutMs |
+| apps/dashboard/src/pages/BattleArenaPage.tsx | DONE — 5 agent card |
+| apps/dashboard/src/pages/ScenarioLibraryPage.tsx | DONE — 11 senaryo, adversarial/chaos badge |
+| apps/dashboard/src/store/fraud-tester.store.ts | DONE — adversarial/chaos agents default enabled |
+| apps/dashboard/src/types/fraud-tester.types.ts | DONE — AgentSettings genisletildi |
+| docs/04-planning/fraudtester-standalone-decision.md | DONE — Gate analizi, entegre kal karari |
+| .claude/skills/adversarial-testing.md | DONE |
+
+---
+
+## Kalan Isler
+
+### Sprint 20 — E2E Gercek Testler + FraudTester WebSocket
+
+#### TAKIM A — E2E test.fixme Kaldir
+**On kosul:** docker-compose.full.yml up --wait basariyla tamamlanmali
+
+| Task | Aciklama | Hedef Dosya |
+|------|----------|-------------|
+| T21 | docker compose up --wait dogrulamasi — tum health check'ler gecmeli | docker-compose.full.yml |
+| T22 | test.fixme kaldir — happy-path + fraud-blast (5+4 test) | scenarios/happy-path.spec.ts, fraud-blast.spec.ts |
+| T23 | test.fixme kaldir — jwt-revoke + chaos-redis-down (6+5 test) | scenarios/jwt-revoke.spec.ts, chaos-redis-down.spec.ts |
+| T24 | test.fixme kaldir — multi-tenant-isolation + performance-gate (5+3 test) | scenarios/multi-tenant-isolation.spec.ts, performance-gate.spec.ts |
+
+**Done kriteri:** 28 E2E test gercek servislere karsi 0 flakiness
+
+#### TAKIM B — FraudTester WebSocket + 2. Adapter
+| Task | Aciklama | Hedef Dosya |
+|------|----------|-------------|
+| T25 | FraudTester server.ts — ScenarioRunner entegrasyonu, gercek WebSocket battle sonuclari | apps/fraud-tester/src/api/server.ts |
+| T26 | Custom adapter UI — URL + API key formu, baglanti testi | apps/dashboard/src/pages/TargetManagementPage.tsx |
+| T27 | Integration test suite — Docker Compose servislere karsi | apps/fraud-tester/src/__tests__/integration.spec.ts |
+
+**Done kriteri:** Battle Arena'da gercek WebSocket sonuclari; 2. adapter standalone gate tetiklenebilir
+
+---
+
+## Standalone Karar Gate Kriterleri
+
+Kaynak: docs/04-planning/fraudtester-standalone-decision.md
+
+- [ ] 2+ farkli adapter implementasyonu (simdiki: 1 — SignalRisk)
+- [ ] Detection rate karsilastirmali rapor cikiyor
+- [ ] Dis kullanici/musteri ilgisi mevcut
+
+Tum kriterler karsilanirsa: apps/fraud-tester/ → ayri repo, adapter npm paketi olarak yayinlanir
+
+---
+
+## Mimari Kararlar
+
+| Karar | Secim | Gerekcce |
+|-------|-------|---------|
+| FraudTester konumu | Monorepo entegre | Kod paylasimi kolay, standalone gate karsillanmadi |
+| E2E test yaklasimi | test.fixme (Docker gerektiren) | CI'da mock yoktu, gercek servisler hazir olana kadar atla |
+| Socket.io fallback | Mock setInterval | FraudTester backend calismadan UI gelistirilebilir |
+| Adversarial metrik | Ters (allowedRate > 0.5 = basari) | Saldirganin perspektifinden olcum |
+| Kafka modu | KRaft (Zookeeper'siz) | Kafka 3.x+ native, daha az bagimlilik |
+| IFraudSystemAdapter | FROZEN interface | Geri uyumluluk; degistirilmeden once E7 impact assessment |
+
+---
+
+## Test Sayilari (Sprint 19 sonu)
+
+| Servis | Test Sayisi |
+|--------|-------------|
+| auth-service | 163 |
+| event-collector | 55 |
+| network-intel-service | 66 |
+| dashboard | 188 |
+| decision-service | 65 |
+| case-service | 45 |
+| rule-engine-service | 116 |
+| webhook-service | 39 |
+| web-sdk | 51 |
+| signal-contracts | 33 |
+| behavioral-service | 68 |
+| telco-intel | 32 |
+| graph-intel-service | 34 |
+| integration tests | 22 |
+| load test mock | 19 |
+| fraud-tester | 38 (Sprint 19 sonu) |
+| E2E (test.fixme) | 28 (Docker bekliyor) |
+| **TOPLAM** | **~1062+** |
+
+---
+
+## Onemli Dosya Konumlari
+
+```
+docker-compose.full.yml                  18 servis full stack
+tests/e2e/playwright.config.real.ts      Gercek servis Playwright config
+tests/e2e/scenarios/                     6 senaryo (tumu test.fixme)
+tests/e2e/scenarios/helpers.ts           Shared test utilities
+.github/workflows/e2e.yml                CI/CD pipeline
+
+apps/fraud-tester/
+  src/adapters/
+    base.adapter.ts                      IFraudSystemAdapter (FROZEN)
+    signalrisk.adapter.ts                SignalRisk impl
+    mock.adapter.ts                      6 modlu test adapteri
+    chaos-wrapper.ts                     ChaosAdapterWrapper decorator
+  src/agents/
+    fraud-simulation.agent.ts            5 senaryo, EventEmitter
+    adversarial.agent.ts                 3 adversarial senaryo, ters metrik
+    chaos.agent.ts                       ChaosWrapper + mode parametresi
+  src/scenarios/catalog/
+    device-farm, bot-checkout, velocity-evasion, emulator-spoof, sim-swap
+    adversarial/: emulator-bypass, slow-fraud, bot-evasion
+  src/api/server.ts                      Express + Socket.io, port 3020
+  src/orchestrator/orchestrator.ts       ScenarioRunner, stop() destegi
+  src/reporter/detection-reporter.ts     TP/FP/FN/TN, FPR/TPR
+
+apps/dashboard/src/pages/
+  BattleArenaPage.tsx                    3 panel + RadialBarChart + Socket.io
+  ScenarioLibraryPage.tsx                11 senaryo, badge sistemi
+  DetectionReportPage.tsx                Battle history + Recharts
+  AgentConfigPage.tsx                    5 agent + adversarial/chaos params
+  TargetManagementPage.tsx               Hedef yonetimi (custom adapter TODO)
+
+docs/04-planning/
+  fraudtester-standalone-decision.md     Standalone karar gate analizi
+  e2e-fraudtester-master-plan.md         Bu dosya
+```
+
+---
+
+## Servis Port Haritasi
+
+| Servis | Port |
+|--------|------|
+| auth-service | 3001 |
+| event-collector | 3002 |
+| device-intel-service | 3003 |
+| velocity-service | 3004 |
+| behavioral-service | 3005 |
+| network-intel-service | 3006 |
+| telco-intel-service | 3007 |
+| rule-engine-service | 3008 |
+| decision-service | 3009 |
+| case-service | 3010 |
+| webhook-service | 3011 |
+| graph-intel-service | 3012 |
+| mock-server (dev) | 3000 |
+| fraud-tester (backend) | 3020 |
