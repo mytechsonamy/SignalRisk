@@ -5,6 +5,21 @@
 - Primary Region: us-east-1 | Standby Region: eu-west-1
 - Last tested: 2026-03-06 | Next test: 2026-06-06
 
+## Load Test Baselines
+
+These baselines define the expected performance envelope under full load (5K req/sec).
+A sustained deviation from these numbers indicates capacity regression or infrastructure degradation.
+
+| Metric | Target | Alert threshold |
+|--------|--------|----------------|
+| p99 latency at 5K req/sec | < 100ms | > 120ms |
+| p95 latency at 5K req/sec | < 50ms | > 65ms |
+| Error rate at 5K req/sec | < 0.5% | > 1% |
+| Decision throughput (sustained) | > 4500 req/sec | < 4000 req/sec |
+
+Run the full load test before any major infrastructure change and after each quarterly DR test.
+See [load-testing.md](./load-testing.md) for the full runbook.
+
 ## Architecture
 
 ### Stateful Components (require data sync)
