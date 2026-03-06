@@ -10,6 +10,44 @@ export interface RateLimitResult {
   limit: number;
 }
 
+export interface TokenBucketResult {
+  allowed: boolean;
+  remaining: number;
+  resetAt: Date; // when the bucket refills to full
+  retryAfterSeconds: number;
+}
+
+// Token bucket Lua script: atomic check-and-consume
+const TOKEN_BUCKET_LUA = `
+local key = KEYS[1]
+local capacity = tonumber(ARGV[1])
+local refillRate = tonumber(ARGV[2])  -- tokens per second
+local now = tonumber(ARGV[3])         -- current time in ms
+local requested = tonumber(ARGV[4])   -- tokens to consume (usually 1)
+
+local bucket = redis.call('HMGET', key, 'tokens', 'lastRefill')
+local tokens = tonumber(bucket[1]) or capacity
+local lastRefill = tonumber(bucket[2]) or now
+
+-- Calculate tokens to add based on elapsed time
+local elapsed = math.max(0, now - lastRefill)
+local newTokens = math.min(capacity, tokens + (elapsed / 1000) * refillRate)
+
+if newTokens >= requested then
+  -- Consume token
+  local remaining = newTokens - requested
+  redis.call('HMSET', key, 'tokens', remaining, 'lastRefill', now)
+  redis.call('EXPIRE', key, 120)
+  return {1, math.floor(remaining)}
+else
+  -- Reject
+  redis.call('HMSET', key, 'tokens', newTokens, 'lastRefill', now)
+  redis.call('EXPIRE', key, 120)
+  local waitSeconds = math.ceil((requested - newTokens) / refillRate)
+  return {0, math.floor(newTokens), waitSeconds}
+end
+`;
+
 /**
  * MerchantRateLimitService implements a Redis-based token bucket per merchant.
  *
@@ -32,6 +70,9 @@ export class MerchantRateLimitService {
   private readonly defaultLimit: number;
   private readonly burstMultiplier: number;
 
+  readonly CAPACITY = 1000; // tokens per minute
+  readonly REFILL_RATE = 1000 / 60; // tokens per second (~16.67)
+
   constructor(
     private readonly configService: ConfigService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
@@ -44,6 +85,45 @@ export class MerchantRateLimitService {
       'rateLimit.burstMultiplier',
       2,
     );
+  }
+
+  /**
+   * Token bucket consume for API key-based rate limiting.
+   * Uses a Lua script for atomic check-and-consume.
+   *
+   * @param merchantId - The merchant identifier
+   * @param apiKey     - The API key (first 8 chars used in Redis key)
+   */
+  async consume(merchantId: string, apiKey: string): Promise<TokenBucketResult> {
+    const key = `ratelimit:${merchantId}:${apiKey.substring(0, 8)}`;
+    const now = Date.now();
+
+    try {
+      const result = await (this.redis as any).eval(
+        TOKEN_BUCKET_LUA,
+        1,
+        key,
+        this.CAPACITY,
+        this.REFILL_RATE,
+        now,
+        1,
+      ) as [number, number, number?];
+
+      const allowed = result[0] === 1;
+      const remaining = result[1];
+      const retryAfterSeconds = result[2] ?? 0;
+      const resetAt = new Date(now + retryAfterSeconds * 1000);
+
+      return { allowed, remaining, resetAt, retryAfterSeconds };
+    } catch {
+      // Fail open on Redis error
+      return {
+        allowed: true,
+        remaining: this.CAPACITY,
+        resetAt: new Date(now + 60000),
+        retryAfterSeconds: 0,
+      };
+    }
   }
 
   /**
