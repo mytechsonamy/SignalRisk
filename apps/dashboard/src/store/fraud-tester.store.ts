@@ -6,6 +6,8 @@ import type {
   BattleConfig,
   BattleHistoryEntry,
   AttackDecision,
+  BattleReport,
+  AgentConfig,
 } from '../types/fraud-tester.types';
 
 interface FraudTesterStore {
@@ -14,10 +16,14 @@ interface FraudTesterStore {
   liveFeed: AttackResult[];
   battleHistory: BattleHistoryEntry[];
   config: BattleConfig;
+  activeBattleId: string | null;
+  agentConfig: AgentConfig;
   startBattle: () => void;
   stopBattle: () => void;
   updateConfig: (partial: Partial<BattleConfig>) => void;
+  updateAgentConfig: (partial: Partial<AgentConfig>) => void;
   _addResult: (result: AttackResult) => void;
+  _completeBattle: (report: BattleReport) => void;
 }
 
 const DEMO_SCENARIOS = [
@@ -70,49 +76,161 @@ const MOCK_HISTORY: BattleHistoryEntry[] = [
 
 let _intervalId: ReturnType<typeof setInterval> | null = null;
 
+// Socket.io client — loaded lazily so SSR / build doesn't break when server is absent
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _socket: any = null;
+
+const FRAUD_TESTER_URL =
+  typeof window !== 'undefined'
+    ? (import.meta.env?.VITE_FRAUD_TESTER_URL ?? 'http://localhost:3020')
+    : 'http://localhost:3020';
+
+function stopMockInterval() {
+  if (_intervalId) {
+    clearInterval(_intervalId);
+    _intervalId = null;
+  }
+}
+
+function disconnectSocket() {
+  if (_socket) {
+    _socket.disconnect();
+    _socket = null;
+  }
+}
+
 export const useFraudTesterStore = create<FraudTesterStore>((set, get) => ({
   battleStatus: 'idle',
   stats: { detectionRate: 0, tpr: 0, fpr: 0, avgLatencyMs: 0, totalAttacks: 0, blocked: 0, detected: 0, missed: 0 },
   liveFeed: [],
   battleHistory: MOCK_HISTORY,
+  activeBattleId: null,
   config: {
     targetName: 'SignalRisk',
     duration: '5min',
     intensity: 'medium',
     enabledScenarios: [...DEMO_SCENARIOS],
   },
+  agentConfig: {
+    fraudSim: { enabled: true, intensity: 5, schedule: 'manual' },
+    adversarial: { enabled: false, intensity: 3, schedule: 'manual' },
+    chaos: { enabled: false, intensity: 1, schedule: 'manual' },
+  },
 
   startBattle: () => {
-    set({ battleStatus: 'running', liveFeed: [], stats: { detectionRate: 0, tpr: 0, fpr: 0, avgLatencyMs: 0, totalAttacks: 0, blocked: 0, detected: 0, missed: 0 } });
+    set({
+      battleStatus: 'running',
+      liveFeed: [],
+      activeBattleId: null,
+      stats: { detectionRate: 0, tpr: 0, fpr: 0, avgLatencyMs: 0, totalAttacks: 0, blocked: 0, detected: 0, missed: 0 },
+    });
 
-    _intervalId = setInterval(() => {
-      const { battleStatus, config } = get();
-      if (battleStatus !== 'running') {
-        if (_intervalId) clearInterval(_intervalId);
-        return;
-      }
+    const { config } = get();
 
-      const enabledScenarios = config.enabledScenarios.length > 0 ? config.enabledScenarios : DEMO_SCENARIOS;
-      const scenarioName = enabledScenarios[Math.floor(Math.random() * enabledScenarios.length)];
-      const decision = pickDecision();
-      const baseLatency = config.intensity === 'low' ? 80 : config.intensity === 'medium' ? 140 : 200;
-      const result: AttackResult = {
-        id: `atk-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        scenarioName,
-        decision,
-        riskScore: Math.round((0.5 + Math.random() * 0.5) * 100) / 100,
-        latencyMs: baseLatency + Math.round(Math.random() * 60),
-        timestamp: new Date().toISOString(),
-      };
+    function startMockBattle() {
+      stopMockInterval();
+      _intervalId = setInterval(() => {
+        const { battleStatus, config: cfg } = get();
+        if (battleStatus !== 'running') {
+          stopMockInterval();
+          return;
+        }
 
-      get()._addResult(result);
-    }, 600);
+        const enabledScenarios = cfg.enabledScenarios.length > 0 ? cfg.enabledScenarios : DEMO_SCENARIOS;
+        const scenarioName = enabledScenarios[Math.floor(Math.random() * enabledScenarios.length)];
+        const decision = pickDecision();
+        const baseLatency = cfg.intensity === 'low' ? 80 : cfg.intensity === 'medium' ? 140 : 200;
+        const result: AttackResult = {
+          id: `atk-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          scenarioName,
+          decision,
+          riskScore: Math.round((0.5 + Math.random() * 0.5) * 100) / 100,
+          latencyMs: baseLatency + Math.round(Math.random() * 60),
+          timestamp: new Date().toISOString(),
+        };
+
+        get()._addResult(result);
+      }, 600);
+    }
+
+    // Attempt Socket.io connection to fraud-tester server
+    // socket.io-client is a real dependency — dynamic import used for graceful fallback
+    import('socket.io-client')
+      .then(({ io }) => {
+        let socketConnected = false;
+        const socket = io(FRAUD_TESTER_URL, { timeout: 3000, reconnection: false });
+        _socket = socket;
+
+        const connectTimeout = setTimeout(() => {
+          if (!socketConnected) {
+            socket.disconnect();
+            _socket = null;
+            startMockBattle();
+          }
+        }, 3000);
+
+        socket.on('connect', () => {
+          socketConnected = true;
+          clearTimeout(connectTimeout);
+
+          // Start a battle via API then join room
+          fetch(`${FRAUD_TESTER_URL}/v1/fraud-tester/battles`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config),
+          })
+            .then((r) => r.json() as Promise<{ battleId: string }>)
+            .then(({ battleId }) => {
+              set({ activeBattleId: battleId });
+              socket.emit('join:battle', battleId);
+            })
+            .catch(() => {
+              // Fraud-tester API unavailable — fall back to mock
+              socket.disconnect();
+              _socket = null;
+              startMockBattle();
+            });
+        });
+
+        socket.on('battle:result', (result: AttackResult) => {
+          get()._addResult(result);
+        });
+
+        socket.on('battle:complete', (report: BattleReport) => {
+          get()._completeBattle(report);
+        });
+
+        socket.on('connect_error', () => {
+          if (!socketConnected) {
+            clearTimeout(connectTimeout);
+            socket.disconnect();
+            _socket = null;
+            startMockBattle();
+          }
+        });
+      })
+      .catch(() => {
+        // socket.io-client not available — use mock
+        startMockBattle();
+      });
   },
 
   stopBattle: () => {
-    if (_intervalId) {
-      clearInterval(_intervalId);
-      _intervalId = null;
+    stopMockInterval();
+
+    const { activeBattleId } = get();
+
+    if (_socket) {
+      if (activeBattleId) {
+        fetch(`${FRAUD_TESTER_URL}/v1/fraud-tester/battles/${activeBattleId}/stop`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
+        }).catch(() => { /* ignore */ });
+      }
+      _socket.off('battle:result');
+      _socket.off('battle:complete');
+      disconnectSocket();
     }
 
     const { stats, battleHistory } = get();
@@ -124,6 +242,7 @@ export const useFraudTesterStore = create<FraudTesterStore>((set, get) => ({
 
     set({
       battleStatus: 'completed',
+      activeBattleId: null,
       battleHistory: [historyEntry, ...battleHistory].slice(0, 10),
     });
   },
@@ -132,11 +251,41 @@ export const useFraudTesterStore = create<FraudTesterStore>((set, get) => ({
     set((state) => ({ config: { ...state.config, ...partial } }));
   },
 
+  updateAgentConfig: (partial) => {
+    set((state) => ({ agentConfig: { ...state.agentConfig, ...partial } }));
+  },
+
   _addResult: (result) => {
     set((state) => {
       const newFeed = [result, ...state.liveFeed].slice(0, 50);
       const newStats = calcStats(newFeed);
       return { liveFeed: newFeed, stats: newStats };
     });
+  },
+
+  _completeBattle: (report) => {
+    stopMockInterval();
+    disconnectSocket();
+
+    const historyEntry: BattleHistoryEntry = {
+      id: report.id,
+      timestamp: typeof report.timestamp === 'string' ? report.timestamp : new Date(report.timestamp).toISOString(),
+      stats: {
+        detectionRate: report.overallTpr,
+        tpr: report.overallTpr,
+        fpr: report.overallFpr,
+        avgLatencyMs: report.avgLatencyMs,
+        totalAttacks: report.scenarios.reduce((acc, s) => acc + s.totalEvents, 0),
+        blocked: report.scenarios.reduce((acc, s) => acc + s.tp, 0),
+        detected: report.scenarios.reduce((acc, s) => acc + s.tn, 0),
+        missed: report.scenarios.reduce((acc, s) => acc + s.fn, 0),
+      },
+    };
+
+    set((state) => ({
+      battleStatus: 'completed',
+      activeBattleId: null,
+      battleHistory: [historyEntry, ...state.battleHistory].slice(0, 10),
+    }));
   },
 }));

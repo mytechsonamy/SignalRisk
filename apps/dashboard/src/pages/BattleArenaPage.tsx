@@ -2,6 +2,9 @@ import { RadialBarChart, RadialBar, LineChart, Line, XAxis, YAxis, Tooltip, Resp
 import { useFraudTesterStore } from '../store/fraud-tester.store';
 import type { AttackResult, AttackDecision } from '../types/fraud-tester.types';
 
+// Socket.io connection is managed in the store.
+// BattleArenaPage reads from the store reactively.
+
 const DEMO_SCENARIOS = ['Device Farm', 'Emulator Spoof', 'Bot Checkout', 'Velocity Evasion', 'SIM Swap'];
 
 function decisionBadge(decision: AttackDecision) {

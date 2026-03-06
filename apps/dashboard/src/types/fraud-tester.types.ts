@@ -33,3 +33,43 @@ export interface BattleHistoryEntry {
   timestamp: string;
   stats: BattleStats;
 }
+
+/** ScenarioResult mirrors apps/fraud-tester/src/scenarios/types.ts */
+export interface ScenarioResult {
+  scenarioId: string;
+  scenarioName: string;
+  totalEvents: number;
+  detectedCount: number;
+  /** Fraction of events correctly identified (TP / (TP + FN)) */
+  detectionRate: number;
+  avgLatencyMs: number;
+  tp: number;
+  tn: number;
+  fp: number;
+  fn: number;
+  /** True when detectionRate >= scenario minDetectionRate */
+  passed: boolean;
+}
+
+/** BattleReport mirrors apps/fraud-tester/src/scenarios/types.ts */
+export interface BattleReport {
+  id: string;
+  timestamp: string; // ISO string (backend uses Date, serialized to string)
+  targetAdapter: string;
+  scenarios: ScenarioResult[];
+  overallTpr: number;
+  overallFpr: number;
+  avgLatencyMs: number;
+}
+
+export interface AgentConfig {
+  fraudSim: AgentSettings;
+  adversarial: AgentSettings;
+  chaos: AgentSettings;
+}
+
+export interface AgentSettings {
+  enabled: boolean;
+  intensity: number; // 1-10
+  schedule: 'manual' | 'hourly' | 'daily' | 'weekly';
+}

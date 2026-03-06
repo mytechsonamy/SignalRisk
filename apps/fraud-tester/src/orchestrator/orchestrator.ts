@@ -14,6 +14,15 @@ import type { AttackResult, BattleReport, FraudScenario, ScenarioResult } from '
 
 export class ScenarioRunner extends EventEmitter {
   private readonly reporter = new DetectionReporter();
+  private _stopped = false;
+
+  /**
+   * Request a graceful stop. The current event will finish, then no further
+   * events or scenarios will be processed.
+   */
+  stop(): void {
+    this._stopped = true;
+  }
 
   /**
    * Run all scenarios against the provided adapter.
@@ -27,6 +36,8 @@ export class ScenarioRunner extends EventEmitter {
     const scenarioResults: ScenarioResult[] = [];
 
     for (const scenario of scenarios) {
+      if (this._stopped) break;
+
       try {
         const scenarioResult = await this.runScenario(scenario, adapter);
         scenarioResults.push(scenarioResult);
@@ -63,6 +74,8 @@ export class ScenarioRunner extends EventEmitter {
     const attackResults: AttackResult[] = [];
 
     for await (const event of scenario.generate()) {
+      if (this._stopped) break;
+
       try {
         const decision = await adapter.submitEvent(event);
         const detected =
