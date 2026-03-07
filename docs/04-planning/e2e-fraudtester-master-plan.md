@@ -166,7 +166,9 @@ STREAM B: FraudTester
 
 ---
 
-## [IN PROGRESS] Sprint 21 — Docker Build + 2. Adapter
+## [DONE] Sprint 21 — Docker Build + 2. Adapter + CI/CD
+**Commit:** 874f286
+**SDLC Sprinti:** 21 (COMPLETED)
 
 | Dosya | Durum |
 |-------|-------|
@@ -181,17 +183,51 @@ STREAM B: FraudTester
 | apps/fraud-tester/jest.config.js | DONE — coverage threshold %70, lcov reporter |
 | tests/e2e/README-docker.md | DONE — CI/CD durumu eklendi |
 | apps/rule-engine-service/package.json | DONE — axios eksik dependency eklendi |
-| Docker compose build | PARTIAL — 13/14 servis build ediliyor, Docker Desktop crash sonrasi dogrulama bekliyor |
+| Docker compose build | DONE — 14/14 servis build, 18 container healthy |
 
 ---
 
-## Kalan Isler — Sprint 22+
+## [DONE] Sprint 22 — E2E Altyapi Fix + Brownfield Gap Analysis
+
+**Commitler:** c116941, 12da405
+**SDLC Sprinti:** 22 (COMPLETED)
+
+### E2E Altyapi Fixleri
+| Dosya | Durum |
+|-------|-------|
+| infrastructure/docker/initdb.d/03_indexes.sql | DONE — IMMUTABLE function fix (partial index) |
+| database/migrations/003_indexes.sql | DONE — Ayni fix |
+| apps/auth-service/src/merchants/merchants.service.ts | DONE — Dev merchant seed (OnModuleInit) |
+| apps/decision-service/src/decision/signal-fetchers.ts | DONE — Velocity snake_case→camelCase mapping |
+| tests/e2e/scenarios/helpers.ts | DONE — API key auth, UUID eventId, ingestEvent helper |
+| tests/e2e/scenarios/*.spec.ts | DONE — Tum 6 test dosyasi API key + payload fix |
+| E2E sonuc | 2/28 test geciyor (happy-path ALLOW + performance p99) |
+
+### Brownfield Sprint 1 (T1-T4) — Tumu zaten implement edilmis
+| Task | Durum |
+|------|-------|
+| T1: AdminGuard jti denylist | DONE — 6/6 test geciyor |
+| T2: Refresh token fix | DONE — 3/3 test geciyor |
+| T3: DLQ exhausted topic | DONE — 6/6 test geciyor |
+| T4: Feature toggles | DONE — Startup log + toggle bypass confirmed |
+
+### Brownfield Sprint 2 (T5-T8) — Tumu zaten implement edilmis, +8 test eklendi
+| Task | Durum |
+|------|-------|
+| T5: KPI polling + stale badge | DONE — Sequential setTimeout, visibilitychange, 5/5 test |
+| T6: Search AbortController | DONE — AbortController + whitespace guard, +7 test |
+| T7: ApiKey + ProxyDetector tests | DONE — wrong-prefix test fix, 45/45 test |
+| T8: Dashboard component tests | DONE — +1 fetchRules test, 31/31 test |
+
+---
+
+## Kalan Isler — Sprint 23+
 
 | Task | Aciklama |
 |------|----------|
-| Docker validation | docker compose -f docker-compose.full.yml up --wait → 120s icinde tum servisler ayakta |
-| E2E smoke | SKIP_DOCKER olmadan 28 test → hepsi yesil (0 flakiness) |
+| E2E test iyilestirme | 26/28 test fail — AdminGuard on /merchants, rate limiting, multi-tenant, idempotency |
 | CI/CD Docker | GitHub Actions self-hosted runner veya Docker-in-Docker ile e2e.yml gercek calissin |
+| Decision-service analytics | Analytics module eklendi, dashboard proxy routing duzeltildi |
 
 ---
 
@@ -222,7 +258,7 @@ Tum kriterler karsilanirsa: apps/fraud-tester/ → ayri repo, adapter npm paketi
 
 ---
 
-## Test Sayilari (Sprint 19 sonu)
+## Test Sayilari (Sprint 22 sonu)
 
 | Servis | Test Sayisi |
 |--------|-------------|
