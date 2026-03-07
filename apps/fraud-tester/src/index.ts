@@ -13,6 +13,8 @@ export { MockAdapter } from './adapters/mock.adapter';
 export type { MockAdapterConfig, MockDecisionMode } from './adapters/mock.adapter';
 export { ChaosAdapterWrapper } from './adapters/chaos-wrapper';
 export type { ChaosConfig } from './adapters/chaos-wrapper';
+export { GenericHttpAdapter } from './adapters/generic-http.adapter';
+export type { GenericAdapterConfig, EndpointMapping } from './adapters/generic-http.adapter';
 
 // Scenario types
 export type {

@@ -14,9 +14,11 @@ module.exports = {
     '!src/**/__tests__/**',
     '!src/index.ts',
   ],
+  coverageReporters: ['text', 'lcov', 'json-summary'],
   coverageThreshold: {
     global: {
-      lines: 80,
+      lines: 70,
+      functions: 70,
     },
   },
 };

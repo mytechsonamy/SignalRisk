@@ -166,16 +166,32 @@ STREAM B: FraudTester
 
 ---
 
-## Kalan Isler — Sprint 21+
+## [IN PROGRESS] Sprint 21 — Docker Build + 2. Adapter
 
-**On kosul:** Docker Desktop kurulu ve docker-compose.full.yml calistirilabilir
+| Dosya | Durum |
+|-------|-------|
+| Dockerfile | DONE — Multi-stage monorepo build, SERVICE arg, apps/*/node_modules fix |
+| .dockerignore | DONE — node_modules, dist, dashboard, tests, .git excluded |
+| docker-compose.full.yml | DONE — Tum 14 servis root Dockerfile ile SERVICE build arg |
+| .github/workflows/fraud-tester.yml | DONE — Ayri CI pipeline (unit tests + coverage) |
+| .github/workflows/e2e.yml | DONE — SKIP_DOCKER CI, fraud-tester-tests job eklendi |
+| apps/fraud-tester/src/adapters/generic-http.adapter.ts | DONE — GenericHttpAdapter (2. adapter) |
+| apps/fraud-tester/src/__tests__/generic-http-adapter.spec.ts | DONE — 6 test |
+| apps/fraud-tester/src/index.ts | DONE — GenericHttpAdapter export |
+| apps/fraud-tester/jest.config.js | DONE — coverage threshold %70, lcov reporter |
+| tests/e2e/README-docker.md | DONE — CI/CD durumu eklendi |
+| apps/rule-engine-service/package.json | DONE — axios eksik dependency eklendi |
+| Docker compose build | PARTIAL — 13/14 servis build ediliyor, Docker Desktop crash sonrasi dogrulama bekliyor |
+
+---
+
+## Kalan Isler — Sprint 22+
 
 | Task | Aciklama |
 |------|----------|
 | Docker validation | docker compose -f docker-compose.full.yml up --wait → 120s icinde tum servisler ayakta |
 | E2E smoke | SKIP_DOCKER olmadan 28 test → hepsi yesil (0 flakiness) |
 | CI/CD Docker | GitHub Actions self-hosted runner veya Docker-in-Docker ile e2e.yml gercek calissin |
-| 2. Adapter | Custom HTTP adapter implementasyonu → standalone gate tetiklenir |
 
 ---
 
@@ -183,7 +199,7 @@ STREAM B: FraudTester
 
 Kaynak: docs/04-planning/fraudtester-standalone-decision.md
 
-- [ ] 2+ farkli adapter implementasyonu (simdiki: 1 — SignalRisk)
+- [x] 2+ farkli adapter implementasyonu (SignalRisk + GenericHttpAdapter)
 - [ ] Detection rate karsilastirmali rapor cikiyor
 - [ ] Dis kullanici/musteri ilgisi mevcut
 
@@ -201,6 +217,8 @@ Tum kriterler karsilanirsa: apps/fraud-tester/ → ayri repo, adapter npm paketi
 | Adversarial metrik | Ters (allowedRate > 0.5 = basari) | Saldirganin perspektifinden olcum |
 | Kafka modu | KRaft (Zookeeper'siz) | Kafka 3.x+ native, daha az bagimlilik |
 | IFraudSystemAdapter | FROZEN interface | Geri uyumluluk; degistirilmeden once E7 impact assessment |
+| Docker build stratejisi | Root Dockerfile + SERVICE arg | Tek Dockerfile tum servisleri build eder; tsc --skipLibCheck Docker'da |
+| Workspace deps | apps/*/node_modules COPY | npm workspace hoisting service-level deps olusturur, runner stage'de de gerekli |
 
 ---
 
@@ -223,7 +241,7 @@ Tum kriterler karsilanirsa: apps/fraud-tester/ → ayri repo, adapter npm paketi
 | graph-intel-service | 34 |
 | integration tests | 22 |
 | load test mock | 19 |
-| fraud-tester | 52 unit + 7 integration (Sprint 20 sonu) |
+| fraud-tester | 58 unit + 7 integration (Sprint 21 — GenericHttpAdapter +6) |
 | E2E (SKIP_DOCKER guard) | 28 (Docker stack gerektirir) |
 | **TOPLAM** | **~1090+** |
 
@@ -243,6 +261,7 @@ apps/fraud-tester/
     base.adapter.ts                      IFraudSystemAdapter (FROZEN)
     signalrisk.adapter.ts                SignalRisk impl
     mock.adapter.ts                      6 modlu test adapteri
+    generic-http.adapter.ts              2. adapter — herhangi HTTP fraud sistemi
     chaos-wrapper.ts                     ChaosAdapterWrapper decorator
   src/agents/
     fraud-simulation.agent.ts            5 senaryo, EventEmitter

@@ -1,0 +1,40 @@
+# All node_modules — reinstalled inside Docker for Linux compatibility
+**/node_modules
+node_modules
+
+# Build outputs — rebuilt inside Docker
+**/dist
+dist
+
+# Dashboard (large, not needed for backend services)
+apps/dashboard
+
+# Test files
+**/coverage
+**/*.spec.ts
+**/__tests__
+tests/e2e
+tests/k6
+tests/smoke
+
+# Dev tools
+.git
+.claude
+.sdlc
+**/.env
+**/.env.*
+!**/.env.example
+
+# Logs
+**/*.log
+**/logs
+
+# Docker files themselves
+.dockerignore
+docker-compose*.yml
+
+# OS / editor
+.DS_Store
+**/.DS_Store
+.idea
+.vscode

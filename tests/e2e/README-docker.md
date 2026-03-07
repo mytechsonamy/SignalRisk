@@ -100,3 +100,11 @@ npx playwright test --config=playwright.config.real.ts
 | `scenarios/multi-tenant-isolation.spec.ts` | RLS tenant izolasyonu |
 | `scenarios/performance-gate.spec.ts` | Gecikme ve verim esigi kontrolleri |
 | `scenarios/chaos-redis-down.spec.ts` | Redis devre disi senaryosu |
+
+## CI/CD Durumu
+
+E2E testleri CI'da `SKIP_DOCKER=true` ile calisir (28 test atlanir).
+Gercek Docker stack dogrulamasi icin lokal ortamda calistirin.
+
+FraudTester unit testleri CI'da her PR'da calisir:
+`apps/fraud-tester/npm test` → 45+ test, SKIP_INTEGRATION=true

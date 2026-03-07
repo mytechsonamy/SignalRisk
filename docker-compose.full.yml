@@ -223,8 +223,11 @@ services:
   # ---------------------------------------------------------------------------
   auth-service:
     build:
-      context: ./apps/auth-service
+      context: .
       dockerfile: Dockerfile
+      args:
+        SERVICE: auth-service
+        PORT: "3001"
     image: signalrisk/auth-service:dev
     container_name: signalrisk-auth-service
     restart: unless-stopped
@@ -252,8 +255,11 @@ services:
   # ---------------------------------------------------------------------------
   event-collector:
     build:
-      context: ./apps/event-collector
+      context: .
       dockerfile: Dockerfile
+      args:
+        SERVICE: event-collector
+        PORT: "3002"
     image: signalrisk/event-collector:dev
     container_name: signalrisk-event-collector
     restart: unless-stopped
@@ -286,8 +292,11 @@ services:
   # ---------------------------------------------------------------------------
   device-intel-service:
     build:
-      context: ./apps/device-intel-service
+      context: .
       dockerfile: Dockerfile
+      args:
+        SERVICE: device-intel-service
+        PORT: "3003"
     image: signalrisk/device-intel-service:dev
     container_name: signalrisk-device-intel-service
     restart: unless-stopped
@@ -312,8 +321,11 @@ services:
   # ---------------------------------------------------------------------------
   velocity-service:
     build:
-      context: ./apps/velocity-service
+      context: .
       dockerfile: Dockerfile
+      args:
+        SERVICE: velocity-service
+        PORT: "3004"
     image: signalrisk/velocity-service:dev
     container_name: signalrisk-velocity-service
     restart: unless-stopped
@@ -338,8 +350,11 @@ services:
   # ---------------------------------------------------------------------------
   behavioral-service:
     build:
-      context: ./apps/behavioral-service
+      context: .
       dockerfile: Dockerfile
+      args:
+        SERVICE: behavioral-service
+        PORT: "3005"
     image: signalrisk/behavioral-service:dev
     container_name: signalrisk-behavioral-service
     restart: unless-stopped
@@ -364,8 +379,11 @@ services:
   # ---------------------------------------------------------------------------
   network-intel-service:
     build:
-      context: ./apps/network-intel-service
+      context: .
       dockerfile: Dockerfile
+      args:
+        SERVICE: network-intel-service
+        PORT: "3006"
     image: signalrisk/network-intel-service:dev
     container_name: signalrisk-network-intel-service
     restart: unless-stopped
@@ -393,8 +411,11 @@ services:
   # ---------------------------------------------------------------------------
   telco-intel-service:
     build:
-      context: ./apps/telco-intel-service
+      context: .
       dockerfile: Dockerfile
+      args:
+        SERVICE: telco-intel-service
+        PORT: "3007"
     image: signalrisk/telco-intel-service:dev
     container_name: signalrisk-telco-intel-service
     restart: unless-stopped
@@ -427,8 +448,11 @@ services:
   # ---------------------------------------------------------------------------
   rule-engine-service:
     build:
-      context: ./apps/rule-engine-service
+      context: .
       dockerfile: Dockerfile
+      args:
+        SERVICE: rule-engine-service
+        PORT: "3008"
     image: signalrisk/rule-engine-service:dev
     container_name: signalrisk-rule-engine-service
     restart: unless-stopped
@@ -453,8 +477,11 @@ services:
   # ---------------------------------------------------------------------------
   graph-intel-service:
     build:
-      context: ./apps/graph-intel-service
+      context: .
       dockerfile: Dockerfile
+      args:
+        SERVICE: graph-intel-service
+        PORT: "3012"
     image: signalrisk/graph-intel-service:dev
     container_name: signalrisk-graph-intel-service
     restart: unless-stopped
@@ -489,8 +516,11 @@ services:
   # ---------------------------------------------------------------------------
   decision-service:
     build:
-      context: ./apps/decision-service
+      context: .
       dockerfile: Dockerfile
+      args:
+        SERVICE: decision-service
+        PORT: "3009"
     image: signalrisk/decision-service:dev
     container_name: signalrisk-decision-service
     restart: unless-stopped
@@ -540,8 +570,11 @@ services:
   # ---------------------------------------------------------------------------
   case-service:
     build:
-      context: ./apps/case-service
+      context: .
       dockerfile: Dockerfile
+      args:
+        SERVICE: case-service
+        PORT: "3010"
     image: signalrisk/case-service:dev
     container_name: signalrisk-case-service
     restart: unless-stopped
@@ -572,8 +605,11 @@ services:
   # ---------------------------------------------------------------------------
   webhook-service:
     build:
-      context: ./apps/webhook-service
+      context: .
       dockerfile: Dockerfile
+      args:
+        SERVICE: webhook-service
+        PORT: "3011"
     image: signalrisk/webhook-service:dev
     container_name: signalrisk-webhook-service
     restart: unless-stopped
@@ -610,8 +646,11 @@ services:
   # ---------------------------------------------------------------------------
   feature-flag-service:
     build:
-      context: ./apps/feature-flag-service
+      context: .
       dockerfile: Dockerfile
+      args:
+        SERVICE: feature-flag-service
+        PORT: "3013"
     image: signalrisk/feature-flag-service:dev
     container_name: signalrisk-feature-flag-service
     restart: unless-stopped
@@ -635,8 +674,11 @@ services:
   # ---------------------------------------------------------------------------
   outbox-relay:
     build:
-      context: ./apps/outbox-relay
+      context: .
       dockerfile: Dockerfile
+      args:
+        SERVICE: outbox-relay
+        PORT: "3014"
     image: signalrisk/outbox-relay:dev
     container_name: signalrisk-outbox-relay
     restart: unless-stopped
