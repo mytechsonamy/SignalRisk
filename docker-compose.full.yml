@@ -33,6 +33,7 @@ x-common-env: &common-env
   REDIS_HOST: redis
   REDIS_PORT: "6379"
   KAFKA_BROKER: kafka:9092
+  KAFKA_BROKERS: kafka:9092
   # JWT — RS256 key pair (development placeholder; replace with real keys in prod)
   # The services that need RS256 will fall back to HS256/shared secret in dev mode
   JWT_SECRET: signalrisk-local-dev-secret-change-in-production
@@ -108,7 +109,7 @@ services:
       POSTGRES_PASSWORD: signalrisk_dev
       POSTGRES_DB: signalrisk
     ports:
-      - "5432:5432"
+      - "15432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       # Optional: mount init SQL scripts for schema bootstrapping
@@ -132,7 +133,7 @@ services:
     # No password in dev mode; add --requirepass <secret> for staging/prod
     command: redis-server --save 60 1 --loglevel warning
     ports:
-      - "6379:6379"
+      - "16379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -174,12 +175,12 @@ services:
     volumes:
       - kafka_data:/var/lib/kafka/data
     healthcheck:
-      # Wait until the broker can respond to metadata requests
-      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list > /dev/null 2>&1"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 30s
+      # TCP check — broker is listening on 9092
+      test: ["CMD-SHELL", "nc -z localhost 9092 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 45s
     networks:
       - signalrisk-network
 
@@ -368,7 +369,7 @@ services:
       auth-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3005/health > /dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "nc -z localhost 3005 || exit 1"]
       <<: *app-healthcheck
     networks:
       - signalrisk-network
@@ -466,7 +467,7 @@ services:
       auth-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3008/health > /dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "nc -z localhost 3008 || exit 1"]
       <<: *app-healthcheck
     networks:
       - signalrisk-network

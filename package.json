@@ -20,6 +20,9 @@
     "node": ">=18.0.0",
     "npm": ">=9.0.0"
   },
+  "devDependencies": {
+    "tsc-alias": "^1.8.10"
+  },
   "dependencies": {
     "@nestjs/core": "^11.1.16",
     "@nestjs/jwt": "^11.0.2",

@@ -2,8 +2,8 @@
 # SignalRisk — Monorepo Root Dockerfile
 # Build arg: SERVICE (required), PORT (default: 3000)
 #
-# Pre-requisite on host:
-#   npm install --legacy-peer-deps   # generates package-lock.json
+# Strategy: tsc --skipLibCheck + tsc-alias (resolves @/* path aliases)
+# Pre-requisite: npm install --legacy-peer-deps on host (generates lock file)
 #
 # Build example:
 #   DOCKER_BUILDKIT=1 docker build --build-arg SERVICE=auth-service .
@@ -20,18 +20,17 @@ WORKDIR /app
 RUN npm config set fetch-timeout 600000 && \
     npm config set fetch-retry-mintimeout 20000 && \
     npm config set fetch-retry-maxtimeout 120000 && \
-    npm config set maxsockets 3 && \
-    npm config set prefer-offline false
+    npm config set maxsockets 3
 
 # Copy lock files for deterministic installs
 COPY package.json package-lock.json ./
 
-# Copy all workspace package manifests
+# Copy all workspace package manifests (source removed below, only manifests matter)
 COPY packages/ ./packages/
 COPY apps/     ./apps/
 
-# Remove source so the context is lean (only manifests + lock file matter here)
-RUN find packages apps -name "*.ts" -not -name "package.json" -delete 2>/dev/null || true
+# Remove source files — only package.json + lock file matter for npm ci
+RUN find packages apps -name "*.ts" -delete 2>/dev/null || true
 
 # Install everything (uses package-lock.json for exact versions)
 RUN --mount=type=cache,target=/root/.npm \
@@ -46,30 +45,37 @@ ARG SERVICE
 
 WORKDIR /app
 
-# Copy source + installed Linux node_modules
+# Install tsc-alias for resolving @/* path aliases in compiled output
+RUN npm install -g tsc-alias
+
+# Copy source + installed Linux node_modules (root hoisted)
 COPY . .
 COPY --from=deps /app/node_modules ./node_modules
 
-# Copy per-workspace node_modules (npm workspace hoisting may place deps at service level)
+# Copy app-level node_modules. Shared packages should resolve against hoisted
+# root dependencies to avoid duplicate type trees during package compilation.
 RUN --mount=from=deps,source=/app,target=/deps \
-    for pkg in /deps/packages/*/node_modules /deps/apps/*/node_modules; do \
+    for pkg in /deps/apps/*/node_modules; do \
       rel="${pkg#/deps/}"; \
       dst="$(dirname $rel)"; \
       [ -d "$pkg" ] && cp -r "$pkg" "./$dst/" 2>/dev/null || true; \
     done
 
-# Build shared TS packages (skip errors from unused packages like web-sdk/mobile-sdk)
+# Build shared TS packages (skip errors from unused packages)
 RUN for pkg in packages/redis-module packages/signal-contracts \
-               packages/event-schemas packages/kafka-config; do \
+               packages/event-schemas packages/kafka-config \
+               packages/kafka-health; do \
       [ -d "$pkg/src" ] && (cd "$pkg" && npx tsc --skipLibCheck 2>/dev/null || true); \
     done
 
-# Build the target NestJS service (skipLibCheck: type deps hoisted differently in Docker)
+# Build the target service: tsc (compile) + tsc-alias (resolve @/* paths)
 RUN cd "apps/${SERVICE}" && \
     if [ -f tsconfig.build.json ]; then \
-      npx tsc -p tsconfig.build.json --skipLibCheck --outDir dist; \
+      npx tsc -p tsconfig.build.json --skipLibCheck && \
+      tsc-alias -p tsconfig.build.json; \
     else \
-      npx tsc -p tsconfig.json --skipLibCheck --outDir dist; \
+      npx tsc -p tsconfig.json --skipLibCheck && \
+      tsc-alias -p tsconfig.json; \
     fi
 
 # ---------------------------------------------------------------------------
@@ -91,7 +97,9 @@ RUN addgroup -g 1001 -S signalrisk && \
 # Copy runtime dependencies (root hoisted + service-level)
 COPY --from=deps    /app/node_modules          ./node_modules
 COPY --from=deps    /app/apps/${SERVICE}/node_modules ./apps/${SERVICE}/node_modules
+# Shared packages (built .js files needed at runtime)
 COPY --from=builder /app/packages              ./packages
+# Compiled service
 COPY --from=builder /app/apps/${SERVICE}/dist  ./apps/${SERVICE}/dist
 COPY --from=builder /app/package.json          ./
 COPY --from=builder /app/apps/${SERVICE}/package.json \

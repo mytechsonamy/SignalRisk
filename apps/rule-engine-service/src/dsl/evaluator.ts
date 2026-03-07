@@ -1,8 +1,4 @@
-import { DeviceSignal } from '../../../../packages/signal-contracts/src/device.signal';
-import { VelocitySignal } from '../../../../packages/signal-contracts/src/velocity.signal';
-import { BehavioralSignal } from '../../../../packages/signal-contracts/src/behavioral.signal';
-import { NetworkSignal } from '../../../../packages/signal-contracts/src/network.signal';
-import { TelcoSignal } from '../../../../packages/signal-contracts/src/telco.signal';
+import type { DeviceSignal, VelocitySignal, BehavioralSignal, NetworkSignal, TelcoSignal } from '@signalrisk/signal-contracts';
 import {
   RuleNode,
   ExpressionNode,

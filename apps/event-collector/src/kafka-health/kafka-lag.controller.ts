@@ -1,5 +1,5 @@
 import { Controller, Get } from '@nestjs/common';
-import { KafkaLagService } from '../../../../packages/kafka-health/src';
+import { KafkaLagService } from '@signalrisk/kafka-health';
 
 @Controller('metrics')
 export class KafkaLagController {

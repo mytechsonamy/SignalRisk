@@ -1,8 +1,12 @@
 {
   "name": "@signalrisk/kafka-health",
   "version": "1.0.0",
-  "main": "src/index.ts",
-  "scripts": { "test": "jest --no-coverage" },
+  "main": "dist/index.js",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest --no-coverage"
+  },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
     "@nestjs/config": "^3.0.0",

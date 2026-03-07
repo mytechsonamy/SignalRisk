@@ -5,7 +5,7 @@ import { KafkaModule } from './kafka/kafka.module';
 import { EventsModule } from './events/events.module';
 import { HealthModule } from './health/health.module';
 import { DlqModule } from './dlq/dlq.module';
-import { KafkaHealthModule } from '../../../packages/kafka-health/src/kafka-health.module';
+import { KafkaHealthModule } from '@signalrisk/kafka-health';
 import { KafkaLagController } from './kafka-health/kafka-lag.controller';
 
 @Module({
