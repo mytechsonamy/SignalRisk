@@ -10,11 +10,11 @@ export default () => ({
   serviceName: process.env.SERVICE_NAME || 'decision-service',
 
   database: {
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '5432', 10),
-    username: process.env.DB_USERNAME || 'signalrisk',
-    password: process.env.DB_PASSWORD || 'signalrisk',
-    database: process.env.DB_DATABASE || 'signalrisk',
+    host: process.env.DATABASE_HOST || process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DATABASE_PORT || process.env.DB_PORT || '5432', 10),
+    username: process.env.DATABASE_USER || process.env.DB_USERNAME || 'signalrisk',
+    password: process.env.DATABASE_PASSWORD || process.env.DB_PASSWORD || 'signalrisk',
+    database: process.env.DATABASE_NAME || process.env.DB_DATABASE || 'signalrisk',
     ssl: process.env.DB_SSL === 'true',
   },
 
@@ -38,16 +38,11 @@ export default () => ({
   },
 
   services: {
-    /** Base URL of device-intel-service */
-    deviceIntelUrl: process.env.DEVICE_INTEL_URL || 'http://localhost:3003',
-    /** Base URL of velocity-engine service */
-    velocityUrl: process.env.VELOCITY_URL || 'http://localhost:3004',
-    /** Base URL of behavioral-service */
-    behavioralUrl: process.env.BEHAVIORAL_URL || 'http://localhost:3005',
-    /** Base URL of network-intel-service */
-    networkIntelUrl: process.env.NETWORK_INTEL_URL || 'http://localhost:3006',
-    /** Base URL of telco-intel-service */
-    telcoIntelUrl: process.env.TELCO_INTEL_URL || 'http://localhost:3007',
+    deviceIntelUrl: process.env.DEVICE_INTEL_SERVICE_URL || process.env.DEVICE_INTEL_URL || 'http://localhost:3003',
+    velocityUrl: process.env.VELOCITY_SERVICE_URL || process.env.VELOCITY_URL || 'http://localhost:3004',
+    behavioralUrl: process.env.BEHAVIORAL_SERVICE_URL || process.env.BEHAVIORAL_URL || 'http://localhost:3005',
+    networkIntelUrl: process.env.NETWORK_INTEL_SERVICE_URL || process.env.NETWORK_INTEL_URL || 'http://localhost:3006',
+    telcoIntelUrl: process.env.TELCO_INTEL_SERVICE_URL || process.env.TELCO_INTEL_URL || 'http://localhost:3007',
   },
 
   otel: {

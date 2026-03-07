@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import CaseReviewQueue from '../components/fraud-ops/CaseReviewQueue';
 import { useFraudOpsStore } from '../store/fraud-ops.store';
 import type { Case } from '../types/case.types';
@@ -134,5 +135,179 @@ describe('CaseReviewQueue', () => {
     render(<CaseReviewQueue />);
     const checkbox = screen.getByLabelText('Select case case-high') as HTMLInputElement;
     expect(checkbox.checked).toBe(true);
+  });
+
+  // ── Search: AbortController + Whitespace Guard + Loading State ──
+
+  describe('search functionality', () => {
+    let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      fetchSpy = vi.spyOn(globalThis, 'fetch');
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      fetchSpy.mockRestore();
+    });
+
+    it('typing a partial query fetches filtered results and displays them', async () => {
+      const filtered = [makeCase('case-match', 88)];
+      fetchSpy.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ cases: filtered }),
+      } as Response);
+
+      setupStore();
+      render(<CaseReviewQueue />);
+
+      const input = screen.getByTestId('case-search-input');
+      // Type a query
+      await act(async () => {
+        fireEvent.change(input, { target: { value: 'match' } });
+      });
+
+      // Should show searching indicator after debounce fires
+      await act(async () => {
+        vi.advanceTimersByTime(350);
+      });
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/cases?action=REVIEW&search=match'),
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+
+      // Wait for the fetch promise to resolve and results to render
+      await waitFor(() => {
+        expect(screen.getByText('merchant-case-match')).toBeInTheDocument();
+      });
+
+      // Original cases should no longer be visible
+      expect(screen.queryByText('merchant-case-high')).not.toBeInTheDocument();
+    });
+
+    it('typing whitespace-only shows full list and no searching indicator', async () => {
+      setupStore();
+      render(<CaseReviewQueue />);
+
+      const input = screen.getByTestId('case-search-input');
+      await act(async () => {
+        fireEvent.change(input, { target: { value: '   ' } });
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(350);
+      });
+
+      // No fetch should have been triggered
+      expect(fetchSpy).not.toHaveBeenCalled();
+
+      // Full case list should still be displayed
+      expect(screen.getByText('merchant-case-high')).toBeInTheDocument();
+      expect(screen.getByText('merchant-case-mid')).toBeInTheDocument();
+      expect(screen.getByText('merchant-case-low')).toBeInTheDocument();
+
+      // No searching indicator
+      expect(screen.queryByTestId('searching-indicator')).not.toBeInTheDocument();
+    });
+
+    it('aborts previous in-flight request when a new keystroke arrives', async () => {
+      const abortSpy = vi.spyOn(AbortController.prototype, 'abort');
+
+      // First fetch: never resolves (simulates slow response)
+      fetchSpy.mockImplementationOnce(
+        () => new Promise<Response>(() => { /* intentionally pending */ }),
+      );
+      // Second fetch: resolves immediately
+      fetchSpy.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ cases: [makeCase('case-final', 75)] }),
+      } as Response);
+
+      setupStore();
+      render(<CaseReviewQueue />);
+      const input = screen.getByTestId('case-search-input');
+
+      // First keystroke
+      await act(async () => {
+        fireEvent.change(input, { target: { value: 'first' } });
+        vi.advanceTimersByTime(350);
+      });
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+      // Second keystroke — should abort the first request
+      await act(async () => {
+        fireEvent.change(input, { target: { value: 'second' } });
+        vi.advanceTimersByTime(350);
+      });
+
+      expect(abortSpy).toHaveBeenCalled();
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+
+      // Final results should render
+      await waitFor(() => {
+        expect(screen.getByText('merchant-case-final')).toBeInTheDocument();
+      });
+
+      abortSpy.mockRestore();
+    });
+
+    it('does not treat AbortError as a real error', async () => {
+      const abortError = new DOMException('The operation was aborted.', 'AbortError');
+      fetchSpy.mockRejectedValueOnce(abortError);
+
+      setupStore();
+      render(<CaseReviewQueue />);
+      const input = screen.getByTestId('case-search-input');
+
+      await act(async () => {
+        fireEvent.change(input, { target: { value: 'test' } });
+        vi.advanceTimersByTime(350);
+      });
+
+      // Wait for the rejection to be handled
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10);
+      });
+
+      // No error message should be displayed
+      expect(screen.queryByTestId('search-error')).not.toBeInTheDocument();
+    });
+
+    it('clearing the search input resets to full case list', async () => {
+      const filtered = [makeCase('case-match', 88)];
+      fetchSpy.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ cases: filtered }),
+      } as Response);
+
+      setupStore();
+      render(<CaseReviewQueue />);
+      const input = screen.getByTestId('case-search-input');
+
+      // Type a query first
+      await act(async () => {
+        fireEvent.change(input, { target: { value: 'match' } });
+        vi.advanceTimersByTime(350);
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('merchant-case-match')).toBeInTheDocument();
+      });
+
+      // Clear the input
+      await act(async () => {
+        fireEvent.change(input, { target: { value: '' } });
+      });
+
+      // Full list should be restored immediately (no debounce needed for clear)
+      expect(screen.getByText('merchant-case-high')).toBeInTheDocument();
+      expect(screen.getByText('merchant-case-mid')).toBeInTheDocument();
+      expect(screen.getByText('merchant-case-low')).toBeInTheDocument();
+      expect(screen.queryByTestId('searching-indicator')).not.toBeInTheDocument();
+    });
   });
 });

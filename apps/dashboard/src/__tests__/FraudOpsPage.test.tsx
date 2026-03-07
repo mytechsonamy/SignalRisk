@@ -190,4 +190,25 @@ describe('FraudOpsPage', () => {
     renderPage();
     expect(screen.getByText('Fraud Ops')).toBeInTheDocument();
   });
+
+  // ── Search integration (rendered via CaseReviewQueue) ──
+
+  it('renders a search input for case filtering', () => {
+    setupStore();
+    setupAuth('analyst');
+    renderPage();
+    expect(screen.getByTestId('case-search-input')).toBeInTheDocument();
+  });
+
+  it('whitespace-only search shows full list and no searching indicator', () => {
+    setupStore();
+    setupAuth('analyst');
+    renderPage();
+    const input = screen.getByTestId('case-search-input');
+    fireEvent.change(input, { target: { value: '   ' } });
+    // Full list should still render
+    expect(screen.getByText('merchant-case-001')).toBeInTheDocument();
+    // No searching indicator
+    expect(screen.queryByTestId('searching-indicator')).not.toBeInTheDocument();
+  });
 });

@@ -256,7 +256,7 @@ function ConfigPanel() {
             value={config.duration}
             onChange={(e) => updateConfig({ duration: e.target.value as typeof config.duration })}
             disabled={isRunning}
-            className="w-full rounded-md border border-surface-border bg-surface-sidebar text-text-primary text-xs px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+            className="w-full rounded-md border border-surface-border bg-surface-card text-text-primary text-xs px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
           >
             <option value="1min">1 minute</option>
             <option value="5min">5 minutes</option>
@@ -272,7 +272,7 @@ function ConfigPanel() {
             value={config.intensity}
             onChange={(e) => updateConfig({ intensity: e.target.value as typeof config.intensity })}
             disabled={isRunning}
-            className="w-full rounded-md border border-surface-border bg-surface-sidebar text-text-primary text-xs px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+            className="w-full rounded-md border border-surface-border bg-surface-card text-text-primary text-xs px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
           >
             <option value="low">Low</option>
             <option value="medium">Medium</option>

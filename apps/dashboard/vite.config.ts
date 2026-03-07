@@ -9,14 +9,25 @@ export default defineConfig({
   ],
   server: {
     proxy: {
-      '/api': {
-        target: 'http://localhost:3000',
+      '/api/v1/analytics': {
+        target: 'http://localhost:3009',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
-      '/v1': {
-        target: 'http://localhost:3000',
+      '/api/v1/decisions': {
+        target: 'http://localhost:3009',
         changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+      '/api/v1/events': {
+        target: 'http://localhost:3002',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+      '/api': {
+        target: 'http://localhost:3009',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
       },
       '/fraud-tester': {
         target: 'http://localhost:3020',

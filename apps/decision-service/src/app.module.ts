@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import configuration from './config/configuration';
 import { DecisionModule } from './decision/decision.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 import { HealthController } from './health/health.controller';
 
 @Module({
@@ -12,6 +13,7 @@ import { HealthController } from './health/health.controller';
       envFilePath: '.env',
     }),
     DecisionModule,
+    AnalyticsModule,
   ],
   controllers: [HealthController],
 })

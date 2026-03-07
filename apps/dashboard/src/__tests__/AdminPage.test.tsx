@@ -149,4 +149,11 @@ describe('AdminPage', () => {
     renderPage();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
+
+  it('calls fetchRules on mount', () => {
+    setupAdminStore();
+    setupAuthStore('admin');
+    renderPage();
+    expect(mockFetchRules).toHaveBeenCalledTimes(1);
+  });
 });

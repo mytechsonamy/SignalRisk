@@ -92,7 +92,7 @@ describe('ApiKeyService', () => {
 
   it('should reject a key with the wrong prefix', async () => {
     const service = await createService(VALID_KEY);
-    const wrongPrefixKey = makeKey('a1b2c3d4e5f6789012345678901234ab').replace('sk_test_', 'sk_test_');
+    const wrongPrefixKey = 'sk_prod_a1b2c3d4e5f6789012345678901234ab';
     expect(() => service.validate(wrongPrefixKey)).toThrow(UnauthorizedException);
   });
 

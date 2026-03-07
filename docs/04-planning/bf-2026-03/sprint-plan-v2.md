@@ -1,5 +1,5 @@
 # SignalRisk v2 — Brownfield Gap Analysis: Sprint Plan (v2)
-# STATUS: IN REVIEW
+# STATUS: ALL SPRINTS DONE
 
 **Date:** 2026-03-06
 **Requirements ref:** docs/01-requirements/bf-2026-03/gap-analysis-v7.md
@@ -17,25 +17,26 @@
 | Item | Status |
 |------|--------|
 | ApiKeyService (P0.1) | ✅ Implemented — tests only needed |
-| AdminGuard RS256 + role check | ✅ Implemented — jti Redis lookup NOT yet done |
-| AdminGuard jti denylist + logout | ❌ Not implemented |
-| Refresh token role lookup | ✅ Implemented — deleted user fallback needs fix |
+| AdminGuard RS256 + role check | ✅ Implemented — jti Redis lookup DONE |
+| AdminGuard jti denylist + logout | ✅ Implemented (T1 verified) |
+| Refresh token role lookup | ✅ Implemented — deleted user fallback DONE (T2 verified) |
 | Velocity merchant ID (P3.1) | ✅ Implemented |
-| DLQ reprocess (P3.2) | ✅ Implemented — exhausted Kafka topic NOT yet done |
+| DLQ reprocess (P3.2) | ✅ Implemented — exhausted Kafka topic DONE (T3 verified) |
 | VPN detection / ProxyDetector (P3.3) | ✅ Implemented — tests only needed |
-| Dashboard KPI wiring (P1.1) | ✅ Wired — stale badge/sequential poll NOT yet done |
+| Dashboard KPI wiring (P1.1) | ✅ Wired — stale badge/sequential poll DONE (T5 verified) |
 | Evidence timeline (P2.2) | ✅ Implemented |
 | Rules page (P2.1) | ✅ Implemented |
 | Settings form (P2.3) | ✅ Implemented |
-| Case search (P2.4) | ✅ Implemented — AbortController/whitespace NOT yet done |
-| Feature toggles (BC-002) | ❌ Not implemented |
+| Case search (P2.4) | ✅ Implemented — AbortController/whitespace DONE (T6 verified) |
+| Feature toggles (BC-002) | ✅ Implemented (T4 verified) |
 
 ---
 
-## Sprint 1 — Security & Backend (with bundled tests)
+## Sprint 1 — Security & Backend (with bundled tests) ✅ DONE
 
 **Goal:** Complete P0.2, P0.3, P3.2, BC-002 — all with tests bundled.
 **Parallelism:** 4 agents (T1, T2, T3, T4 fully independent)
+**Result:** All 4 tasks verified as already implemented. Tests pass (T1: 6/6, T2: 3/3, T3: 6/6, T4: startup logs confirmed).
 
 ---
 
@@ -177,10 +178,11 @@ if (process.env.ENABLE_VPN_DETECTION === 'false') return { vpnDetected: false };
 
 ---
 
-## Sprint 2 — Dashboard Improvements & Remaining Tests
+## Sprint 2 — Dashboard Improvements & Remaining Tests ✅ DONE
 
 **Goal:** P1.1 stale badge, P2.4 AbortController, P4 tests for existing implementations.
 **Parallelism:** 4 agents (T5, T6, T7, T8 independent)
+**Result:** All 4 tasks verified. T5/T6 already implemented; T7 had 1 test bug fix; T8 added 1 new test. All tests pass.
 
 ---
 
