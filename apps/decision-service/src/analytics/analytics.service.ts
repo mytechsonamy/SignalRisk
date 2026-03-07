@@ -133,7 +133,7 @@ export class AnalyticsService {
          ROUND(AVG(d.risk_score), 1)::text AS avg_risk_score,
          ROUND(COUNT(*) FILTER (WHERE d.decision = 'BLOCK')::numeric / GREATEST(COUNT(*), 1), 3)::text AS block_rate
        FROM decisions d
-       LEFT JOIN merchants m ON m.id = d.merchant_id
+       LEFT JOIN merchants m ON m.id::text = d.merchant_id
        WHERE d.created_at >= NOW() - INTERVAL '7 days' AND d.is_test = false
        GROUP BY d.merchant_id, m.name
        ORDER BY event_volume DESC

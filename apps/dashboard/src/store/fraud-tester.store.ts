@@ -89,7 +89,7 @@ let _socket: any = null;
 
 const FRAUD_TESTER_URL =
   typeof window !== 'undefined'
-    ? (import.meta.env?.VITE_FRAUD_TESTER_URL ?? 'http://localhost:3020')
+    ? (import.meta.env?.VITE_FRAUD_TESTER_URL ?? '')
     : 'http://localhost:3020';
 
 function stopMockInterval() {

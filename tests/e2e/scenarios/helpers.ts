@@ -173,6 +173,8 @@ export async function pollDecision(
   token: string,
   maxAttempts = 20,
   intervalMs = 200,
+  /** Override entityId for velocity lookup (default: requestId). Pass deviceId for velocity-based tests. */
+  entityId?: string,
 ): Promise<{
   requestId: string;
   merchantId: string;
@@ -194,7 +196,7 @@ export async function pollDecision(
       data: {
         requestId,
         merchantId: TEST_MERCHANT.merchantId,
-        entityId:   requestId, // echo the event id as entity id for polling
+        entityId:   entityId ?? requestId,
       },
     });
 

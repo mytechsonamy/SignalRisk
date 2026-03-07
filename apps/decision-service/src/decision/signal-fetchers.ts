@@ -147,7 +147,7 @@ const CIRCUIT_OPEN_DURATION_MS  = 30_000; // 30 seconds
 async function fetchWithTimeout<T>(
   url: string,
   options: RequestInit = {},
-  timeoutMs = 150,
+  timeoutMs = parseInt(process.env.SIGNAL_TIMEOUT_MS || '150', 10),
 ): Promise<T | null> {
   const controller = new AbortController();
   const timerId = setTimeout(() => controller.abort(), timeoutMs);
@@ -333,7 +333,7 @@ export class SignalFetcher {
   }
 
   // -------------------------------------------------------------------------
-  // Velocity signal — GET /v1/velocity/{entityId}?merchantId={merchantId}
+  // Velocity signal — GET /v1/velocity/{entityId} with X-Merchant-ID header
   // -------------------------------------------------------------------------
 
   async fetchVelocitySignal(
@@ -342,8 +342,10 @@ export class SignalFetcher {
   ): Promise<VelocitySignal | null> {
     const baseUrl =
       this.config.get<string>('services.velocityUrl') ?? 'http://localhost:3004';
-    const url = `${baseUrl}/v1/velocity/${encodeURIComponent(entityId)}?merchantId=${encodeURIComponent(merchantId)}`;
-    const raw = await fetchWithTimeout<Record<string, unknown>>(url);
+    const url = `${baseUrl}/v1/velocity/${encodeURIComponent(entityId)}`;
+    const raw = await fetchWithTimeout<Record<string, unknown>>(url, {
+      headers: { 'X-Merchant-ID': merchantId },
+    });
     if (!raw) return null;
 
     // Velocity-service returns { signals: { tx_count_1h, ... }, burst_detected }

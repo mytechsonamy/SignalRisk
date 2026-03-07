@@ -326,6 +326,39 @@ If `localStorage` is unavailable (private browsing, storage quota), a red **Sett
 
 ## 10. FraudTester -- Battle Arena
 
+### What is FraudTester?
+
+FraudTester is a **QA and Red Team tool** for testing SignalRisk's fraud detection capabilities. It is **not** a real-time monitoring tool — that role belongs to the Dashboard (Overview, Analytics, Cases, Live Feed).
+
+**Who uses it:**
+- **Security / QA engineers** — validate detection rules before deployment
+- **Fraud analysts** — measure detection rate against known attack patterns
+- **Developers** — regression-test rule changes, benchmark latency
+
+**What it does:**
+- Generates **synthetic fraud events** (device farm, bot checkout, velocity evasion, etc.)
+- Submits them through the **real SignalRisk pipeline** (event-collector → Kafka → decision-service)
+- Measures **True Positive Rate (TPR)**, False Positive Rate (FPR), and latency
+- Reports results in real time via WebSocket
+
+**What it does NOT do:**
+- Monitor live production traffic (use Dashboard Overview and Analytics for that)
+- Create or manage fraud cases (use Cases and Fraud Ops pages)
+- Replace manual rule tuning (use the Rules page)
+
+### FraudTester vs Dashboard
+
+| Aspect | FraudTester (Battle Arena) | Dashboard (Overview / Analytics) |
+|--------|---------------------------|----------------------------------|
+| Data source | Synthetic events (generated) | Real merchant traffic |
+| Purpose | Measure detection accuracy | Monitor production health |
+| Isolation | `X-SignalRisk-Test: true` — excluded from production metrics | Shows only real traffic (`is_test = false`) |
+| Trigger | Manual (start a battle) | Automatic (traffic flows in) |
+| Key metrics | TPR, FPR, detection rate per scenario | Decision volume, block rate, avg latency, trends |
+| Persistence | In-memory (last 100 battles) | PostgreSQL `decisions` table |
+
+> **Important:** Battle results are intentionally invisible in Dashboard analytics. This is by design — test data must not contaminate production KPIs.
+
 **Path:** `/fraud-tester/battle-arena`
 
 The Battle Arena is the primary interface for adversarial testing. It lets you launch simulated fraud attacks against the detection engine and observe results in real time.
@@ -429,6 +462,13 @@ The detailed view includes:
 - Rising FPR may indicate overly aggressive rules that need weight adjustment
 - Falling TPR on adversarial scenarios highlights detection gaps to address
 
+### Recommended Workflow
+
+1. **Before deploying rule changes:** Run a full battle (all 5 scenarios) → verify TPR is not degraded
+2. **After deploying rule changes:** Run adversarial scenarios → check for evasion regressions
+3. **Weekly cadence:** Run a battle and compare detection rate trend across the last 5 reports
+4. **To see the effect on production:** Check Dashboard Analytics — battle data is isolated, but rule changes affect real traffic immediately
+
 ---
 
 ## 13. Roles & Permissions
@@ -484,6 +524,9 @@ If the Overview KPI cards show a yellow **Stale** badge, the API call failed. Th
 - Run adversarial scenarios after rule changes to verify detection is not degraded
 - Compare battle reports over time to track detection improvement
 - All test data is automatically isolated from production — no cleanup needed
+- Battle results do **not** appear in Dashboard analytics — this is intentional (test isolation)
+- To see real data in the Dashboard, you need actual merchant traffic flowing through the system
+- FraudTester measures "how good is our detection?" — Dashboard measures "what is happening right now?"
 
 ---
 

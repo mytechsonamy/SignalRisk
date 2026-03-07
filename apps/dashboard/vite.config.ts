@@ -29,9 +29,14 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
-      '/fraud-tester': {
+      '/v1/fraud-tester': {
         target: 'http://localhost:3020',
         changeOrigin: true,
+      },
+      '/socket.io': {
+        target: 'http://localhost:3020',
+        changeOrigin: true,
+        ws: true,
       },
     },
   },

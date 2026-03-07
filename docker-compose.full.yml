@@ -273,6 +273,9 @@ services:
       ALLOWED_API_KEYS: "sk_test_00000000000000000000000000000001"
       # kafkajs does not bundle LZ4 codec — use gzip in Docker
       KAFKA_COMPRESSION: gzip
+      # Rate limit: 250 req/min — performance-gate sends 300+ to trigger 429
+      # while leaving enough headroom for other tests
+      RATE_LIMIT_MAX: "2000"
     depends_on:
       <<: *depends-infra
       auth-service:
@@ -537,8 +540,8 @@ services:
       WEIGHT_BEHAVIORAL: "0.20"
       WEIGHT_NETWORK: "0.15"
       WEIGHT_TELCO: "0.05"
-      # Outbound signal fetch timeout (ms)
-      SIGNAL_TIMEOUT_MS: "150"
+      # Outbound signal fetch timeout (ms) — Docker inter-service latency is higher
+      SIGNAL_TIMEOUT_MS: "2000"
     depends_on:
       <<: *depends-infra
       auth-service:

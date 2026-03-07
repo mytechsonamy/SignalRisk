@@ -66,7 +66,7 @@ const battles = new Map<string, {
 
 function createAdapter(config: BattleConfig) {
   // Use mock adapter when explicitly requested or no SignalRisk URL is configured
-  if (config.targetAdapter === 'mock' || (config.targetAdapter !== 'signalrisk' && !process.env['SIGNALRISK_BASE_URL'])) {
+  if (config.targetAdapter === 'mock' || (config.targetAdapter !== 'signalrisk' && !config.targetAdapter?.startsWith('signalrisk') && !process.env['SIGNALRISK_BASE_URL'])) {
     return new MockAdapter({ mode: 'threshold', fixedLatencyMs: 50 });
   }
   return new SignalRiskAdapter({

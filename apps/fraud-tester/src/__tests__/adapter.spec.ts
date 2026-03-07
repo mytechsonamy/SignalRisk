@@ -66,13 +66,13 @@ describe('SignalRiskAdapter', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // Test 3: submitEvent POSTs to the correct endpoint
+  // Test 3: submitEvent ingests via event-collector then polls for decision
   // ---------------------------------------------------------------------------
-  it('submitEvent sends POST to /v1/events with correct headers', async () => {
+  it('submitEvent sends POST to /v1/events then polls GET /v1/decisions/{eventId}', async () => {
     // First call: POST /v1/events → 202
     mockFetch.mockResolvedValueOnce(makeResponse(202, { status: 'accepted' }));
 
-    // Second call: GET /v1/decisions/{eventId} → 200 with a valid decision
+    // Second call: GET /v1/decisions/{eventId} → 200 with decision from Kafka pipeline
     mockFetch.mockResolvedValueOnce(
       makeResponse(200, {
         requestId: 'evt-test-001',
@@ -82,7 +82,7 @@ describe('SignalRiskAdapter', () => {
       }),
     );
 
-    const adapter = new SignalRiskAdapter(BASE_CONFIG);
+    const adapter = new SignalRiskAdapter({ ...BASE_CONFIG, maxPollAttempts: 2, pollIntervalMs: 10 });
     const event = {
       eventId: 'evt-test-001',
       merchantId: 'merchant-test-001',
@@ -93,8 +93,9 @@ describe('SignalRiskAdapter', () => {
       metadata: {},
     };
 
-    await adapter.submitEvent(event);
+    const result = await adapter.submitEvent(event);
 
+    // First call: POST to event-collector
     const [url, options] = mockFetch.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('http://localhost:3002/v1/events');
     expect(options.method).toBe('POST');
@@ -102,6 +103,44 @@ describe('SignalRiskAdapter', () => {
     const headers = options.headers as Record<string, string>;
     expect(headers['Authorization']).toBe(`Bearer ${BASE_CONFIG.apiKey}`);
     expect(headers['X-Merchant-ID']).toBe(BASE_CONFIG.merchantId);
+    expect(headers['X-SignalRisk-Test']).toBe('true');
+
+    // Verify payload maps deviceFingerprint → deviceId
+    const body = JSON.parse(options.body as string);
+    expect(body.events[0].deviceId).toBe('fp-abc');
+    expect(body.events[0].type).toBe('PAYMENT');
+
+    // Second call: GET decision from pipeline
+    const [pollUrl] = mockFetch.mock.calls[1] as [string, RequestInit];
+    expect(pollUrl).toBe('http://localhost:3009/v1/decisions/evt-test-001');
+
+    // Result should reflect the pipeline decision
+    expect(result.decision).toBe('BLOCK');
+    expect(result.riskScore).toBe(0.95);
+    expect(result.latencyMs).toBeGreaterThanOrEqual(0);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Test 3b: submitEvent returns default ALLOW on poll timeout
+  // ---------------------------------------------------------------------------
+  it('submitEvent returns default ALLOW when pipeline decision times out', async () => {
+    // POST /v1/events → 202
+    mockFetch.mockResolvedValueOnce(makeResponse(202, { status: 'accepted' }));
+    // Poll attempts → all 404 (decision not yet available)
+    mockFetch.mockResolvedValue(makeResponse(404));
+
+    const adapter = new SignalRiskAdapter({ ...BASE_CONFIG, maxPollAttempts: 2, pollIntervalMs: 10 });
+    const result = await adapter.submitEvent({
+      eventId: 'evt-timeout',
+      merchantId: 'merchant-test-001',
+      deviceFingerprint: 'fp-xyz',
+      userId: 'user-2',
+      metadata: {},
+    });
+
+    expect(result.decision).toBe('ALLOW');
+    expect(result.riskScore).toBe(0);
+    expect(result.signals?._timeout).toBe(1);
   });
 
   // ---------------------------------------------------------------------------
