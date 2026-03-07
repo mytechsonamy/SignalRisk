@@ -22,6 +22,6 @@ import { RedisModule } from '@signalrisk/redis-module';
     WsJwtGuard,
     DecisionProfiler,
   ],
-  exports: [DecisionGateway, DecisionProfiler, DecisionStoreService],
+  exports: [DecisionOrchestratorService, DecisionGateway, DecisionProfiler, DecisionStoreService],
 })
 export class DecisionModule {}

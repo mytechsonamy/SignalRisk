@@ -45,6 +45,16 @@ export default () => ({
     telcoIntelUrl: process.env.TELCO_INTEL_SERVICE_URL || process.env.TELCO_INTEL_URL || 'http://localhost:3007',
   },
 
+  kafka: {
+    brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(','),
+    clientId: process.env.KAFKA_CLIENT_ID || 'decision-service',
+    groupId: process.env.KAFKA_GROUP_ID || 'decision-service',
+    ssl: process.env.KAFKA_SSL === 'true',
+    saslMechanism: process.env.KAFKA_SASL_MECHANISM || undefined,
+    saslUsername: process.env.KAFKA_SASL_USERNAME || undefined,
+    saslPassword: process.env.KAFKA_SASL_PASSWORD || undefined,
+  },
+
   otel: {
     endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318/v1/traces',
   },
