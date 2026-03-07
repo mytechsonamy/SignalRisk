@@ -290,14 +290,49 @@ STREAM B: FraudTester
 
 ---
 
-## Kalan Isler — Sprint 25+
+## [DONE] Sprint 25 — FraudTester Real Pipeline + merchant_id UUID Fix
+
+**SDLC Sprinti:** 25 (COMPLETED)
+
+| Fix | Detay |
+|-----|-------|
+| decisions.merchant_id UUID→TEXT | FK dropped, RLS policy updated (no ::UUID cast) |
+| decisions.device_id UUID→TEXT | FK dropped, nullable |
+| decision-store INSERT | Removed ::uuid casts ($2, $3 plain TEXT) |
+| analytics JOIN | m.id::text = d.merchant_id |
+| SignalRiskAdapter rewrite | POST /v1/events → poll GET /v1/decisions/{eventId} |
+| Full pipeline verified | event-collector → Kafka → decision-service → PostgreSQL → GET API |
+
+---
+
+## [DONE] Sprint 26 — Case Pipeline E2E + Rate Limit + 28/28 Tests
+
+**SDLC Sprinti:** 26 (COMPLETED)
+
+| Fix | Detay |
+|-----|-------|
+| Case-service topic mismatch | 'decisions' → 'signalrisk.decisions' |
+| Case-service DB config | DB_HOST → DATABASE_HOST env var alignment |
+| cases table | 06_cases.sql — TEXT columns, RLS enabled |
+| Decision producer fields | 'outcome' → 'action', added entityId |
+| Decision controller → Kafka | POST /v1/decisions publishes to Kafka (forwardRef) |
+| deviceId in result | Attached in events-consumer for downstream entityId |
+| Rate limit config | RATE_LIMIT_MAX=150, TTL=10s window |
+| Multi-tenant test fix | case-service 200 accepted (RLS isolation), event-collector for auth tests |
+
+### Sonuc
+- **28/28 test pass, 0 fail, 0 skip** (all previously skipped tests now pass)
+
+---
+
+## Kalan Isler — Sprint 27+
 
 | Task | Aciklama |
 |------|----------|
 | CI/CD Docker | GitHub Actions self-hosted runner veya Docker-in-Docker ile e2e.yml gercek calissin |
-| Decision-service Kafka producer | decision-service'in kararları Kafka "decisions" topic'e yazmasi → case-service consume eder |
-| FraudTester gercek pipeline | fraud-tester → event-collector → Kafka → decision-service → sonuc geri donusu |
+| Case-service auth middleware | TenantMiddleware + JWT guard (currently no auth on case-service) |
 | Event-collector Kafka consumer lag | Consumer lag HTTP server'i bloke ediyor — ayri worker/thread gerekli |
+| FraudTester battle integration test | Real pipeline battle (blast → poll → case verify) |
 
 ---
 
@@ -329,7 +364,7 @@ Tum kriterler karsilanirsa: apps/fraud-tester/ → ayri repo, adapter npm paketi
 
 ---
 
-## Test Sayilari (Sprint 24 sonu)
+## Test Sayilari (Sprint 26 sonu)
 
 | Servis | Test Sayisi |
 |--------|-------------|
@@ -349,7 +384,7 @@ Tum kriterler karsilanirsa: apps/fraud-tester/ → ayri repo, adapter npm paketi
 | integration tests | 22 |
 | load test mock | 19 |
 | fraud-tester | 58 unit + 7 integration (Sprint 21 — GenericHttpAdapter +6) |
-| E2E (SKIP_DOCKER guard) | 28 (Docker stack gerektirir) |
+| E2E (SKIP_DOCKER guard) | 28/28 pass (Docker stack gerektirir) |
 | **TOPLAM** | **~1090+** |
 
 ---
