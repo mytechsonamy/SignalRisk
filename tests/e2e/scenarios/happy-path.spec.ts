@@ -13,7 +13,7 @@
  *   npx playwright test --config tests/e2e/playwright.config.real.ts happy-path
  */
 
-import { test, expect, type APIRequestContext } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import {
   AUTH_URL,
   EVENT_URL,
@@ -22,6 +22,7 @@ import {
   getMerchantToken,
   pollDecision,
   generateEventId,
+  ingestEvent,
 } from './helpers';
 
 // Re-export for reference — allows reading URLs in test output without helpers
@@ -29,49 +30,6 @@ export { AUTH_URL, EVENT_URL, DECISION_URL };
 
 const SKIP = process.env.SKIP_DOCKER === 'true';
 test.describe.configure({ mode: 'serial' });
-
-// ---------------------------------------------------------------------------
-// Internal helper: ingest a single event via the event-collector bulk wrapper
-// ---------------------------------------------------------------------------
-
-async function ingestEvent(
-  request: APIRequestContext,
-  token: string,
-  overrides: Partial<{
-    eventId: string;
-    deviceId: string;
-    sessionId: string;
-    merchantId: string;
-    type: string;
-    payload: Record<string, unknown>;
-    ipAddress: string;
-  }> = {},
-): Promise<{ status: number; body: unknown }> {
-  const response = await request.post(`${EVENT_URL}/v1/events`, {
-    headers: {
-      Authorization:  `Bearer ${token}`,
-      'X-Merchant-ID': overrides.merchantId ?? TEST_MERCHANT.merchantId,
-    },
-    data: {
-      events: [
-        {
-          merchantId: overrides.merchantId ?? TEST_MERCHANT.merchantId,
-          deviceId:   overrides.deviceId   ?? 'safe-device-xyz',
-          sessionId:  overrides.sessionId  ?? `sess-${Date.now()}`,
-          type:       overrides.type       ?? 'PAYMENT',
-          payload: overrides.payload ?? {
-            amount:   50,
-            currency: 'TRY',
-          },
-          ipAddress: overrides.ipAddress ?? '1.2.3.4',
-          eventId:   overrides.eventId,
-        },
-      ],
-    },
-  });
-
-  return { status: response.status(), body: await response.json().catch(() => null) };
-}
 
 // ---------------------------------------------------------------------------
 // Test suite
@@ -94,7 +52,7 @@ test.describe('Happy Path E2E', () => {
     const start = Date.now();
 
     // 1. Ingest the event
-    const { status: ingestStatus } = await ingestEvent(request, token, {
+    const { status: ingestStatus } = await ingestEvent(request, {
       eventId,
       deviceId: 'safe-device-xyz',
       payload: { amount: 50, currency: 'TRY' },
@@ -126,13 +84,13 @@ test.describe('Happy Path E2E', () => {
     const requestId = eventId;
 
     // First submission
-    const { status: first } = await ingestEvent(request, token, { eventId });
+    const { status: first } = await ingestEvent(request, { eventId });
     expect(first).toBe(202);
 
     const decision1 = await pollDecision(request, requestId, token);
 
     // Second submission — identical payload, same eventId
-    const { status: second } = await ingestEvent(request, token, { eventId });
+    const { status: second } = await ingestEvent(request, { eventId });
     // event-collector should accept it (202) or return a cached 200/202
     expect([200, 202]).toContain(second);
 
@@ -212,7 +170,7 @@ test.describe('Happy Path E2E', () => {
     const requestId = eventId;
 
     // Ingest event
-    const { status: ingestStatus } = await ingestEvent(request, token, {
+    const { status: ingestStatus } = await ingestEvent(request, {
       eventId,
       deviceId: 'own-merchant-device',
     });

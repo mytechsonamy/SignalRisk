@@ -13,7 +13,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { AUTH_URL, EVENT_URL, DECISION_URL, getMerchantToken, pollDecision, generateEventId } from './helpers';
+import { AUTH_URL, EVENT_URL, DECISION_URL, TEST_MERCHANT, getMerchantToken, pollDecision, generateEventId } from './helpers';
 
 const SKIP = process.env.SKIP_DOCKER === 'true';
 
@@ -36,7 +36,7 @@ test.describe('Performance Gate', () => {
       const start = Date.now();
       await request.post(`${EVENT_URL}/v1/events`, {
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${TEST_MERCHANT.apiKey}`,
           'X-Merchant-ID': 'merchant-001',
         },
         data: {
@@ -69,7 +69,7 @@ test.describe('Performance Gate', () => {
     for (let i = 0; i < 200; i++) {
       const res = await request.post(`${EVENT_URL}/v1/events`, {
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${TEST_MERCHANT.apiKey}`,
           'X-Merchant-ID': 'merchant-001',
         },
         data: {
@@ -99,7 +99,7 @@ test.describe('Performance Gate', () => {
     const start = Date.now();
     await request.post(`${EVENT_URL}/v1/events`, {
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${TEST_MERCHANT.apiKey}`,
         'X-Merchant-ID': 'merchant-001',
       },
       data: {

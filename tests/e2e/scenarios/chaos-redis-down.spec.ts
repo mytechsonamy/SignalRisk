@@ -126,7 +126,7 @@ test.describe('Chaos — Redis Down', () => {
     const adminToken = await getAdminToken(request);
 
     const beforeStatus = await probeStatus(
-      `${AUTH_URL}/v1/admin/merchants`,
+      `${AUTH_URL}/merchants`,
       { Authorization: `Bearer ${adminToken}` },
     );
     expect(beforeStatus).toBe(200);
@@ -138,7 +138,7 @@ test.describe('Chaos — Redis Down', () => {
 
     try {
       const afterStatus = await probeStatus(
-        `${AUTH_URL}/v1/admin/merchants`,
+        `${AUTH_URL}/merchants`,
         { Authorization: `Bearer ${adminToken}` },
       );
       // fail-closed: Redis unavailable → 503
@@ -175,7 +175,7 @@ test.describe('Chaos — Redis Down', () => {
       const eventId  = generateEventId();
       const response = await request.post(`${EVENT_URL}/v1/events`, {
         headers: {
-          Authorization:  `Bearer ${merchantToken}`,
+          Authorization:  `Bearer ${TEST_MERCHANT.apiKey}`,
           'X-Merchant-ID': TEST_MERCHANT.merchantId,
         },
         data: {
@@ -185,7 +185,7 @@ test.describe('Chaos — Redis Down', () => {
               deviceId:   `chaos-device-${Date.now()}`,
               sessionId:  `sess-chaos-${Date.now()}`,
               type:       'PAYMENT',
-              payload:    { amount: 10, currency: 'TRY' },
+              payload:    { amount: 10, currency: 'TRY', paymentMethod: 'credit_card' },
               eventId,
             },
           ],
@@ -221,7 +221,7 @@ test.describe('Chaos — Redis Down', () => {
 
     // Wait for the service to reconnect and return 200
     await waitForStatus(
-      `${AUTH_URL}/v1/admin/merchants`,
+      `${AUTH_URL}/merchants`,
       200,
       { Authorization: `Bearer ${adminToken}` },
       30_000,
@@ -230,7 +230,7 @@ test.describe('Chaos — Redis Down', () => {
 
     // Final assertion — should already pass due to waitForStatus
     const status = await probeStatus(
-      `${AUTH_URL}/v1/admin/merchants`,
+      `${AUTH_URL}/merchants`,
       { Authorization: `Bearer ${adminToken}` },
     );
     expect(status).toBe(200);
@@ -277,7 +277,7 @@ test.describe('Chaos — Redis Down', () => {
 
     // Final recovery check
     await waitForStatus(
-      `${AUTH_URL}/v1/admin/merchants`,
+      `${AUTH_URL}/merchants`,
       200,
       { Authorization: `Bearer ${adminToken}` },
       30_000,
@@ -285,7 +285,7 @@ test.describe('Chaos — Redis Down', () => {
     );
 
     const status = await probeStatus(
-      `${AUTH_URL}/v1/admin/merchants`,
+      `${AUTH_URL}/merchants`,
       { Authorization: `Bearer ${adminToken}` },
     );
     expect(status).toBe(200);

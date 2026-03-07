@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
@@ -23,9 +23,37 @@ const tracer = trace.getTracer('auth-service');
 const BCRYPT_ROUNDS = 12;
 
 @Injectable()
-export class MerchantsService {
+export class MerchantsService implements OnModuleInit {
+  private readonly logger = new Logger(MerchantsService.name);
   // In-memory store -- replace with database in production
   private merchants: Map<string, Merchant> = new Map();
+
+  async onModuleInit(): Promise<void> {
+    if (process.env.NODE_ENV === 'production') return;
+
+    const seeds = [
+      { id: 'merchant-001', name: 'Test Merchant', clientId: 'test-merchant-001', clientSecret: 'test-secret-001', roles: ['merchant'] },
+      { id: 'merchant-002', name: 'Test Merchant B', clientId: 'merchant-b', clientSecret: 'secret-b', roles: ['merchant'] },
+      { id: 'merchant-a-id', name: 'Merchant A', clientId: 'merchant-a', clientSecret: 'secret-a', roles: ['merchant'] },
+      { id: 'admin-001', name: 'Admin', clientId: 'admin', clientSecret: 'admin-secret', roles: ['admin'] },
+    ];
+
+    for (const s of seeds) {
+      const hash = await bcrypt.hash(s.clientSecret, BCRYPT_ROUNDS);
+      const now = new Date();
+      this.merchants.set(s.id, {
+        id: s.id,
+        name: s.name,
+        clientId: s.clientId,
+        clientSecretHash: hash,
+        roles: s.roles,
+        active: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    this.logger.log(`Seeded ${seeds.length} dev merchants`);
+  }
 
   findByClientId(clientId: string): Merchant | undefined {
     for (const merchant of this.merchants.values()) {

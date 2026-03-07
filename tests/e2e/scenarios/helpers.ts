@@ -6,6 +6,7 @@
  */
 
 import { execSync } from 'child_process';
+import * as crypto from 'crypto';
 import type { APIRequestContext } from '@playwright/test';
 
 // ---------------------------------------------------------------------------
@@ -26,8 +27,8 @@ export const TEST_MERCHANT = {
   clientId:   'test-merchant-001',
   clientSecret: 'test-secret-001',
   merchantId: 'merchant-001',
-  /** Valid sk_test_ API key seeded in the dev environment. */
-  apiKey: ('sk_test_' + 'a'.repeat(32)) as string,
+  /** Valid sk_test_ API key configured in docker-compose ALLOWED_API_KEYS. */
+  apiKey: 'sk_test_00000000000000000000000000000001',
 } as const;
 
 /** Admin account used for JWT-revoke and chaos tests. */
@@ -211,6 +212,50 @@ export async function pollDecision(
 }
 
 // ---------------------------------------------------------------------------
+// Event ingestion helper (uses API key, not JWT)
+// ---------------------------------------------------------------------------
+
+/**
+ * Ingest a single event via the event-collector using the API key.
+ * The event-collector validates API keys (sk_test_...), not JWTs.
+ */
+export async function ingestEvent(
+  request: APIRequestContext,
+  overrides: Partial<{
+    eventId: string;
+    deviceId: string;
+    sessionId: string;
+    merchantId: string;
+    type: string;
+    payload: Record<string, unknown>;
+    ipAddress: string;
+    apiKey: string;
+  }> = {},
+): Promise<{ status: number; body: unknown }> {
+  const response = await request.post(`${EVENT_URL}/v1/events`, {
+    headers: {
+      Authorization:  `Bearer ${overrides.apiKey ?? TEST_MERCHANT.apiKey}`,
+      'X-Merchant-ID': overrides.merchantId ?? TEST_MERCHANT.merchantId,
+    },
+    data: {
+      events: [
+        {
+          merchantId: overrides.merchantId ?? TEST_MERCHANT.merchantId,
+          deviceId:   overrides.deviceId   ?? 'safe-device-xyz',
+          sessionId:  overrides.sessionId  ?? `sess-${Date.now()}`,
+          type:       overrides.type       ?? 'PAYMENT',
+          payload:    overrides.payload    ?? { amount: 50, currency: 'TRY', paymentMethod: 'credit_card' },
+          ipAddress:  overrides.ipAddress  ?? '1.2.3.4',
+          eventId:    overrides.eventId,
+        },
+      ],
+    },
+  });
+
+  return { status: response.status(), body: await response.json().catch(() => null) };
+}
+
+// ---------------------------------------------------------------------------
 // Miscellaneous utilities
 // ---------------------------------------------------------------------------
 
@@ -219,7 +264,7 @@ export async function pollDecision(
  * and the decision-service requestId (idempotency key).
  */
 export function generateEventId(): string {
-  return `evt-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  return crypto.randomUUID();
 }
 
 /**

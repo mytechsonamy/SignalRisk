@@ -343,7 +343,26 @@ export class SignalFetcher {
     const baseUrl =
       this.config.get<string>('services.velocityUrl') ?? 'http://localhost:3004';
     const url = `${baseUrl}/v1/velocity/${encodeURIComponent(entityId)}?merchantId=${encodeURIComponent(merchantId)}`;
-    return fetchWithTimeout<VelocitySignal>(url);
+    const raw = await fetchWithTimeout<Record<string, unknown>>(url);
+    if (!raw) return null;
+
+    // Velocity-service returns { signals: { tx_count_1h, ... }, burst_detected }
+    // Map to VelocitySignal { dimensions: { txCount1h, ... }, burstDetected }
+    const signals = (raw as any).signals ?? (raw as any).dimensions ?? {};
+    return {
+      entityId: (raw as any).entityId ?? entityId,
+      merchantId: (raw as any).merchantId ?? merchantId,
+      dimensions: {
+        txCount1h:        signals.txCount1h        ?? signals.tx_count_1h        ?? 0,
+        txCount24h:       signals.txCount24h       ?? signals.tx_count_24h       ?? 0,
+        amountSum1h:      signals.amountSum1h      ?? signals.amount_sum_1h      ?? 0,
+        uniqueDevices24h: signals.uniqueDevices24h ?? signals.unique_devices_24h ?? 0,
+        uniqueIps24h:     signals.uniqueIps24h     ?? signals.unique_ips_24h     ?? 0,
+        uniqueSessions1h: signals.uniqueSessions1h ?? signals.unique_sessions_1h ?? 0,
+      },
+      burstDetected: (raw as any).burstDetected ?? (raw as any).burst_detected ?? false,
+      burstRatio:    (raw as any).burstRatio    ?? (raw as any).burst_ratio,
+    };
   }
 
   // -------------------------------------------------------------------------

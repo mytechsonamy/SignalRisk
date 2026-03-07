@@ -17,6 +17,7 @@
  */
 
 import { test, expect, type APIRequestContext } from '@playwright/test';
+import * as crypto from 'crypto';
 import {
   EVENT_URL,
   CASE_URL,
@@ -52,9 +53,9 @@ function buildEventPayload(
         deviceId,
         sessionId: `sess-blast-${deviceId}-${index}`,
         type:      'PAYMENT',
-        payload:   { amount: 200, currency: 'TRY' },
+        payload:   { amount: 200, currency: 'TRY', paymentMethod: 'credit_card' },
         ipAddress: '5.6.7.8',
-        eventId:   `${deviceId}-evt-${index}`,
+        eventId:   crypto.randomUUID(),
       },
     ],
   };
@@ -62,17 +63,17 @@ function buildEventPayload(
 
 /**
  * Ingest a single event for the blast device and return the HTTP status.
- * Uses the Bearer token approach (JWT issued by auth-service).
+ * Uses the API key approach (event-collector validates sk_test_ keys).
  */
 async function blastEvent(
   request: APIRequestContext,
-  token: string,
+  _token: string,
   deviceId: string,
   index: number,
 ): Promise<number> {
   const response = await request.post(`${EVENT_URL}/v1/events`, {
     headers: {
-      Authorization:  `Bearer ${token}`,
+      Authorization:  `Bearer ${TEST_MERCHANT.apiKey}`,
       'X-Merchant-ID': TEST_MERCHANT.merchantId,
     },
     data: buildEventPayload(deviceId, index),
@@ -240,7 +241,7 @@ test.describe('Fraud Blast E2E', () => {
     const cleanEventId = generateEventId();
     const ingestResponse = await request.post(`${EVENT_URL}/v1/events`, {
       headers: {
-        Authorization:  `Bearer ${token}`,
+        Authorization:  `Bearer ${TEST_MERCHANT.apiKey}`,
         'X-Merchant-ID': TEST_MERCHANT.merchantId,
       },
       data: {
@@ -250,7 +251,7 @@ test.describe('Fraud Blast E2E', () => {
             deviceId:   cleanDeviceId,
             sessionId:  `sess-clean-${Date.now()}`,
             type:       'PAYMENT',
-            payload:    { amount: 30, currency: 'TRY' },
+            payload:    { amount: 30, currency: 'TRY', paymentMethod: 'credit_card' },
             ipAddress:  '9.10.11.12',
             eventId:    cleanEventId,
           },

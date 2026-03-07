@@ -16,6 +16,7 @@ import {
   EVENT_URL,
   CASE_URL,
   DECISION_URL,
+  TEST_MERCHANT,
   getMerchantTokenFor,
   getAdminToken,
 } from './helpers';
@@ -112,18 +113,21 @@ test.describe('Multi-Tenant Isolation', () => {
     // First, create a known event for Merchant A to ensure there are decisions to query
     const eventResp = await request.post(`${EVENT_URL}/v1/events`, {
       headers: {
-        Authorization: `Bearer ${tokenA}`,
+        Authorization: `Bearer ${TEST_MERCHANT.apiKey}`,
         'X-Merchant-ID': MERCHANT_A.merchantId,
       },
       data: {
-        eventType: 'PAYMENT',
-        entityId: `cross-query-entity-${Date.now()}`,
-        merchantId: MERCHANT_A.merchantId,
-        amount: 5.00,
-        currency: 'USD',
+        events: [{
+          merchantId: MERCHANT_A.merchantId,
+          deviceId: `cross-query-device-${Date.now()}`,
+          sessionId: `sess-cross-${Date.now()}`,
+          type: 'PAYMENT',
+          payload: { amount: 5.00, currency: 'USD' },
+          ipAddress: '1.2.3.4',
+        }],
       },
     });
-    expect(eventResp.status()).toBe(201);
+    expect(eventResp.status()).toBe(202);
 
     // Query Merchant A's decisions using Merchant B's token
     const decisionResp = await request.get(
