@@ -349,7 +349,18 @@ STREAM B: FraudTester
 
 ---
 
-## Kalan Isler — Sprint 29+
+## [DONE] Sprint 29 — Chaos Kafka Down E2E
+
+| Task | Durum |
+|------|-------|
+| T1: Kafka chaos test suite | DONE — 4 test: graceful degradation, auth unaffected, decision sync works, recovery |
+| T2: Playwright config guncelle | DONE — chaos-kafka added to chaos project |
+
+**Sonuc:** Kafka down senaryosunda sistem graceful degrade ediyor. Auth unaffected, decision sync calisiyor, recovery basarili. E2E 40/40.
+
+---
+
+## Kalan Isler — Sprint 30+
 
 | Task | Aciklama |
 |------|----------|
@@ -387,7 +398,7 @@ Tum kriterler karsilanirsa: apps/fraud-tester/ → ayri repo, adapter npm paketi
 
 ---
 
-## Test Sayilari (Sprint 28 sonu)
+## Test Sayilari (Sprint 29 sonu)
 
 | Servis | Test Sayisi |
 |--------|-------------|
@@ -407,7 +418,7 @@ Tum kriterler karsilanirsa: apps/fraud-tester/ → ayri repo, adapter npm paketi
 | integration tests | 22 |
 | load test mock | 19 |
 | fraud-tester | 58 unit + 7 integration (Sprint 21 — GenericHttpAdapter +6) |
-| E2E (SKIP_DOCKER guard) | 36/36 pass (Docker stack gerektirir) |
+| E2E (SKIP_DOCKER guard) | 40/40 pass (Docker stack gerektirir) |
 | **TOPLAM** | **~1090+** |
 
 ---
@@ -417,7 +428,7 @@ Tum kriterler karsilanirsa: apps/fraud-tester/ → ayri repo, adapter npm paketi
 ```
 docker-compose.full.yml                  18 servis full stack
 tests/e2e/playwright.config.real.ts      Gercek servis Playwright config
-tests/e2e/scenarios/                     7 senaryo (tumu test.fixme)
+tests/e2e/scenarios/                     8 senaryo (tumu test.fixme)
 tests/e2e/scenarios/helpers.ts           Shared test utilities
 .github/workflows/e2e.yml                CI/CD pipeline
 

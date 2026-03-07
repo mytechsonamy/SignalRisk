@@ -26,7 +26,7 @@ export default defineConfig({
     // Chaos tests last — they stop/start Redis, disrupting other services
     {
       name: 'chaos',
-      testMatch: /chaos/,
+      testMatch: /chaos-redis|chaos-kafka/,
       fullyParallel: false,
       dependencies: ['e2e-heavy'],
     },
