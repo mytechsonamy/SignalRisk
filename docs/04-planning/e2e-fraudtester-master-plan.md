@@ -325,12 +325,23 @@ STREAM B: FraudTester
 
 ---
 
-## Kalan Isler — Sprint 27+
+## [DONE] Sprint 27 — Case-service TenantGuard
+
+| Task | Durum |
+|------|-------|
+| T1: TenantGuard JWT guard olustur | DONE — `apps/case-service/src/guards/tenant.guard.ts` |
+| T2: CaseController'a @UseGuards(TenantGuard) ekle | DONE — controller-level guard |
+| T3: Multi-tenant E2E testleri guncelle | DONE — 403 (cross-tenant), 200 (admin) beklentileri |
+
+**Sonuc:** Case-service artik JWT-based tenant auth yapiyor. Cross-tenant erisim → 403, admin role → bypass, eksik JWT → 401. E2E 28/28.
+
+---
+
+## Kalan Isler — Sprint 28+
 
 | Task | Aciklama |
 |------|----------|
 | CI/CD Docker | GitHub Actions self-hosted runner veya Docker-in-Docker ile e2e.yml gercek calissin |
-| Case-service auth middleware | TenantMiddleware + JWT guard (currently no auth on case-service) |
 | Event-collector Kafka consumer lag | Consumer lag HTTP server'i bloke ediyor — ayri worker/thread gerekli |
 | FraudTester battle integration test | Real pipeline battle (blast → poll → case verify) |
 

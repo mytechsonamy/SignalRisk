@@ -56,16 +56,9 @@ test.describe('Multi-Tenant Isolation', () => {
       },
     });
 
-    // Case-service has no tenant middleware yet — RLS + merchantId query param
-    // provides data isolation. Accept 200 with empty results (RLS isolation),
-    // 403 (tenant guard), 401 (auth rejection), or 500 (guard error).
-    if (response.status() === 200) {
-      const body = await response.json() as { cases?: unknown[]; total?: number };
-      // 200 is acceptable if the response shows no cross-tenant data
-      expect(body.total ?? (body.cases?.length ?? 0)).toBe(0);
-    } else {
-      expect([401, 403, 500]).toContain(response.status());
-    }
+    // TenantGuard validates JWT merchant_id against X-Merchant-ID header.
+    // Mismatch → 403 Forbidden.
+    expect(response.status()).toBe(403);
   });
 
   /**
@@ -188,8 +181,8 @@ test.describe('Multi-Tenant Isolation', () => {
         'X-Merchant-ID': MERCHANT_A.merchantId,
       },
     });
-    // 200 = admin access granted, 500 = case-service doesn't handle admin role yet
-    expect([200, 500]).toContain(respA.status());
+    // TenantGuard allows admin role — 200 expected
+    expect(respA.status()).toBe(200);
 
     // Admin reads Merchant B cases
     const respB = await request.get(`${CASE_URL}/v1/cases`, {
@@ -198,7 +191,7 @@ test.describe('Multi-Tenant Isolation', () => {
         'X-Merchant-ID': MERCHANT_B.merchantId,
       },
     });
-    expect([200, 500]).toContain(respB.status());
+    expect(respB.status()).toBe(200);
   });
 
   /**

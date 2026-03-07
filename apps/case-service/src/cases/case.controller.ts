@@ -10,6 +10,7 @@ import {
   ParseIntPipe,
   DefaultValuePipe,
   Logger,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { CaseService } from './case.service';
@@ -17,8 +18,10 @@ import { CaseExportService } from './case-export.service';
 import { UpdateCaseDto } from './dto/update-case.dto';
 import { BulkActionDto } from './dto/bulk-action.dto';
 import { CasePriority, CaseStatus } from './case.types';
+import { TenantGuard } from '../guards/tenant.guard';
 
 @ApiTags('cases')
+@UseGuards(TenantGuard)
 @Controller('v1/cases')
 export class CaseController {
   private readonly logger = new Logger(CaseController.name);
