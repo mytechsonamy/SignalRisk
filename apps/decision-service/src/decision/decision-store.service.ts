@@ -59,8 +59,8 @@ export class DecisionStoreService {
 
       await client.query(
         `INSERT INTO decisions
-           (request_id, merchant_id, device_id, risk_score, decision, risk_factors, signals, latency_ms, created_at)
-         VALUES ($1, $2::uuid, COALESCE($3::uuid, uuid_generate_v4()), $4, $5::decision_outcome, $6::jsonb, $7::jsonb, $8, $9)
+           (request_id, merchant_id, device_id, risk_score, decision, risk_factors, signals, latency_ms, created_at, is_test)
+         VALUES ($1, $2::uuid, COALESCE($3::uuid, uuid_generate_v4()), $4, $5::decision_outcome, $6::jsonb, $7::jsonb, $8, $9, $10)
          ON CONFLICT ON CONSTRAINT uq_decisions_merchant_request DO NOTHING`,
         [
           result.requestId,
@@ -72,6 +72,7 @@ export class DecisionStoreService {
           JSON.stringify((result as any).signals || {}),
           result.latencyMs,
           result.createdAt,
+          result.isTest ?? false,
         ],
       );
 

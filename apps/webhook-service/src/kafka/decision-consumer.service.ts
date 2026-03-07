@@ -113,6 +113,14 @@ export class DecisionConsumerService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
+    // Skip test events — never send webhooks for fraud-tester traffic
+    const isTest = message.headers?.['is-test']?.toString() === 'true'
+      || (decision as any).isTest === true;
+    if (isTest) {
+      this.logger.debug(`Skipping webhook for test event (requestId=${decision.requestId})`);
+      return;
+    }
+
     // Only process BLOCK or REVIEW outcomes
     if (decision.outcome !== 'BLOCK' && decision.outcome !== 'REVIEW') {
       this.logger.debug(

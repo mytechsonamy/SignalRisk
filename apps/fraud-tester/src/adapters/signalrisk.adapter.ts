@@ -44,6 +44,7 @@ export class SignalRiskAdapter implements IFraudSystemAdapter {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${this.apiKey}`,
       'X-Merchant-ID': this.merchantId,
+      'X-SignalRisk-Test': 'true',
     };
   }
 

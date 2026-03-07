@@ -20,6 +20,8 @@
 12. [Observability](#12-observability)
 13. [Performance & SLAs](#13-performance--slas)
 14. [Development Setup](#14-development-setup)
+15. [FraudTester Framework](#15-fraudtester-framework)
+16. [Test Isolation](#16-test-isolation)
 
 ---
 
@@ -123,6 +125,7 @@ SignalRisk is a real-time fraud decision engine for payment and carrier billing 
 | webhook-service | 3011 | Signed webhook delivery, retry queue, DLQ |
 | graph-intel-service | 3012 | Neo4j entity relationship analysis, fraud ring detection |
 | dashboard | 5173 | React analyst dashboard (development server) |
+| fraud-tester | 3020 | Adversarial fraud testing, scenario library, battle arena |
 
 All services are NestJS on Node.js 20. All expose `/health` (liveness) and `/health/ready` (readiness) endpoints.
 
@@ -148,7 +151,7 @@ All services are NestJS on Node.js 20. All expose `/health` (liveness) and `/hea
 
 | Topic | Producer | Consumer |
 |-------|----------|---------|
-| `signalrisk.events.raw` | event-collector | decision-service |
+| `signalrisk.events.raw` | event-collector | decision-service | Note: carries `is-test` header for test traffic |
 | `signalrisk.decisions` | decision-service | case-service, webhook-service |
 | `signalrisk.events.dlq` | event-collector (retry exhausted) | ops/monitoring |
 | `signalrisk.events.dlq.exhausted` | event-collector (permanent fail) | ops |
@@ -596,6 +599,127 @@ cd tests/load && k6 run full-stack.js
 - URL: `http://localhost:5173`
 - Admin: `admin@signalrisk.com` / `password`
 - Analyst: `analyst@signalrisk.com` / `password`
+
+---
+
+## 15. FraudTester Framework
+
+FraudTester is an integrated adversarial testing framework for validating SignalRisk's detection capabilities.
+
+### Architecture
+
+```
+┌──────────────────────────┐
+│   Dashboard (Battle Arena)│
+│   Socket.io client        │
+└───────────┬──────────────┘
+            │ WebSocket
+┌───────────▼──────────────┐
+│   fraud-tester :3020      │
+│                           │
+│   ┌─────────────────────┐ │
+│   │ FraudSimulationAgent│ │     ┌───────────────────┐
+│   │ AdversarialAgent    │─┼────►│ IFraudSystemAdapter│
+│   │ ChaosAgent          │ │     │  ├ SignalRiskAdapter│
+│   └─────────────────────┘ │     │  ├ GenericHttpAdapter│
+│                           │     │  └ MockAdapter      │
+│   ┌─────────────────────┐ │     └───────────────────┘
+│   │ ScenarioRunner      │ │              │
+│   │ DetectionReporter   │ │     ┌────────▼──────────┐
+│   └─────────────────────┘ │     │ event-collector    │
+└──────────────────────────┘     │ (X-SignalRisk-Test) │
+                                  └────────────────────┘
+```
+
+### Adapter Interface (FROZEN)
+
+```typescript
+interface IFraudSystemAdapter {
+  name: string;
+  submitEvent(event: FraudTestEvent): Promise<FraudDecision>;
+  getDecision(eventId: string): Promise<FraudDecision>;
+  reset(): Promise<void>;
+}
+```
+
+The adapter interface is frozen — changes require an E7 impact assessment.
+
+### Scenario Categories
+
+| Category | Scenarios | Expected Outcome |
+|----------|-----------|-----------------|
+| Device | Device Farm, Emulator Spoof | BLOCK (risk > 0.8) |
+| Velocity | Velocity Evasion | REVIEW/BLOCK |
+| Bot | Bot Checkout | BLOCK |
+| Identity | SIM Swap | REVIEW/BLOCK |
+| Adversarial | Emulator Bypass, Slow Fraud, Bot Evasion | Tests detection limits |
+
+### Agents
+
+| Agent | Purpose | Metric |
+|-------|---------|--------|
+| FraudSimulationAgent | Standard fraud scenarios | Detection rate, TPR |
+| AdversarialAgent | Bypass detection | Evasion rate (inverse) |
+| ChaosAgent | System resilience | Recovery time, fail-closed |
+
+---
+
+## 16. Test Isolation
+
+FraudTester traffic is isolated from production data using a header-based flag that propagates through the entire pipeline.
+
+### Flow
+
+```
+fraud-tester                     event-collector              Kafka
+  │                                    │                        │
+  │ POST /v1/events                    │                        │
+  │ X-SignalRisk-Test: true            │                        │
+  │───────────────────────────────────►│                        │
+  │                                    │ Kafka header:          │
+  │                                    │ is-test: "true"        │
+  │                                    │───────────────────────►│
+  │                                    │                        │
+  │                              velocity-service         decision-service
+  │                                    │                        │
+  │                              Redis keys prefixed      is_test=true
+  │                              with "test:"             in decisions table
+  │                                                             │
+  │                                                       webhook-service
+  │                                                             │
+  │                                                       SKIPPED (no webhook)
+```
+
+### Isolation Points
+
+| Layer | Mechanism | Effect |
+|-------|-----------|--------|
+| HTTP | `X-SignalRisk-Test: true` header | Signals test traffic at ingestion |
+| Kafka | `is-test: "true"` message header | Propagates flag to all consumers |
+| Velocity (Redis) | `test:{merchantId}` key prefix | Separate counter namespace |
+| Decisions (PostgreSQL) | `is_test BOOLEAN` column | Permanent audit trail |
+| Analytics | `WHERE is_test = false` | Test data excluded from all metrics |
+| Webhooks | Skip delivery when `is-test` | No false alerts to merchants |
+
+### Database Migration
+
+```sql
+-- 005_test_isolation.sql
+ALTER TABLE decisions ADD COLUMN is_test BOOLEAN NOT NULL DEFAULT false;
+CREATE INDEX idx_decisions_is_test ON decisions(is_test) WHERE is_test = true;
+```
+
+### Configuration
+
+No configuration needed. The `X-SignalRisk-Test` header is automatically set by the FraudTester SignalRisk adapter. Manual test traffic can also use this header:
+
+```bash
+curl -X POST http://localhost:3002/v1/events \
+  -H "Authorization: Bearer sk_test_..." \
+  -H "X-SignalRisk-Test: true" \
+  -H "Content-Type: application/json" \
+  -d '{"events": [...]}'
+```
 
 ---
 

@@ -29,4 +29,5 @@ export interface DecisionResult {
   latencyMs: number;
   cached: boolean;        // true if served from idempotency cache
   createdAt: Date;
+  isTest?: boolean;       // true for events sent with X-SignalRisk-Test header
 }

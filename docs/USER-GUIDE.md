@@ -15,8 +15,11 @@
 7. [Live Feed Page](#7-live-feed-page)
 8. [Admin Page](#8-admin-page)
 9. [Settings Page](#9-settings-page)
-10. [Roles & Permissions](#10-roles--permissions)
-11. [Keyboard Shortcuts & Tips](#11-keyboard-shortcuts--tips)
+10. [FraudTester — Battle Arena](#10-fraudtester--battle-arena)
+11. [FraudTester — Scenario Library](#11-fraudtester--scenario-library)
+12. [FraudTester — Detection Reports](#12-fraudtester--detection-reports)
+13. [Roles & Permissions](#13-roles--permissions)
+14. [Keyboard Shortcuts & Tips](#14-keyboard-shortcuts--tips)
 
 ---
 
@@ -321,7 +324,114 @@ If `localStorage` is unavailable (private browsing, storage quota), a red **Sett
 
 ---
 
-## 10. Roles & Permissions
+## 10. FraudTester -- Battle Arena
+
+**Path:** `/fraud-tester/battle-arena`
+
+The Battle Arena is the primary interface for adversarial testing. It lets you launch simulated fraud attacks against the detection engine and observe results in real time.
+
+### Layout
+
+The page is divided into three panels:
+
+- **Left: Attack Team** -- shows the active agents (Fraud Simulation, Adversarial, Chaos) and which scenarios are running
+- **Center: Detection Score** -- real-time detection gauge, TPR/FPR metrics, average latency, and a scrolling live feed of attack results
+- **Right: Configuration** -- battle settings (duration, intensity, scenario selection)
+
+### Starting a Battle
+
+1. Select scenarios from the Configuration panel (right side)
+2. Adjust intensity (low/medium/high) and duration
+3. Click **Start Battle** in the header or configuration panel
+4. Watch real-time results in the center panel
+
+Each attack result shows:
+- Scenario name
+- Decision outcome (BLOCK / REVIEW / ALLOW)
+- Risk score
+- Latency in milliseconds
+
+Results are colour-coded: red for detected (BLOCK), amber for REVIEW, green for missed (ALLOW).
+
+### Test Isolation
+
+All Battle Arena traffic is automatically marked with the `X-SignalRisk-Test: true` header. This means:
+- Test results are excluded from production analytics and KPI dashboards
+- Velocity counters are namespaced separately in Redis
+- No webhooks are triggered for test events
+- Test decisions are stored with `is_test = true` in the database
+
+You can safely run battles against production infrastructure without affecting live metrics or alerting.
+
+### Mock Mode
+
+If the fraud-tester backend (port 3020) is not running, the Battle Arena automatically falls back to client-side mock mode. Mock mode generates realistic random results for UI demonstration purposes.
+
+---
+
+## 11. FraudTester -- Scenario Library
+
+**Path:** `/fraud-tester/scenarios`
+
+The Scenario Library displays all available fraud test scenarios organised by category.
+
+### Categories
+
+| Category | Scenarios |
+|----------|-----------|
+| Device | Device Farm, Emulator Spoof |
+| Velocity | Velocity Evasion |
+| Bot | Bot Checkout |
+| Identity | SIM Swap |
+| Adversarial | Emulator Bypass, Slow Fraud, Bot Evasion |
+
+Each scenario card shows:
+- Category badge (colour-coded)
+- Description of the attack pattern
+- Number of events generated
+- Expected detection outcome
+- Historical detection rate (if previously run)
+
+### Running a Single Scenario
+
+Click **Run** on any scenario card to execute it independently outside of the Battle Arena. Results appear in the Detection Reports page.
+
+---
+
+## 12. FraudTester -- Detection Reports
+
+**Path:** `/fraud-tester/reports`
+
+The Detection Reports page shows historical battle results and detection performance trends.
+
+### Battle List
+
+A table of all completed battles showing:
+- Battle ID and timestamp
+- Duration and event count
+- Overall detection rate
+- TPR (True Positive Rate) and FPR (False Positive Rate)
+- Average latency
+
+Click any row to see the detailed report.
+
+### Detailed Report
+
+The detailed view includes:
+- **KPI Summary** -- TPR, FPR, average latency, scenarios run
+- **Per-Scenario Breakdown** -- detection rate, missed events, and average latency for each scenario
+- **Trend Chart** -- comparison of detection rates across the last 5 battles
+
+### Interpreting Results
+
+- **TPR > 85%** is the target for production readiness
+- **FPR < 5%** ensures legitimate users are not blocked
+- Rising FPR may indicate overly aggressive rules that need weight adjustment
+- Falling TPR on adversarial scenarios highlights detection gaps to address
+
+---
+
+## 13. Roles & Permissions
 
 | Feature | Admin | Analyst | Merchant |
 |---------|-------|---------|----------|
@@ -335,10 +445,11 @@ If `localStorage` is unavailable (private browsing, storage quota), a red **Sett
 | Live Feed | Yes | Yes | No |
 | Admin panel | Yes | No | No |
 | Settings | Yes | Yes | Yes |
+| FraudTester — Battle Arena | Yes | Yes | No |
 
 ---
 
-## 11. Keyboard Shortcuts & Tips
+## 14. Keyboard Shortcuts & Tips
 
 ### Closing the Case Detail Panel
 
@@ -366,6 +477,13 @@ If the Overview KPI cards show a yellow **Stale** badge, the API call failed. Th
 - Only set weight to **1.0** for rules with extremely high precision (confirmed zero false positives)
 - Set weight to **0.1** (minimum) rather than deleting rules — this preserves history
 - Deactivate rules before deleting to observe the impact on decision distribution first
+
+### FraudTester Tips
+
+- Use **low intensity** for initial rule validation, **high intensity** for stress testing
+- Run adversarial scenarios after rule changes to verify detection is not degraded
+- Compare battle reports over time to track detection improvement
+- All test data is automatically isolated from production — no cleanup needed
 
 ---
 

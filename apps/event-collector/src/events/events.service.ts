@@ -45,7 +45,7 @@ export class EventsService {
    * Ingest a batch of events: validate each against its type-specific schema,
    * produce valid ones to the raw topic, and route invalid ones to the DLQ.
    */
-  async ingest(events: CreateEventDto[]): Promise<IngestResult> {
+  async ingest(events: CreateEventDto[], isTest = false): Promise<IngestResult> {
     const validPayloads: KafkaMessagePayload[] = [];
     const invalidEvents: Array<{
       event: CreateEventDto;
@@ -89,6 +89,7 @@ export class EventsService {
             'merchant-id': event.merchantId,
             'event-type': event.type,
             'schema-version': String(this.validator.getSchemaVersion()),
+            ...(isTest ? { 'is-test': 'true' } : {}),
           },
         };
 

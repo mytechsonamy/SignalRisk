@@ -47,6 +47,7 @@ export class EventsController {
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
   async ingestEvents(
     @Headers('authorization') authHeader: string | undefined,
+    @Headers('x-signalrisk-test') testHeader: string | undefined,
     @Body() body: { events: CreateEventDto[] },
   ): Promise<{ status: string; accepted: number; rejected: number; results: IngestResult['results'] }> {
     // --- API Key validation ---
@@ -64,8 +65,11 @@ export class EventsController {
       );
     }
 
+    // --- Test isolation flag ---
+    const isTest = testHeader?.toLowerCase() === 'true';
+
     // --- Ingest ---
-    const result = await this.eventsService.ingest(events);
+    const result = await this.eventsService.ingest(events, isTest);
 
     return {
       status: 'accepted',

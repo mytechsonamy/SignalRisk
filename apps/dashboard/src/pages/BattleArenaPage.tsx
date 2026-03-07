@@ -290,7 +290,7 @@ function ConfigPanel() {
                   checked={config.enabledScenarios.includes(name)}
                   onChange={() => toggleScenario(name)}
                   disabled={isRunning}
-                  className="rounded border-surface-border accent-primary disabled:opacity-50"
+                  className="rounded border-surface-border accent-brand-primary disabled:opacity-50"
                 />
                 <span className="text-xs text-text-primary">{name}</span>
               </label>
@@ -303,7 +303,7 @@ function ConfigPanel() {
           className={`w-full rounded-md px-4 py-2 text-sm font-semibold transition-colors ${
             isRunning
               ? 'bg-red-600 hover:bg-red-700 text-white'
-              : 'bg-primary hover:bg-primary-hover text-white'
+              : 'bg-brand-primary hover:bg-brand-primary/90 text-white'
           }`}
         >
           {isRunning ? 'Stop' : 'Start Battle'}
@@ -331,7 +331,7 @@ export default function BattleArenaPage() {
           className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition-colors ${
             isRunning
               ? 'bg-red-600 hover:bg-red-700 text-white'
-              : 'bg-primary hover:bg-primary-hover text-white'
+              : 'bg-brand-primary hover:bg-brand-primary/90 text-white'
           }`}
         >
           {isRunning ? (

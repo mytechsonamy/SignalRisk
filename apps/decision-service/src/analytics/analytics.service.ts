@@ -63,7 +63,7 @@ export class AnalyticsService {
          COUNT(*) FILTER (WHERE decision = 'REVIEW') AS review,
          COUNT(*) FILTER (WHERE decision = 'BLOCK')  AS block
        FROM decisions
-       WHERE created_at >= NOW() - make_interval(days => $1)
+       WHERE created_at >= NOW() - make_interval(days => $1) AND is_test = false
        GROUP BY 1
        ORDER BY 1`,
       [days],
@@ -83,7 +83,7 @@ export class AnalyticsService {
          date_trunc('hour', created_at) AS hour,
          COUNT(*) AS events
        FROM decisions
-       WHERE created_at >= NOW() - INTERVAL '24 hours'
+       WHERE created_at >= NOW() - INTERVAL '24 hours' AND is_test = false
        GROUP BY 1
        ORDER BY 1`,
     );
@@ -100,7 +100,7 @@ export class AnalyticsService {
          width_bucket(risk_score, 0, 100, 10) AS bucket,
          COUNT(*) AS count
        FROM decisions
-       WHERE created_at >= NOW() - INTERVAL '7 days'
+       WHERE created_at >= NOW() - INTERVAL '7 days' AND is_test = false
        GROUP BY 1
        ORDER BY 1`,
     );
@@ -134,7 +134,7 @@ export class AnalyticsService {
          ROUND(COUNT(*) FILTER (WHERE d.decision = 'BLOCK')::numeric / GREATEST(COUNT(*), 1), 3)::text AS block_rate
        FROM decisions d
        LEFT JOIN merchants m ON m.id = d.merchant_id
-       WHERE d.created_at >= NOW() - INTERVAL '7 days'
+       WHERE d.created_at >= NOW() - INTERVAL '7 days' AND d.is_test = false
        GROUP BY d.merchant_id, m.name
        ORDER BY event_volume DESC
        LIMIT 50`,
@@ -164,7 +164,7 @@ export class AnalyticsService {
          COALESCE(ROUND(AVG(latency_ms)), 0)::text AS avg_latency,
          GREATEST(EXTRACT(EPOCH FROM (MAX(created_at) - MIN(created_at))) / 3600, 1)::text AS hours_span
        FROM decisions
-       WHERE created_at >= NOW() - INTERVAL '24 hours'`,
+       WHERE created_at >= NOW() - INTERVAL '24 hours' AND is_test = false`,
     );
 
     const r = rows[0];
@@ -192,7 +192,7 @@ export class AnalyticsService {
          COUNT(*) FILTER (WHERE decision = 'REVIEW') AS review,
          COUNT(*) FILTER (WHERE decision = 'BLOCK')  AS block
        FROM decisions
-       WHERE created_at >= NOW() - INTERVAL '60 minutes'
+       WHERE created_at >= NOW() - INTERVAL '60 minutes' AND is_test = false
        GROUP BY 1
        ORDER BY 1`,
     );

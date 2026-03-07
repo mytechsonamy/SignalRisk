@@ -231,3 +231,77 @@ This document specifies requirements for **backend service improvements and dash
 - Persistent DLQ consumer for `signalrisk.events.dlq.exhausted`
 - Settings backend API
 - WebSocket upgrade for KPI dashboard
+
+---
+
+## P5 — Test Isolation (FraudTester) [IMPLEMENTED]
+
+### P5.1 — X-SignalRisk-Test Header Flag
+
+FraudTester and manual test traffic must be isolated from production data. The `X-SignalRisk-Test: true` HTTP header marks traffic as test.
+
+**Pipeline propagation:**
+1. **event-collector** extracts `X-SignalRisk-Test` header from HTTP request
+2. Adds `is-test: "true"` to Kafka message headers on `signalrisk.events.raw`
+3. All downstream consumers read this Kafka header to determine test status
+
+**AC:**
+- AC1: `X-SignalRisk-Test: true` header → `is-test` Kafka header set to `"true"`
+- AC2: Missing or false header → no `is-test` Kafka header
+- AC3: Header check is case-insensitive (`True`, `TRUE`, `true` all accepted)
+
+### P5.2 — Velocity Redis Key Isolation
+
+Test events must not pollute production velocity counters.
+
+**Mechanism:** Velocity consumer prefixes `merchantId` with `test:` when `is-test` Kafka header is `"true"`. All Redis keys automatically namespaced (e.g. `test:{merchantId}:vel:tx:{entityId}`).
+
+**AC:**
+- AC1: Test event → Redis keys prefixed with `test:`
+- AC2: Production event → Redis keys unchanged (no prefix)
+- AC3: Test velocity counters do not affect production velocity queries
+
+### P5.3 — Decision Store is_test Column
+
+Test decisions are permanently marked in PostgreSQL.
+
+**Migration:** `005_test_isolation.sql`
+```sql
+ALTER TABLE decisions ADD COLUMN is_test BOOLEAN NOT NULL DEFAULT false;
+CREATE INDEX idx_decisions_is_test ON decisions(is_test) WHERE is_test = true;
+```
+
+**AC:**
+- AC1: Test decisions stored with `is_test = true`
+- AC2: Production decisions stored with `is_test = false` (default)
+- AC3: Partial index only covers test rows (storage efficient)
+
+### P5.4 — Analytics Exclusion
+
+All analytics queries filter out test data by default.
+
+**Affected queries:** getTrends, getVelocity, getRiskBuckets, getMerchantStats, getKpi, getMinuteTrend — all append `AND is_test = false` to WHERE clause.
+
+**AC:**
+- AC1: Dashboard KPI metrics exclude test decisions
+- AC2: Analytics charts exclude test decisions
+- AC3: Merchant stats exclude test decisions
+
+### P5.5 — Webhook Suppression
+
+No webhooks are delivered for test events.
+
+**Mechanism:** Webhook consumer checks `is-test` Kafka header and `isTest` field in decision message. If either is `true`, webhook delivery is skipped.
+
+**AC:**
+- AC1: Test decision → no webhook delivered
+- AC2: Production BLOCK/REVIEW decision → webhook delivered normally
+- AC3: Skip is logged at DEBUG level for auditability
+
+### P5.6 — FraudTester Adapter Auto-Marking
+
+The SignalRisk adapter in fraud-tester automatically sets `X-SignalRisk-Test: true` on all requests.
+
+**AC:**
+- AC1: All events submitted by SignalRiskAdapter include `X-SignalRisk-Test: true` header
+- AC2: Header is set in `defaultHeaders` — applies to all API calls (events and decisions)

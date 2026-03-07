@@ -221,13 +221,54 @@ STREAM B: FraudTester
 
 ---
 
-## Kalan Isler — Sprint 23+
+## [DONE] Sprint 23 — Test Isolation + Analytics + Visual Rule Builder
+
+**SDLC Sprinti:** 23 (COMPLETED)
+
+### Test Isolation (X-SignalRisk-Test Header)
+| Dosya | Durum |
+|-------|-------|
+| database/migrations/005_test_isolation.sql | DONE — is_test BOOLEAN + partial index |
+| apps/event-collector/src/events/events.controller.ts | DONE — X-SignalRisk-Test header extraction |
+| apps/event-collector/src/events/events.service.ts | DONE — is-test Kafka header propagation |
+| apps/velocity-service/src/consumer/velocity-event.consumer.ts | DONE — test: merchantId prefix for Redis isolation |
+| apps/decision-service/src/decision/decision.types.ts | DONE — isTest field added to DecisionResult |
+| apps/decision-service/src/decision/decision-store.service.ts | DONE — is_test column in INSERT |
+| apps/decision-service/src/analytics/analytics.service.ts | DONE — AND is_test = false in all 6 queries |
+| apps/webhook-service/src/kafka/decision-consumer.service.ts | DONE — skip webhook for test events |
+| apps/fraud-tester/src/adapters/signalrisk.adapter.ts | DONE — X-SignalRisk-Test: true header |
+
+### Analytics Backend
+| Dosya | Durum |
+|-------|-------|
+| apps/decision-service/src/analytics/ | DONE — 6 endpoint (trends, velocity, risk-buckets, merchants, kpi, minute-trend) |
+| apps/dashboard/vite.config.ts | DONE — proxy routing fix (analytics→3009, events→3002) |
+
+### Visual Rule Builder
+| Dosya | Durum |
+|-------|-------|
+| apps/dashboard/src/components/admin/RuleBuilder.tsx | DONE — 5 signal, typed operators, DSL generator/parser |
+| apps/dashboard/src/components/admin/AddRuleModal.tsx | DONE — visual builder integration |
+| apps/dashboard/src/components/admin/EditRuleModal.tsx | DONE — visual builder + DSL editor toggle |
+
+### Documentation
+| Dosya | Durum |
+|-------|-------|
+| README.md | DONE — FraudTester section + test isolation |
+| docs/TECHNICAL.md | DONE — FraudTester framework + test isolation architecture |
+| docs/USER-GUIDE.md | DONE — Battle Arena, Scenario Library, Detection Reports |
+| docs/01-requirements/bf-2026-03/gap-analysis-v7.md | DONE — P5 Test Isolation requirements |
+
+---
+
+## Kalan Isler — Sprint 24+
 
 | Task | Aciklama |
 |------|----------|
-| E2E test iyilestirme | 26/28 test fail — AdminGuard on /merchants, rate limiting, multi-tenant, idempotency |
+| E2E test iyilestirme | 24/28 geciyor, 4 skip — velocity pipeline (3) + rate limiting (1) |
 | CI/CD Docker | GitHub Actions self-hosted runner veya Docker-in-Docker ile e2e.yml gercek calissin |
-| Decision-service analytics | Analytics module eklendi, dashboard proxy routing duzeltildi |
+| Decision-service Kafka consumer | decision-service'in signalrisk.events.raw'dan consume edip karar vermesi (gercek pipeline) |
+| FraudTester gercek pipeline | fraud-tester → event-collector → Kafka → decision-service → sonuc geri donusu |
 
 ---
 
@@ -255,6 +296,7 @@ Tum kriterler karsilanirsa: apps/fraud-tester/ → ayri repo, adapter npm paketi
 | IFraudSystemAdapter | FROZEN interface | Geri uyumluluk; degistirilmeden once E7 impact assessment |
 | Docker build stratejisi | Root Dockerfile + SERVICE arg | Tek Dockerfile tum servisleri build eder; tsc --skipLibCheck Docker'da |
 | Workspace deps | apps/*/node_modules COPY | npm workspace hoisting service-level deps olusturur, runner stage'de de gerekli |
+| Test izolasyonu | Header-based (X-SignalRisk-Test) | Tenant izolasyonu Redis'i kapsamiyor; ayri environment operasyonel yuk; header en temiz cozum |
 
 ---
 

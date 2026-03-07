@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAdminStore } from '../../store/admin.store';
 import type { Rule } from '../../types/admin.types';
+import RuleBuilder, { conditionsToDsl, type Condition } from './RuleBuilder';
 
 interface Props {
   onClose: () => void;
@@ -17,20 +18,27 @@ const OUTCOME_COLORS: Record<Rule['outcome'], string> = {
 export default function AddRuleModal({ onClose }: Props) {
   const { createRule } = useAdminStore();
   const [name, setName] = useState('');
-  const [expression, setExpression] = useState('');
+  const [conditions, setConditions] = useState<Condition[]>([]);
   const [outcome, setOutcome] = useState<Rule['outcome']>('REVIEW');
   const [weight, setWeight] = useState(0.5);
   const [isActive, setIsActive] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const expression = conditionsToDsl(conditions);
+
   const handleSave = async () => {
     if (!name.trim()) { setError('Rule name is required'); return; }
-    if (!expression.trim()) { setError('Expression is required'); return; }
+    if (!expression.trim()) { setError('At least one condition is required'); return; }
+
+    // Validate all conditions have values
+    const empty = conditions.find((c) => c.value === '' || c.value === undefined);
+    if (empty) { setError('All conditions must have a value'); return; }
+
     setError(null);
     setIsSubmitting(true);
     try {
-      await createRule({ name: name.trim(), expression: expression.trim(), outcome, weight, isActive });
+      await createRule({ name: name.trim(), expression, outcome, weight, isActive });
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create rule');
@@ -46,7 +54,7 @@ export default function AddRuleModal({ onClose }: Props) {
       aria-modal="true"
       aria-label="Add Rule"
     >
-      <div className="w-full max-w-lg rounded-lg bg-surface-card border border-surface-border p-6 shadow-xl">
+      <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-lg bg-surface-card border border-surface-border p-6 shadow-xl">
         <h2 className="text-lg font-semibold text-text-primary mb-4">Add New Rule</h2>
 
         {error && (
@@ -70,17 +78,10 @@ export default function AddRuleModal({ onClose }: Props) {
           </div>
 
           <div>
-            <label htmlFor="rule-expression" className="block text-sm font-medium text-text-primary mb-1">
-              DSL Expression
+            <label className="block text-sm font-medium text-text-primary mb-2">
+              Conditions
             </label>
-            <textarea
-              id="rule-expression"
-              value={expression}
-              onChange={e => setExpression(e.target.value)}
-              rows={4}
-              placeholder="e.g. device.country == 'NG' && txn.amount > 1000"
-              className="w-full rounded-md border border-surface-border bg-surface-input px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-primary resize-vertical"
-            />
+            <RuleBuilder conditions={conditions} onChange={setConditions} />
           </div>
 
           <div className="flex gap-4">

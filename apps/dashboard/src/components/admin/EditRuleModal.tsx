@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAdminStore } from '../../store/admin.store';
 import type { Rule } from '../../types/admin.types';
+import RuleBuilder, { conditionsToDsl, parseDslToConditions, type Condition } from './RuleBuilder';
 
 interface Props {
   rule: Rule;
@@ -15,11 +16,26 @@ const OUTCOME_COLORS: Record<Rule['outcome'], string> = {
 
 export default function EditRuleModal({ rule, onClose }: Props) {
   const { updateRuleExpression } = useAdminStore();
-  const [expression, setExpression] = useState(rule.expression);
+  const [conditions, setConditions] = useState<Condition[]>(
+    () => parseDslToConditions(rule.expression) ?? [],
+  );
+  const [useFreeText, setUseFreeText] = useState(
+    () => parseDslToConditions(rule.expression) === null && rule.expression.trim().length > 0,
+  );
+  const [freeText, setFreeText] = useState(rule.expression);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const expression = useFreeText ? freeText : conditionsToDsl(conditions);
+
   const handleSave = async () => {
+    if (!expression.trim()) { setError('Expression is required'); return; }
+
+    if (!useFreeText) {
+      const empty = conditions.find((c) => c.value === '' || c.value === undefined);
+      if (empty) { setError('All conditions must have a value'); return; }
+    }
+
     setError(null);
     setIsSubmitting(true);
     try {
@@ -40,7 +56,7 @@ export default function EditRuleModal({ rule, onClose }: Props) {
       aria-modal="true"
       aria-label="Edit Rule"
     >
-      <div className="w-full max-w-lg rounded-lg bg-surface-card border border-surface-border p-6 shadow-xl">
+      <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-lg bg-surface-card border border-surface-border p-6 shadow-xl">
         <h2 className="text-lg font-semibold text-text-primary mb-1">Edit Rule</h2>
         <p className="text-sm text-text-secondary mb-4">{rule.name}</p>
 
@@ -59,18 +75,49 @@ export default function EditRuleModal({ rule, onClose }: Props) {
           </div>
         )}
 
-        <div className="mb-4">
-          <label htmlFor="rule-expression" className="block text-sm font-medium text-text-primary mb-1">
-            DSL Expression
-          </label>
-          <textarea
-            id="rule-expression"
-            value={expression}
-            onChange={(e) => setExpression(e.target.value)}
-            rows={5}
-            className="w-full rounded-md border border-surface-border bg-surface-input px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-primary resize-vertical"
-          />
+        {/* Mode toggle */}
+        <div className="mb-3 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setUseFreeText(false)}
+            className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+              !useFreeText ? 'bg-brand-primary text-white' : 'border border-surface-border text-text-secondary hover:bg-surface-hover'
+            }`}
+          >
+            Visual Builder
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setFreeText(conditionsToDsl(conditions) || rule.expression);
+              setUseFreeText(true);
+            }}
+            className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+              useFreeText ? 'bg-brand-primary text-white' : 'border border-surface-border text-text-secondary hover:bg-surface-hover'
+            }`}
+          >
+            DSL Editor
+          </button>
         </div>
+
+        {useFreeText ? (
+          <div className="mb-4">
+            <label htmlFor="rule-expression" className="block text-sm font-medium text-text-primary mb-1">
+              DSL Expression
+            </label>
+            <textarea
+              id="rule-expression"
+              value={freeText}
+              onChange={(e) => setFreeText(e.target.value)}
+              rows={5}
+              className="w-full rounded-md border border-surface-border bg-surface-input px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-primary resize-vertical"
+            />
+          </div>
+        ) : (
+          <div className="mb-4">
+            <RuleBuilder conditions={conditions} onChange={setConditions} />
+          </div>
+        )}
 
         <div className="flex justify-end gap-3">
           <button

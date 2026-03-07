@@ -37,6 +37,7 @@ npm run test:all
 | case-service | 3010 | Case management |
 | webhook-service | 3011 | HMAC-SHA256 webhook delivery |
 | feature-flag | 3013 | Feature flags, rule rollout |
+| fraud-tester | 3020 | Adversarial fraud testing framework |
 
 ---
 
@@ -156,6 +157,42 @@ Merchant SDK (iOS/Android/Web)
 - Annual penetration testing, CVE scanning in CI/CD
 - Right to erasure with full propagation (including model unlearning)
 
+## FraudTester — Adversarial Testing Framework
+
+Built-in adversarial testing framework for validating and stress-testing SignalRisk's detection capabilities. FraudTester generates realistic fraud scenarios and measures detection performance.
+
+### Capabilities
+
+- **Scenario Library** — 11 pre-built fraud scenarios (device farm, bot checkout, velocity evasion, emulator spoof, SIM swap, plus adversarial variants)
+- **Battle Arena** — Real-time adversarial testing with live detection gauges, TPR/FPR metrics, and latency tracking
+- **Three Agent Types:**
+  - *Fraud Simulation Agent* — runs standard fraud scenarios
+  - *Adversarial Agent* — attempts to bypass detection (emulator bypass, slow fraud, bot evasion)
+  - *Chaos Agent* — tests system resilience under failure conditions
+- **Adapter Architecture** — pluggable target system via `IFraudSystemAdapter` interface. Ships with SignalRisk adapter and GenericHttpAdapter for testing any fraud system
+- **Detection Reports** — TPR, FPR, per-scenario detection rates, latency histograms, battle comparison
+
+### Test Isolation
+
+FraudTester traffic is automatically isolated from production data via the `X-SignalRisk-Test: true` HTTP header. This ensures:
+
+- **Analytics exclusion** — test decisions are filtered from all dashboard analytics and KPI metrics
+- **Redis key namespacing** — velocity counters use a `test:` prefix, preventing pollution of real user velocity data
+- **Webhook suppression** — no webhooks are sent for test events, protecting downstream merchant integrations
+- **Database marking** — all test decisions are stored with `is_test = true` for auditability without data contamination
+
+This allows safe testing against production infrastructure without affecting live traffic or metrics.
+
+### Usage
+
+```bash
+# Start fraud-tester backend
+pnpm --filter fraud-tester dev   # http://localhost:3020
+
+# Or use the dashboard Battle Arena
+# Navigate to /fraud-tester/battle-arena in the dashboard
+```
+
 ---
 
 ## Non-Functional Requirements
@@ -226,3 +263,6 @@ Current Phase: ARCHITECTURE
 - [Wireframes v3](docs/02-design/wireframes-v3.md)
 - [Component Map v2](docs/02-design/component-map-v2.md)
 - [Architecture v3](docs/03-architecture/architecture-v3.md)
+- [FraudTester Master Plan](docs/04-planning/e2e-fraudtester-master-plan.md)
+- [User Guide](docs/USER-GUIDE.md)
+- [Technical Documentation](docs/TECHNICAL.md)

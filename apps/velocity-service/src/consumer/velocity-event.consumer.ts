@@ -110,10 +110,16 @@ export class VelocityEventConsumer implements OnModuleInit, OnModuleDestroy {
     let rawEvent: {
       eventId: string;
       merchantId: string;
-      transactionId: string;
-      amountMinor: number;
-      ipAddress?: string;
+      // Legacy fields (velocity-native schema)
+      transactionId?: string;
+      amountMinor?: number;
       deviceFingerprint?: string;
+      // Fields from event-collector schema
+      deviceId?: string;
+      sessionId?: string;
+      type?: string;
+      payload?: { amount?: number; [key: string]: unknown };
+      ipAddress?: string;
       timestamp: string;
       metadata?: Record<string, unknown>;
     };
@@ -140,15 +146,28 @@ export class VelocityEventConsumer implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    // Build VelocityEvent from the raw Kafka message
+    // Test isolation: prefix merchantId to namespace Redis keys
+    const isTest = message.headers?.['is-test']?.toString() === 'true';
+    const effectiveMerchantId = isTest
+      ? `test:${rawEvent.merchantId}`
+      : rawEvent.merchantId;
+
+    // Build VelocityEvent from the raw Kafka message.
+    // Support both velocity-native schema (transactionId, amountMinor, deviceFingerprint)
+    // and event-collector schema (deviceId, sessionId, payload.amount).
+    const entityId = rawEvent.transactionId || rawEvent.deviceId || rawEvent.eventId;
+    const amountMinor = rawEvent.amountMinor ?? Math.round((rawEvent.payload?.amount ?? 0) * 100);
+    const deviceFingerprint = rawEvent.deviceFingerprint || rawEvent.deviceId;
+    const sessionId = rawEvent.sessionId || (rawEvent.metadata?.sessionId as string) || undefined;
+
     const velocityEvent: VelocityEvent = {
       eventId: rawEvent.eventId,
-      merchantId: rawEvent.merchantId,
-      entityId: rawEvent.transactionId, // Entity = transaction reference
-      amountMinor: rawEvent.amountMinor,
-      deviceFingerprint: rawEvent.deviceFingerprint,
+      merchantId: effectiveMerchantId,
+      entityId,
+      amountMinor,
+      deviceFingerprint,
       ipAddress: rawEvent.ipAddress,
-      sessionId: (rawEvent.metadata?.sessionId as string) || undefined,
+      sessionId,
       timestampSeconds: Math.floor(new Date(rawEvent.timestamp).getTime() / 1000),
     };
 
