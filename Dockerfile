@@ -1,74 +1,88 @@
 # =============================================================================
-# SignalRisk — Monorepo Root Dockerfile
+# SignalRisk — Optimized Monorepo Dockerfile
 # Build arg: SERVICE (required), PORT (default: 3000)
 #
-# Strategy: tsc --skipLibCheck + tsc-alias (resolves @/* path aliases)
-# Pre-requisite: npm install --legacy-peer-deps on host (generates lock file)
+# Strategy:
+#   Stage 1 (deps)        — npm ci, cached until package*.json changes
+#   Stage 2 (pkg-builder) — build shared packages, cached until packages/ changes
+#   Stage 3 (builder)     — build ONLY the target service (~20-30s)
+#   Stage 4 (runner)      — minimal production image
 #
 # Build example:
-#   DOCKER_BUILDKIT=1 docker build --build-arg SERVICE=auth-service .
+#   docker compose -f docker-compose.full.yml build auth-service
 # =============================================================================
 
 # ---------------------------------------------------------------------------
-# Stage 1: Install (Linux-native binaries via npm ci)
+# Stage 1: Install all workspace dependencies (shared across all services)
 # ---------------------------------------------------------------------------
 FROM node:22-alpine AS deps
 
 WORKDIR /app
 
-# Configure npm for reliability
 RUN npm config set fetch-timeout 600000 && \
     npm config set fetch-retry-mintimeout 20000 && \
     npm config set fetch-retry-maxtimeout 120000 && \
     npm config set maxsockets 3
 
-# Copy lock files for deterministic installs
 COPY package.json package-lock.json ./
-
-# Copy all workspace package manifests (source removed below, only manifests matter)
 COPY packages/ ./packages/
 COPY apps/     ./apps/
 
 # Remove source files — only package.json + lock file matter for npm ci
 RUN find packages apps -name "*.ts" -delete 2>/dev/null || true
 
-# Install everything (uses package-lock.json for exact versions)
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --legacy-peer-deps
 
 # ---------------------------------------------------------------------------
-# Stage 2: Build
+# Stage 2: Build shared TS packages (shared across all services)
+# Cached until packages/ source changes — NOT invalidated by app changes.
 # ---------------------------------------------------------------------------
-FROM node:22-alpine AS builder
-
-ARG SERVICE
+FROM node:22-alpine AS pkg-builder
 
 WORKDIR /app
 
-# Install tsc-alias for resolving @/* path aliases in compiled output
 RUN npm install -g tsc-alias
 
-# Copy source + installed Linux node_modules (root hoisted)
-COPY . .
+# Copy root node_modules (hoisted deps)
 COPY --from=deps /app/node_modules ./node_modules
 
-# Copy app-level node_modules. Shared packages should resolve against hoisted
-# root dependencies to avoid duplicate type trees during package compilation.
+# Copy package source + their node_modules
+COPY packages/ ./packages/
 RUN --mount=from=deps,source=/app,target=/deps \
-    for pkg in /deps/apps/*/node_modules; do \
-      rel="${pkg#/deps/}"; \
-      dst="$(dirname $rel)"; \
-      [ -d "$pkg" ] && cp -r "$pkg" "./$dst/" 2>/dev/null || true; \
+    for pkg in /deps/packages/*/node_modules; do \
+      [ -d "$pkg" ] || continue; \
+      dst="./packages/$(basename $(dirname $pkg))/node_modules"; \
+      cp -r "$pkg" "$dst" 2>/dev/null || true; \
     done
 
-# Build shared TS packages (skip errors from unused packages)
+# Build shared packages once
 RUN for pkg in packages/redis-module packages/signal-contracts \
                packages/event-schemas packages/kafka-config \
                packages/kafka-health; do \
       [ -d "$pkg/src" ] && (cd "$pkg" && npx tsc --skipLibCheck 2>/dev/null || true); \
     done
 
-# Build the target service: tsc (compile) + tsc-alias (resolve @/* paths)
+# ---------------------------------------------------------------------------
+# Stage 3: Build ONLY the target service (fast — just tsc for one service)
+# ---------------------------------------------------------------------------
+FROM pkg-builder AS builder
+
+ARG SERVICE
+
+# Copy root package.json (needed for workspace resolution)
+COPY package.json ./
+
+# Copy only this service's source (NOT all apps/)
+COPY apps/${SERVICE}/ ./apps/${SERVICE}/
+
+# Copy only this service's node_modules from deps
+RUN --mount=from=deps,source=/app,target=/deps \
+    if [ -d "/deps/apps/${SERVICE}/node_modules" ]; then \
+      cp -r "/deps/apps/${SERVICE}/node_modules" "./apps/${SERVICE}/"; \
+    fi
+
+# Compile: tsc + tsc-alias
 RUN cd "apps/${SERVICE}" && \
     if [ -f tsconfig.build.json ]; then \
       npx tsc -p tsconfig.build.json --skipLibCheck && \
@@ -79,7 +93,7 @@ RUN cd "apps/${SERVICE}" && \
     fi
 
 # ---------------------------------------------------------------------------
-# Stage 3: Production runner
+# Stage 4: Minimal production runner
 # ---------------------------------------------------------------------------
 FROM node:22-alpine AS runner
 
@@ -94,20 +108,17 @@ WORKDIR /app
 RUN addgroup -g 1001 -S signalrisk && \
     adduser -S signalrisk -u 1001 -G signalrisk
 
-# Copy runtime dependencies (root hoisted + service-level)
-COPY --from=deps    /app/node_modules          ./node_modules
-COPY --from=deps    /app/apps/${SERVICE}/node_modules ./apps/${SERVICE}/node_modules
-# Shared packages (built .js files + their node_modules needed at runtime)
-COPY --from=builder /app/packages              ./packages
-COPY --from=deps    /app/packages              /tmp/pkg-deps
-RUN for pkg in /tmp/pkg-deps/*/node_modules; do \
-      [ -d "$pkg" ] && cp -r "$pkg" "./packages/$(basename $(dirname $pkg))/" 2>/dev/null; \
-    done; rm -rf /tmp/pkg-deps
+# Runtime dependencies
+COPY --from=deps    /app/node_modules                    ./node_modules
+COPY --from=deps    /app/apps/${SERVICE}/node_modules     ./apps/${SERVICE}/node_modules
+
+# Shared packages (built .js + their runtime deps)
+COPY --from=builder /app/packages                         ./packages
+
 # Compiled service
-COPY --from=builder /app/apps/${SERVICE}/dist  ./apps/${SERVICE}/dist
-COPY --from=builder /app/package.json          ./
-COPY --from=builder /app/apps/${SERVICE}/package.json \
-                                               ./apps/${SERVICE}/
+COPY --from=builder /app/apps/${SERVICE}/dist             ./apps/${SERVICE}/dist
+COPY --from=builder /app/package.json                     ./
+COPY --from=builder /app/apps/${SERVICE}/package.json     ./apps/${SERVICE}/
 
 USER signalrisk
 
