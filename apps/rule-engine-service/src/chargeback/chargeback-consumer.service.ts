@@ -22,18 +22,20 @@ export class ChargebackConsumerService implements OnModuleInit {
   }
 
   async onModuleInit(): Promise<void> {
-    try {
-      await this.consumer.connect();
-      await this.consumer.subscribe({ topic: 'chargebacks', fromBeginning: false });
-      await this.consumer.run({
-        eachMessage: async (payload: EachMessagePayload) => {
-          await this.handleMessage(payload);
-        },
-      });
-      this.logger.log('Chargeback consumer started, listening on topic: chargebacks');
-    } catch (err) {
+    this.connectConsumer().catch((err) => {
       this.logger.error('Failed to start chargeback consumer', err);
-    }
+    });
+  }
+
+  private async connectConsumer(): Promise<void> {
+    await this.consumer.connect();
+    await this.consumer.subscribe({ topic: 'chargebacks', fromBeginning: false });
+    await this.consumer.run({
+      eachMessage: async (payload: EachMessagePayload) => {
+        await this.handleMessage(payload);
+      },
+    });
+    this.logger.log('Chargeback consumer started, listening on topic: chargebacks');
   }
 
   async processEvent(event: ChargebackEvent): Promise<void> {

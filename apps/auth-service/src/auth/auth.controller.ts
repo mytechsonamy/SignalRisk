@@ -38,6 +38,46 @@ export class AuthController {
   ) {}
 
   /**
+   * POST /v1/auth/login
+   * Dashboard login — email + password → JWT + user info.
+   */
+  @ApiOperation({ summary: 'Dashboard login (email + password)' })
+  @ApiResponse({ status: 200, description: 'Login successful' })
+  @ApiResponse({ status: 401, description: 'Invalid email or password' })
+  @Post('login')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ token: { limit: 10, ttl: 60_000 } })
+  async login(
+    @Body() body: { email: string; password: string },
+  ): Promise<{ accessToken: string; user: { id: string; email: string; role: string } }> {
+    // Seed admin users (in-memory, for development)
+    const seedUsers = [
+      { id: 'usr-admin-001', email: 'admin@signalrisk.io', password: 'admin123', role: 'admin' },
+      { id: 'usr-analyst-001', email: 'analyst@signalrisk.io', password: 'analyst123', role: 'analyst' },
+    ];
+
+    const user = seedUsers.find(
+      (u) => u.email === body.email && u.password === body.password,
+    );
+    if (!user) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    const tokenResult = await this.authService.issueTokenForUser({
+      userId: user.id,
+      merchantId: 'merchant-signalrisk',
+      role: user.role,
+      permissions: [user.role],
+    });
+
+    return {
+      accessToken: tokenResult.access_token,
+      user: { id: user.id, email: user.email, role: user.role },
+    };
+  }
+
+  /**
    * POST /v1/auth/token
    * Issue JWT via client_credentials or password grant.
    */

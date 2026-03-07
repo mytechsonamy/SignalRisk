@@ -17,9 +17,6 @@ x-common-env: &common-env
   LOG_LEVEL: ${LOG_LEVEL:-info}
 
 x-nestjs-service: &nestjs-service
-  build:
-    context: .
-    dockerfile: Dockerfile.base
   restart: unless-stopped
   networks:
     - signalrisk
@@ -59,20 +56,21 @@ services:
       - signalrisk
 
   pgbouncer:
-    image: bitnami/pgbouncer:1
+    image: edoburu/pgbouncer:latest
     container_name: signalrisk-pgbouncer
     ports:
       - "${PGBOUNCER_PORT:-6432}:6432"
     environment:
-      POSTGRESQL_HOST: postgres
-      POSTGRESQL_PORT: "5432"
-      POSTGRESQL_USERNAME: ${POSTGRES_USER:-signalrisk}
-      POSTGRESQL_PASSWORD: ${POSTGRES_PASSWORD:-signalrisk_dev}
-      POSTGRESQL_DATABASE: ${POSTGRES_DB:-signalrisk}
-      PGBOUNCER_POOL_MODE: transaction
-      PGBOUNCER_MAX_CLIENT_CONN: "200"
-      PGBOUNCER_DEFAULT_POOL_SIZE: "20"
-      PGBOUNCER_MIN_POOL_SIZE: "5"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${POSTGRES_USER:-signalrisk}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-signalrisk_dev}
+      DB_NAME: ${POSTGRES_DB:-signalrisk}
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: "200"
+      DEFAULT_POOL_SIZE: "20"
+      MIN_POOL_SIZE: "5"
+      AUTH_TYPE: scram-sha-256
     depends_on:
       postgres:
         condition: service_healthy
@@ -100,30 +98,30 @@ services:
       - signalrisk
 
   kafka:
-    image: bitnami/kafka:3.7
+    image: apache/kafka:3.7.0
     container_name: signalrisk-kafka
     ports:
       - "${KAFKA_PORT:-9092}:9092"
     environment:
       # KRaft mode (no Zookeeper)
-      KAFKA_CFG_NODE_ID: "1"
-      KAFKA_CFG_PROCESS_ROLES: broker,controller
-      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
-      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_CFG_LISTENERS: PLAINTEXT://:29092,CONTROLLER://:9093,EXTERNAL://:9092
-      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,EXTERNAL://localhost:9092
-      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
-      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_KRAFT_CLUSTER_ID: signalrisk-local-dev
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENERS: PLAINTEXT://:29092,CONTROLLER://:9093,EXTERNAL://:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      CLUSTER_ID: c2lnbmFscmlzay1sb2NhbA
       # Topic defaults
-      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
-      KAFKA_CFG_NUM_PARTITIONS: "3"
-      KAFKA_CFG_DEFAULT_REPLICATION_FACTOR: "1"
-      KAFKA_CFG_LOG_RETENTION_HOURS: "24"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: "3"
+      KAFKA_DEFAULT_REPLICATION_FACTOR: "1"
+      KAFKA_LOG_RETENTION_HOURS: "24"
     volumes:
-      - kafka_data:/bitnami/kafka
+      - kafka_data:/tmp/kraft-combined-logs
     healthcheck:
-      test: ["CMD-SHELL", "kafka-broker-api-versions.sh --bootstrap-server localhost:29092 | grep -q 'ApiVersion'"]
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:29092 | grep -q 'ApiVersion'"]
       interval: 10s
       timeout: 10s
       retries: 15
@@ -146,31 +144,36 @@ services:
       - signalrisk
 
   # ---------------------------------------------------------------------------
-  # Application Services
+  # Application Services (uses root Dockerfile with SERVICE build-arg)
   # ---------------------------------------------------------------------------
 
-  api-gateway:
+  auth-service:
     <<: *nestjs-service
-    container_name: signalrisk-api-gateway
+    container_name: signalrisk-auth-service
     build:
       context: .
-      dockerfile: apps/api-gateway/Dockerfile
+      dockerfile: Dockerfile
+      args:
+        SERVICE: auth-service
+        PORT: "3015"
     ports:
-      - "3000:3000"
+      - "3015:3015"
     environment:
       <<: *common-env
-      SERVICE_NAME: api-gateway
-      PORT: "3000"
-      EVENT_COLLECTOR_URL: http://event-collector:3001
-      DECISION_ENGINE_URL: http://decision-engine:3007
-      DASHBOARD_API_URL: http://dashboard-api:3010
+      SERVICE_NAME: auth-service
+      PORT: "3015"
+      JWT_SECRET: ${JWT_SECRET:-signalrisk-dev-jwt-secret}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-3600}
 
   event-collector:
     <<: *nestjs-service
     container_name: signalrisk-event-collector
     build:
       context: .
-      dockerfile: apps/event-collector/Dockerfile
+      dockerfile: Dockerfile
+      args:
+        SERVICE: event-collector
+        PORT: "3001"
     ports:
       - "3001:3001"
     environment:
@@ -183,7 +186,10 @@ services:
     container_name: signalrisk-device-intel-service
     build:
       context: .
-      dockerfile: apps/device-intel-service/Dockerfile
+      dockerfile: Dockerfile
+      args:
+        SERVICE: device-intel-service
+        PORT: "3002"
     ports:
       - "3002:3002"
     environment:
@@ -191,30 +197,36 @@ services:
       SERVICE_NAME: device-intel-service
       PORT: "3002"
 
-  velocity-engine:
+  velocity-service:
     <<: *nestjs-service
-    container_name: signalrisk-velocity-engine
+    container_name: signalrisk-velocity-service
     build:
       context: .
-      dockerfile: apps/velocity-engine/Dockerfile
+      dockerfile: Dockerfile
+      args:
+        SERVICE: velocity-service
+        PORT: "3003"
     ports:
       - "3003:3003"
     environment:
       <<: *common-env
-      SERVICE_NAME: velocity-engine
+      SERVICE_NAME: velocity-service
       PORT: "3003"
 
-  behavioral-intel-service:
+  behavioral-service:
     <<: *nestjs-service
-    container_name: signalrisk-behavioral-intel-service
+    container_name: signalrisk-behavioral-service
     build:
       context: .
-      dockerfile: apps/behavioral-intel-service/Dockerfile
+      dockerfile: Dockerfile
+      args:
+        SERVICE: behavioral-service
+        PORT: "3004"
     ports:
       - "3004:3004"
     environment:
       <<: *common-env
-      SERVICE_NAME: behavioral-intel-service
+      SERVICE_NAME: behavioral-service
       PORT: "3004"
 
   network-intel-service:
@@ -222,7 +234,10 @@ services:
     container_name: signalrisk-network-intel-service
     build:
       context: .
-      dockerfile: apps/network-intel-service/Dockerfile
+      dockerfile: Dockerfile
+      args:
+        SERVICE: network-intel-service
+        PORT: "3005"
     ports:
       - "3005:3005"
     environment:
@@ -230,35 +245,41 @@ services:
       SERVICE_NAME: network-intel-service
       PORT: "3005"
 
-  rule-engine:
+  rule-engine-service:
     <<: *nestjs-service
-    container_name: signalrisk-rule-engine
+    container_name: signalrisk-rule-engine-service
     build:
       context: .
-      dockerfile: apps/rule-engine/Dockerfile
+      dockerfile: Dockerfile
+      args:
+        SERVICE: rule-engine-service
+        PORT: "3006"
     ports:
       - "3006:3006"
     environment:
       <<: *common-env
-      SERVICE_NAME: rule-engine
+      SERVICE_NAME: rule-engine-service
       PORT: "3006"
 
-  decision-engine:
+  decision-service:
     <<: *nestjs-service
-    container_name: signalrisk-decision-engine
+    container_name: signalrisk-decision-service
     build:
       context: .
-      dockerfile: apps/decision-engine/Dockerfile
+      dockerfile: Dockerfile
+      args:
+        SERVICE: decision-service
+        PORT: "3007"
     ports:
       - "3007:3007"
     environment:
       <<: *common-env
-      SERVICE_NAME: decision-engine
+      SERVICE_NAME: decision-service
       PORT: "3007"
-      RULE_ENGINE_URL: http://rule-engine:3006
+      RULE_ENGINE_URL: http://rule-engine-service:3006
       DEVICE_INTEL_URL: http://device-intel-service:3002
-      VELOCITY_ENGINE_URL: http://velocity-engine:3003
-      BEHAVIORAL_INTEL_URL: http://behavioral-intel-service:3004
+      VELOCITY_ENGINE_URL: http://velocity-service:3003
+      BEHAVIORAL_INTEL_URL: http://behavioral-service:3004
       NETWORK_INTEL_URL: http://network-intel-service:3005
       TELCO_INTEL_URL: http://telco-intel-service:3008
 
@@ -267,7 +288,10 @@ services:
     container_name: signalrisk-telco-intel-service
     build:
       context: .
-      dockerfile: apps/telco-intel-service/Dockerfile
+      dockerfile: Dockerfile
+      args:
+        SERVICE: telco-intel-service
+        PORT: "3008"
     ports:
       - "3008:3008"
     environment:
@@ -275,97 +299,97 @@ services:
       SERVICE_NAME: telco-intel-service
       PORT: "3008"
 
-  dashboard-api:
+  case-service:
     <<: *nestjs-service
-    container_name: signalrisk-dashboard-api
+    container_name: signalrisk-case-service
     build:
       context: .
-      dockerfile: apps/dashboard-api/Dockerfile
+      dockerfile: Dockerfile
+      args:
+        SERVICE: case-service
+        PORT: "3010"
     ports:
       - "3010:3010"
     environment:
       <<: *common-env
-      SERVICE_NAME: dashboard-api
+      SERVICE_NAME: case-service
       PORT: "3010"
-
-  dashboard-web:
-    container_name: signalrisk-dashboard-web
-    build:
-      context: .
-      dockerfile: apps/dashboard-web/Dockerfile
-    ports:
-      - "80:80"
-    depends_on:
-      - dashboard-api
-    networks:
-      - signalrisk
-
-  case-management-service:
-    <<: *nestjs-service
-    container_name: signalrisk-case-management-service
-    build:
-      context: .
-      dockerfile: apps/case-management-service/Dockerfile
-    ports:
-      - "3011:3011"
-    environment:
-      <<: *common-env
-      SERVICE_NAME: case-management-service
-      PORT: "3011"
-
-  consent-service:
-    <<: *nestjs-service
-    container_name: signalrisk-consent-service
-    build:
-      context: .
-      dockerfile: apps/consent-service/Dockerfile
-    ports:
-      - "3012:3012"
-    environment:
-      <<: *common-env
-      SERVICE_NAME: consent-service
-      PORT: "3012"
-
-  erasure-service:
-    <<: *nestjs-service
-    container_name: signalrisk-erasure-service
-    build:
-      context: .
-      dockerfile: apps/erasure-service/Dockerfile
-    ports:
-      - "3013:3013"
-    environment:
-      <<: *common-env
-      SERVICE_NAME: erasure-service
-      PORT: "3013"
 
   webhook-service:
     <<: *nestjs-service
     container_name: signalrisk-webhook-service
     build:
       context: .
-      dockerfile: apps/webhook-service/Dockerfile
+      dockerfile: Dockerfile
+      args:
+        SERVICE: webhook-service
+        PORT: "3011"
+    ports:
+      - "3011:3011"
+    environment:
+      <<: *common-env
+      SERVICE_NAME: webhook-service
+      PORT: "3011"
+
+  graph-intel-service:
+    <<: *nestjs-service
+    container_name: signalrisk-graph-intel-service
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: graph-intel-service
+        PORT: "3012"
+    ports:
+      - "3012:3012"
+    environment:
+      <<: *common-env
+      SERVICE_NAME: graph-intel-service
+      PORT: "3012"
+
+  feature-flag-service:
+    <<: *nestjs-service
+    container_name: signalrisk-feature-flag-service
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: feature-flag-service
+        PORT: "3013"
+    ports:
+      - "3013:3013"
+    environment:
+      <<: *common-env
+      SERVICE_NAME: feature-flag-service
+      PORT: "3013"
+
+  outbox-relay:
+    <<: *nestjs-service
+    container_name: signalrisk-outbox-relay
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: outbox-relay
+        PORT: "3014"
     ports:
       - "3014:3014"
     environment:
       <<: *common-env
-      SERVICE_NAME: webhook-service
+      SERVICE_NAME: outbox-relay
       PORT: "3014"
 
-  auth-service:
-    <<: *nestjs-service
-    container_name: signalrisk-auth-service
+  dashboard:
+    container_name: signalrisk-dashboard
     build:
-      context: .
-      dockerfile: apps/auth-service/Dockerfile
+      context: ./apps/dashboard
+      dockerfile: Dockerfile.nginx
     ports:
-      - "3015:3015"
-    environment:
-      <<: *common-env
-      SERVICE_NAME: auth-service
-      PORT: "3015"
-      JWT_SECRET: ${JWT_SECRET:-signalrisk-dev-jwt-secret}
-      JWT_EXPIRATION: ${JWT_EXPIRATION:-3600}
+      - "80:80"
+    depends_on:
+      - case-service
+    networks:
+      - signalrisk
 
 volumes:
   postgres_data:

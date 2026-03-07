@@ -1112,7 +1112,7 @@ export default function GraphIntelPage() {
                 linkDirectionalParticleColor={() => '#a78bfa'}
                 backgroundColor="#0d0b1e"
                 onNodeClick={handleNodeClick}
-                nodeLabel={(node) => `${node.type}: ${node.id}`}
+                nodeLabel={(node: GraphNode) => `${node.type}: ${node.id}`}
                 cooldownTicks={150}
                 d3AlphaDecay={0.02}
                 d3VelocityDecay={0.3}

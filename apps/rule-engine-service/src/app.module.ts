@@ -8,9 +8,11 @@ import { EvaluationModule } from './evaluation/evaluation.module';
 import { ChargebackModule } from './chargeback/chargeback.module';
 import { RulesModule } from './rules/rules.module';
 import { RuleRegistryService } from './registry/rule-registry.service';
+import { HealthController } from './health/health.controller';
 
 @Module({
   imports: [ConfigModule.forRoot({ isGlobal: true }), DslModule, RegistryModule, EvaluationModule, ChargebackModule, RulesModule],
+  controllers: [HealthController],
 })
 export class AppModule implements OnModuleInit {
   private readonly logger = new Logger(AppModule.name);

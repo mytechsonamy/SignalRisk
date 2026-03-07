@@ -14,7 +14,7 @@ async function bootstrap() {
 
   app.enableShutdownHooks();
 
-  const port = process.env.PORT || 3005;
+  const port = process.env.PORT || 3004;
   await app.listen(port);
   console.log(`Behavioral service listening on port ${port}`);
 }

@@ -63,24 +63,26 @@ export class DecisionConsumerService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleInit(): Promise<void> {
-    try {
-      await this.consumer.connect();
-      await this.consumer.subscribe({ topic: TOPIC, fromBeginning: false });
-
-      await this.consumer.run({
-        eachMessage: async (payload: EachMessagePayload) => {
-          await this.handleMessage(payload);
-        },
-      });
-
-      this.connected = true;
-      this.logger.log(`Decision consumer connected, subscribed to ${TOPIC}`);
-    } catch (error) {
+    this.connectConsumer().catch((error) => {
       this.logger.error(
         `Failed to start decision consumer: ${(error as Error).message}`,
         (error as Error).stack,
       );
-    }
+    });
+  }
+
+  private async connectConsumer(): Promise<void> {
+    await this.consumer.connect();
+    await this.consumer.subscribe({ topic: TOPIC, fromBeginning: false });
+
+    await this.consumer.run({
+      eachMessage: async (payload: EachMessagePayload) => {
+        await this.handleMessage(payload);
+      },
+    });
+
+    this.connected = true;
+    this.logger.log(`Decision consumer connected, subscribed to ${TOPIC}`);
   }
 
   async onModuleDestroy(): Promise<void> {

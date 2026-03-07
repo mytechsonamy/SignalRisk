@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import configuration from './config/configuration';
 import { DecisionModule } from './decision/decision.module';
+import { HealthController } from './health/health.controller';
 
 @Module({
   imports: [
@@ -12,5 +13,6 @@ import { DecisionModule } from './decision/decision.module';
     }),
     DecisionModule,
   ],
+  controllers: [HealthController],
 })
 export class AppModule {}

@@ -7,7 +7,7 @@ async function bootstrap() {
   // Enable graceful shutdown hooks
   app.enableShutdownHooks();
 
-  const port = process.env.HEALTH_PORT || 3010;
+  const port = process.env.PORT || process.env.HEALTH_PORT || 3014;
   await app.listen(port);
   console.log(`Outbox relay health endpoint listening on port ${port}`);
 }

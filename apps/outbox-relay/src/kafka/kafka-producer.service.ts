@@ -34,8 +34,20 @@ export class KafkaProducerService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleInit(): Promise<void> {
-    await this.producer.connect();
-    this.logger.log('Kafka producer connected (idempotent=true)');
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      try {
+        await this.producer.connect();
+        this.logger.log('Kafka producer connected (idempotent=true)');
+        return;
+      } catch (error) {
+        this.logger.warn(`Kafka connection attempt ${attempt}/5 failed: ${(error as Error).message}`);
+        if (attempt === 5) {
+          this.logger.error('Kafka connection failed after all retries — running in degraded mode');
+          return;
+        }
+        await new Promise(r => setTimeout(r, 3000));
+      }
+    }
   }
 
   async onModuleDestroy(): Promise<void> {

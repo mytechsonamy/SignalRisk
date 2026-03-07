@@ -97,8 +97,12 @@ RUN addgroup -g 1001 -S signalrisk && \
 # Copy runtime dependencies (root hoisted + service-level)
 COPY --from=deps    /app/node_modules          ./node_modules
 COPY --from=deps    /app/apps/${SERVICE}/node_modules ./apps/${SERVICE}/node_modules
-# Shared packages (built .js files needed at runtime)
+# Shared packages (built .js files + their node_modules needed at runtime)
 COPY --from=builder /app/packages              ./packages
+COPY --from=deps    /app/packages              /tmp/pkg-deps
+RUN for pkg in /tmp/pkg-deps/*/node_modules; do \
+      [ -d "$pkg" ] && cp -r "$pkg" "./packages/$(basename $(dirname $pkg))/" 2>/dev/null; \
+    done; rm -rf /tmp/pkg-deps
 # Compiled service
 COPY --from=builder /app/apps/${SERVICE}/dist  ./apps/${SERVICE}/dist
 COPY --from=builder /app/package.json          ./

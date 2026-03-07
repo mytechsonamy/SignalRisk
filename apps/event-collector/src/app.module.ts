@@ -5,6 +5,7 @@ import { KafkaModule } from './kafka/kafka.module';
 import { EventsModule } from './events/events.module';
 import { HealthModule } from './health/health.module';
 import { DlqModule } from './dlq/dlq.module';
+import { BackpressureModule } from './backpressure/backpressure.module';
 import { KafkaHealthModule } from '@signalrisk/kafka-health';
 import { KafkaLagController } from './kafka-health/kafka-lag.controller';
 
@@ -17,6 +18,7 @@ import { KafkaLagController } from './kafka-health/kafka-lag.controller';
     }),
     KafkaModule,
     DlqModule,
+    BackpressureModule,
     EventsModule,
     HealthModule,
     KafkaHealthModule,
