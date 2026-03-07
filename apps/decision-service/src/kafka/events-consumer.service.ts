@@ -158,7 +158,8 @@ export class EventsConsumerService implements OnModuleInit, OnModuleDestroy {
       // Run through the full decision pipeline
       const result = await this.orchestrator.decide(request);
 
-      // Mark as test if applicable
+      // Attach deviceId and mark test flag for downstream consumers
+      (result as any).deviceId = rawEvent.deviceId || null;
       result.isTest = isTest;
 
       // Persist to PostgreSQL (fire-and-forget pattern from existing code)

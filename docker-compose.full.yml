@@ -273,9 +273,10 @@ services:
       ALLOWED_API_KEYS: "sk_test_00000000000000000000000000000001"
       # kafkajs does not bundle LZ4 codec — use gzip in Docker
       KAFKA_COMPRESSION: gzip
-      # Rate limit: 250 req/min — performance-gate sends 300+ to trigger 429
-      # while leaving enough headroom for other tests
-      RATE_LIMIT_MAX: "2000"
+      # Rate limit: 150 req per 10s window — performance-gate sends 200 to trigger 429
+      # TTL=10s ensures each test gets a fresh window
+      RATE_LIMIT_MAX: "150"
+      RATE_LIMIT_TTL: "10000"
     depends_on:
       <<: *depends-infra
       auth-service:

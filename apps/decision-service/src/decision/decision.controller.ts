@@ -19,6 +19,8 @@ import {
   Res,
   Logger,
   Headers,
+  Inject,
+  Optional,
   NotFoundException,
 } from '@nestjs/common';
 import { Response } from 'express';
@@ -26,6 +28,7 @@ import { ApiOperation, ApiResponse, ApiTags, ApiHeader } from '@nestjs/swagger';
 import { DecisionOrchestratorService } from './decision-orchestrator.service';
 import { IdempotencyService } from '../idempotency/idempotency.service';
 import { DecisionStoreService } from './decision-store.service';
+import { DecisionsProducerService } from '../kafka/decisions-producer.service';
 import { DecisionRequest, DecisionResult } from './decision.types';
 
 @ApiTags('decisions')
@@ -37,6 +40,7 @@ export class DecisionController {
     private readonly orchestrator: DecisionOrchestratorService,
     private readonly idempotency: IdempotencyService,
     private readonly store: DecisionStoreService,
+    @Inject(DecisionsProducerService) @Optional() private readonly producer?: DecisionsProducerService,
   ) {}
 
   @ApiOperation({ summary: 'Request a fraud decision for a transaction or entity' })
@@ -91,6 +95,15 @@ export class DecisionController {
     this.store.save(result).catch((err: Error) => {
       this.logger.error(`Async store failed for ${result.requestId}: ${err.message}`);
     });
+
+    // Publish to Kafka for downstream consumers (case-service, webhook-service)
+    if (this.producer) {
+      const isTest = res.req?.headers?.['x-signalrisk-test'] === 'true';
+      (result as any).deviceId = req.deviceId || null;
+      this.producer.publishDecision(result, isTest).catch((err: Error) => {
+        this.logger.error(`Async publish failed for ${result.requestId}: ${err.message}`);
+      });
+    }
 
     return result;
   }

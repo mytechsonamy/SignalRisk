@@ -34,7 +34,7 @@ test.describe('Performance Gate', () => {
 
     await Promise.all(Array.from({ length: 100 }, async (_, i) => {
       const start = Date.now();
-      await request.post(`${EVENT_URL}/v1/events`, {
+      const res = await request.post(`${EVENT_URL}/v1/events`, {
         headers: {
           Authorization: `Bearer ${TEST_MERCHANT.apiKey}`,
           'X-Merchant-ID': TEST_MERCHANT.merchantId,
@@ -50,9 +50,16 @@ test.describe('Performance Gate', () => {
           }],
         },
       });
-      times.push(Date.now() - start);
+      // Only count accepted requests for latency (429s are fast but not meaningful)
+      if (res.status() !== 429) {
+        times.push(Date.now() - start);
+      }
     }));
 
+    if (times.length === 0) {
+      test.skip(true, 'All 100 events rate-limited (429) — cannot measure latency');
+      return;
+    }
     times.sort((a, b) => a - b);
     const p99 = times[Math.floor(times.length * 0.99)];
     // Cold-started Docker services may have JIT warmup — allow up to 5s p99

@@ -1,10 +1,10 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { DecisionModule } from '../decision/decision.module';
 import { EventsConsumerService } from './events-consumer.service';
 import { DecisionsProducerService } from './decisions-producer.service';
 
 @Module({
-  imports: [DecisionModule],
+  imports: [forwardRef(() => DecisionModule)],
   providers: [EventsConsumerService, DecisionsProducerService],
   exports: [DecisionsProducerService],
 })

@@ -102,7 +102,8 @@ export class DecisionsProducerService implements OnModuleInit, OnModuleDestroy {
             value: JSON.stringify({
               requestId: result.requestId,
               merchantId: result.merchantId,
-              outcome: result.action,
+              action: result.action,
+              entityId: (result as any).deviceId || result.requestId,
               riskScore: result.riskScore,
               riskFactors: result.riskFactors,
               appliedRules: result.appliedRules,

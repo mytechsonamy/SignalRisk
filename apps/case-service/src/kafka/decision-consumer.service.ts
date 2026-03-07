@@ -9,8 +9,8 @@ import { Kafka, Consumer, Producer, EachMessagePayload, logLevel } from 'kafkajs
 import { CaseService } from '../cases/case.service';
 import { DecisionEvent } from '../cases/case.types';
 
-const TOPIC = 'decisions';
-const DLQ_TOPIC = 'decisions.dlq';
+const TOPIC = 'signalrisk.decisions';
+const DLQ_TOPIC = 'signalrisk.decisions.dlq';
 const CONSUMER_GROUP = 'case-service-consumer';
 
 @Injectable()

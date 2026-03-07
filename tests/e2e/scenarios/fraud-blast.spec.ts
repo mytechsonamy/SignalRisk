@@ -187,9 +187,6 @@ test.describe('Fraud Blast E2E', () => {
    */
   test('blast creates a REVIEW or BLOCK case in case-service', async ({ request }) => {
     test.skip(SKIP, 'Requires Docker services (set SKIP_DOCKER=true to skip)');
-    // Case creation requires decision-service → Kafka "decisions" topic → case-service consumer
-    // Decision-service doesn't produce to Kafka yet (HTTP-only), so case creation isn't wired E2E
-    test.skip(true, 'Decision-service does not produce to Kafka "decisions" topic yet');
 
     const token          = blastToken ?? await getMerchantToken(request);
     const deviceId       = sharedBlastDeviceId ?? `blast-case-device-${Date.now()}`;
@@ -203,8 +200,8 @@ test.describe('Fraud Blast E2E', () => {
       );
     }
 
-    // Wait for case creation — case-service consumes from Kafka asynchronously
-    await sleep(2000);
+    // Wait for full pipeline: event → Kafka → decision-service → score → Kafka → case-service
+    await sleep(5000);
 
     // Query case-service for cases related to the blasted device
     const caseResponse = await request.get(`${CASE_URL}/v1/cases`, {

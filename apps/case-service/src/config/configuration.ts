@@ -3,11 +3,11 @@ export default () => ({
   serviceName: process.env.SERVICE_NAME || 'case-service',
 
   database: {
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '5432', 10),
-    username: process.env.DB_USERNAME || 'signalrisk',
-    password: process.env.DB_PASSWORD || 'signalrisk',
-    database: process.env.DB_DATABASE || 'signalrisk',
+    host: process.env.DATABASE_HOST || process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DATABASE_PORT || process.env.DB_PORT || '5432', 10),
+    username: process.env.DATABASE_USER || process.env.DB_USERNAME || 'signalrisk',
+    password: process.env.DATABASE_PASSWORD || process.env.DB_PASSWORD || 'signalrisk',
+    database: process.env.DATABASE_NAME || process.env.DB_DATABASE || 'signalrisk',
     ssl: process.env.DB_SSL === 'true',
   },
 
