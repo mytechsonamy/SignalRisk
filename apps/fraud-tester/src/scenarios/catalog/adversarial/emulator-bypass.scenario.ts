@@ -67,7 +67,7 @@ export const emulatorBypassScenario: FraudScenario = {
 
       const event: FraudTestEvent = {
         eventId: `evt-adversarial-emulator-bypass-${seed}-${i}`,
-        merchantId: 'merchant-test-001',
+        merchantId: '00000000-0000-0000-0000-000000000001',
         deviceFingerprint: `real-device-fp-${seed}-${i % 10}`,
         userId: `legitimate-user-${seed}-${i}`,
         amount: 120 + ((seed * 5 + i * 11) % 380),

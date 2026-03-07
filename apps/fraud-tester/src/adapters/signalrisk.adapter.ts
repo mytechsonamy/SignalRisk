@@ -49,13 +49,16 @@ export class SignalRiskAdapter implements IFraudSystemAdapter {
   }
 
   /**
-   * POST /v1/events then poll /v1/decisions/{eventId} up to MAX_POLL_ATTEMPTS times.
-   * latencyMs covers the full round-trip from submit to decision receipt.
+   * Two-phase approach:
+   * 1. POST /v1/events to event-collector (async — feeds Kafka pipeline)
+   * 2. POST /v1/decisions to decision-service (sync — immediate scoring)
+   * latencyMs covers the full round-trip.
    */
   async submitEvent(event: FraudTestEvent): Promise<FraudDecision> {
     const start = Date.now();
 
-    const submitRes = await fetch(`${this.baseUrl}/v1/events`, {
+    // Fire event to event-collector (async, don't block on failure)
+    fetch(`${this.baseUrl}/v1/events`, {
       method: 'POST',
       headers: this.defaultHeaders,
       body: JSON.stringify({
@@ -72,32 +75,47 @@ export class SignalRiskAdapter implements IFraudSystemAdapter {
           },
         ],
       }),
+    }).catch(() => { /* fire-and-forget for Kafka pipeline */ });
+
+    // Synchronous decision via decision-service
+    const decisionRes = await fetch(`${this.decisionUrl}/v1/decisions`, {
+      method: 'POST',
+      headers: this.defaultHeaders,
+      body: JSON.stringify({
+        requestId: event.eventId,
+        merchantId: event.merchantId,
+        entityId: event.userId || event.eventId,
+        deviceId: event.deviceFingerprint,
+        ip: event.ipAddress,
+        amount: event.amount,
+      }),
     });
 
-    if (!submitRes.ok) {
+    if (!decisionRes.ok) {
       throw new Error(
-        `SignalRiskAdapter: POST /v1/events failed with HTTP ${submitRes.status}`,
+        `SignalRiskAdapter: POST /v1/decisions failed with HTTP ${decisionRes.status}`,
       );
     }
 
-    // Poll for the decision
-    for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
-      if (attempt > 0) {
-        await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-      }
+    const data = (await decisionRes.json()) as {
+      requestId: string;
+      action: 'ALLOW' | 'REVIEW' | 'BLOCK';
+      riskScore: number;
+      riskFactors?: Array<{ signal: string; value: number }>;
+    };
 
-      const decision = await this.getDecision(event.eventId);
-      if (decision !== null) {
-        return {
-          ...decision,
-          latencyMs: Date.now() - start,
-        };
-      }
+    const signals: Record<string, number> = {};
+    for (const factor of data.riskFactors ?? []) {
+      signals[factor.signal] = typeof factor.value === 'number' ? factor.value : 0;
     }
 
-    throw new Error(
-      `SignalRiskAdapter: decision for eventId '${event.eventId}' not available after ${MAX_POLL_ATTEMPTS} polls`,
-    );
+    return {
+      eventId: event.eventId,
+      decision: data.action,
+      riskScore: data.riskScore ?? 0,
+      latencyMs: Date.now() - start,
+      signals,
+    };
   }
 
   /**

@@ -34,7 +34,7 @@ export const simSwapScenario: FraudScenario = {
     for (let i = 0; i < TOTAL_EVENTS; i++) {
       const event: FraudTestEvent = {
         eventId: `evt-sim-swap-${seed}-${i}`,
-        merchantId: 'merchant-test-001',
+        merchantId: '00000000-0000-0000-0000-000000000001',
         // Each event uses the attacker's device, not the victim's historical device
         deviceFingerprint: `attacker-device-${seed}`,
         userId: `victim-user-${seed}`,

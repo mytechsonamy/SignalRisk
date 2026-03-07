@@ -50,7 +50,7 @@ export const slowFraudScenario: FraudScenario = {
 
       const event: FraudTestEvent = {
         eventId: `evt-adversarial-slow-fraud-${seed}-${i}`,
-        merchantId: 'merchant-test-002',
+        merchantId: '00000000-0000-0000-0000-000000000001',
         deviceFingerprint: `slow-fraud-fp-${seed}-${i % 8}`,
         userId: `slow-fraud-user-${seed}-${i}`,
         amount: 49 + ((seed * 11 + i * 7) % 200),

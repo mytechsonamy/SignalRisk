@@ -63,7 +63,7 @@ export const botEvasionScenario: FraudScenario = {
 
       const event: FraudTestEvent = {
         eventId: `evt-adversarial-bot-evasion-${seed}-${i}`,
-        merchantId: 'merchant-test-003',
+        merchantId: '00000000-0000-0000-0000-000000000001',
         deviceFingerprint: `bot-evasion-fp-${seed}-${i % 6}`,
         userId: `bot-evasion-user-${seed}-${i}`,
         amount: 89 + ((seed * 7 + i * 13) % 210),

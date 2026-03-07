@@ -60,13 +60,13 @@ export class DecisionStoreService {
       await client.query(
         `INSERT INTO decisions
            (request_id, merchant_id, device_id, risk_score, decision, risk_factors, signals, latency_ms, created_at, is_test)
-         VALUES ($1, $2::uuid, COALESCE($3::uuid, uuid_generate_v4()), $4, $5::decision_outcome, $6::jsonb, $7::jsonb, $8, $9, $10)
+         VALUES ($1, $2::uuid, $3::uuid, $4, $5::decision_outcome, $6::jsonb, $7::jsonb, $8, $9, $10)
          ON CONFLICT ON CONSTRAINT uq_decisions_merchant_request DO NOTHING`,
         [
           result.requestId,
           result.merchantId,
           (result as any).deviceId || null,
-          result.riskScore,
+          result.riskScore ?? 0,
           result.action,
           JSON.stringify(result.riskFactors),
           JSON.stringify((result as any).signals || {}),
@@ -87,6 +87,36 @@ export class DecisionStoreService {
       );
     } finally {
       client?.release();
+    }
+  }
+
+  /**
+   * Find a decision by request_id (across all merchants — no RLS).
+   */
+  async findByRequestId(requestId: string): Promise<DecisionResult | null> {
+    try {
+      const { rows } = await this.pool.query(
+        `SELECT request_id, merchant_id, device_id, risk_score, decision, risk_factors, signals, latency_ms, created_at, is_test
+         FROM decisions WHERE request_id = $1 LIMIT 1`,
+        [requestId],
+      );
+      if (rows.length === 0) return null;
+      const row = rows[0];
+      return {
+        requestId: row.request_id,
+        merchantId: row.merchant_id,
+        action: row.decision,
+        riskScore: Number(row.risk_score) || 0,
+        riskFactors: row.risk_factors ?? [],
+        appliedRules: [],
+        latencyMs: row.latency_ms,
+        cached: false,
+        createdAt: row.created_at,
+        isTest: row.is_test,
+      };
+    } catch (err) {
+      this.logger.error(`findByRequestId failed: ${(err as Error).message}`);
+      return null;
     }
   }
 

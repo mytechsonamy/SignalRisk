@@ -34,7 +34,7 @@ export const velocityEvasionScenario: FraudScenario = {
 
       const event: FraudTestEvent = {
         eventId: `evt-vel-evasion-${seed}-${i}`,
-        merchantId: 'merchant-test-001',
+        merchantId: '00000000-0000-0000-0000-000000000001',
         deviceFingerprint: `vel-device-${seed}-${i % 10}`,
         userId: `vel-user-${seed}-${i % 10}`,
         ipAddress: `${IP_SUBNET}.${hostOctet}`,

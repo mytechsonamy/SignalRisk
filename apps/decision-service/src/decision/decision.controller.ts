@@ -12,11 +12,14 @@
 import {
   Controller,
   Post,
+  Get,
+  Param,
   Body,
   HttpCode,
   Res,
   Logger,
   Headers,
+  NotFoundException,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { ApiOperation, ApiResponse, ApiTags, ApiHeader } from '@nestjs/swagger';
@@ -42,6 +45,20 @@ export class DecisionController {
   @ApiResponse({ status: 202, description: 'Decision result: ALLOW, REVIEW, or BLOCK with risk score and factors' })
   @ApiResponse({ status: 400, description: 'Missing required fields' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiOperation({ summary: 'Get a decision by request ID (event ID)' })
+  @ApiResponse({ status: 200, description: 'Decision found' })
+  @ApiResponse({ status: 404, description: 'Decision not found' })
+  @Get('/v1/decisions/:requestId')
+  async getDecision(
+    @Param('requestId') requestId: string,
+  ): Promise<DecisionResult> {
+    const result = await this.store.findByRequestId(requestId);
+    if (!result) {
+      throw new NotFoundException(`Decision not found for requestId=${requestId}`);
+    }
+    return result;
+  }
+
   @Post('/v1/decisions')
   @HttpCode(202)
   async decide(

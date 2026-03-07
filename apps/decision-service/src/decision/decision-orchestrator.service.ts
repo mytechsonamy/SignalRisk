@@ -379,7 +379,7 @@ export class DecisionOrchestratorService {
    * Network risk score: use riskScore directly + proxy/VPN/Tor bonuses.
    */
   private networkRiskScore(sig: NetworkSignal): number {
-    let score = sig.riskScore;
+    let score = sig.riskScore ?? 0;
 
     if (sig.isTor)        score = Math.min(100, score + 40);
     if (sig.isProxy)      score = Math.min(100, score + 20);
@@ -424,7 +424,7 @@ export class DecisionOrchestratorService {
   computeWeightedScore(
     scores: Array<{ name: string; score: number | null; weight: number }>,
   ): number {
-    const available = scores.filter((s) => s.score !== null);
+    const available = scores.filter((s) => s.score !== null && !isNaN(s.score as number));
 
     if (available.length === 0) {
       // All signals failed — return a neutral-high score that triggers REVIEW

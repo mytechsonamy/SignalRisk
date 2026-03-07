@@ -108,7 +108,7 @@ export class DecisionsProducerService implements OnModuleInit, OnModuleDestroy {
               appliedRules: result.appliedRules,
               latencyMs: result.latencyMs,
               isTest: isTest,
-              timestamp: result.createdAt.toISOString(),
+              timestamp: result.createdAt instanceof Date ? result.createdAt.toISOString() : new Date().toISOString(),
               signals: {},
             }),
             headers,

@@ -31,7 +31,7 @@ export const deviceFarmScenario: FraudScenario = {
     for (let i = 0; i < TOTAL_EVENTS; i++) {
       const event: FraudTestEvent = {
         eventId: `evt-farm-${seed}-${i}`,
-        merchantId: 'merchant-test-001',
+        merchantId: '00000000-0000-0000-0000-000000000001',
         deviceFingerprint: SHARED_FINGERPRINT,
         userId: `user-${i}`,
         amount: 100 + (i % 400),

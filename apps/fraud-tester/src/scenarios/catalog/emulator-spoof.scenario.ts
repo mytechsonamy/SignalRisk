@@ -41,7 +41,7 @@ export const emulatorSpoofScenario: FraudScenario = {
 
       const event: FraudTestEvent = {
         eventId: `evt-emulator-spoof-${seed}-${i}`,
-        merchantId: 'merchant-test-001',
+        merchantId: '00000000-0000-0000-0000-000000000001',
         deviceFingerprint: `emulator-fp-${seed}-${i % 5}`,
         userId: `emulator-user-${seed}-${i}`,
         amount: 50 + (i % 250),
