@@ -7,6 +7,7 @@
 
 import { execSync } from 'child_process';
 import * as crypto from 'crypto';
+import * as path from 'path';
 import type { APIRequestContext } from '@playwright/test';
 
 // ---------------------------------------------------------------------------
@@ -139,7 +140,7 @@ export async function getAdminToken(request: APIRequestContext): Promise<string>
  */
 export function execDockerCommand(cmd: string): void {
   execSync(cmd, {
-    cwd: process.cwd(),
+    cwd: path.resolve(__dirname, '..', '..', '..'),
     stdio: 'pipe',
   });
 }

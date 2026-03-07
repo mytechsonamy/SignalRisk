@@ -271,6 +271,8 @@ services:
       ALLOWED_SIGNAL_HOSTS: localhost,127.0.0.1
       # API key validation — comma-separated sk_test_<32hex> keys for dev
       ALLOWED_API_KEYS: "sk_test_00000000000000000000000000000001"
+      # kafkajs does not bundle LZ4 codec — use gzip in Docker
+      KAFKA_COMPRESSION: gzip
     depends_on:
       <<: *depends-infra
       auth-service:
