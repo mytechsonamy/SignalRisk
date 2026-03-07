@@ -10,7 +10,7 @@ export class CaseExportService {
     try {
       await client.query("SELECT set_config('app.merchant_id', $1, true)", [merchantId]);
       const res = await client.query(
-        'SELECT * FROM cases WHERE entity_id = $2 AND deleted_at IS NULL ORDER BY created_at DESC',
+        'SELECT * FROM cases WHERE merchant_id = $1 AND entity_id = $2 ORDER BY created_at DESC',
         [merchantId, entityId],
       );
       return res.rows;

@@ -19,7 +19,7 @@ export default defineConfig({
     // Heavy load tests — fraud blast + performance gate generate significant Kafka lag
     {
       name: 'e2e-heavy',
-      testMatch: /fraud-blast|performance-gate/,
+      testMatch: /fraud-blast|performance-gate|case-lifecycle/,
       fullyParallel: false,
       dependencies: ['e2e-light'],
     },
