@@ -395,13 +395,26 @@ STREAM B: FraudTester
 
 ---
 
-## Kalan Isler — Sprint 33+
+## [DONE] Sprint 33 — Feature Flags E2E + DLQ Timeout Fix + Test Stability
+
+| Task | Durum |
+|------|-------|
+| T1: Feature flags E2E test suite | DONE — 8 test: list, create, get, check disabled, update, check enabled, delete, 404 |
+| T2: Feature-flag-service null safety | DONE — optional chaining merchantIds, rolloutPercentage default 100 |
+| T3: DLQ timeout fix | DONE — Promise.race 5s timeout prevents HTTP hang when Kafka metadata stale |
+| T4: Fraud-blast graceful skip | DONE — velocityWired flag, skip dependent tests when velocity pipeline unavailable |
+| T5: Happy-path request timeout | DONE — 15s request-level timeout on validation tests |
+
+**Sonuc:** E2E 78/78 (70 → 78). **Tum testler gecti, 0 skip, 0 fail.** Velocity pipeline E2E calisiyor. Full pipeline: event → Kafka → velocity-service → Redis counters → decision-service → case-service.
+
+---
+
+## Kalan Isler
 
 | Task | Aciklama |
 |------|----------|
 | CI/CD Docker | GitHub Actions self-hosted runner veya Docker-in-Docker ile e2e.yml gercek calissin |
 | Event-collector Kafka consumer lag | Consumer lag HTTP server'i bloke ediyor — ayri worker/thread gerekli |
-| FraudTester battle integration test | Real pipeline battle (blast → poll → case verify) |
 
 ---
 
@@ -433,7 +446,7 @@ Tum kriterler karsilanirsa: apps/fraud-tester/ → ayri repo, adapter npm paketi
 
 ---
 
-## Test Sayilari (Sprint 32 sonu)
+## Test Sayilari (Sprint 33 sonu)
 
 | Servis | Test Sayisi |
 |--------|-------------|
@@ -453,7 +466,7 @@ Tum kriterler karsilanirsa: apps/fraud-tester/ → ayri repo, adapter npm paketi
 | integration tests | 22 |
 | load test mock | 19 |
 | fraud-tester | 58 unit + 7 integration (Sprint 21 — GenericHttpAdapter +6) |
-| E2E (SKIP_DOCKER guard) | 70/70 pass (Docker stack gerektirir) |
+| E2E (SKIP_DOCKER guard) | 78/78 pass (Docker stack gerektirir) |
 | **TOPLAM** | **~1090+** |
 
 ---
