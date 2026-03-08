@@ -371,7 +371,18 @@ STREAM B: FraudTester
 
 ---
 
-## Kalan Isler — Sprint 31+
+## [DONE] Sprint 31 — Health Check & Service Discovery E2E
+
+| Task | Durum |
+|------|-------|
+| T1: 13 servis health check testi | DONE — auth, event-collector, device-intel, velocity, behavioral, network-intel, telco-intel, rule-engine, decision, case, webhook, graph-intel, feature-flag |
+| T2: Aggregate latency testi | DONE — tum servisler 2s altinda yanit vermeli |
+
+**Sonuc:** E2E 62/62 (48 → 62). Tum 13 microservice sağlık kontrolu tam.
+
+---
+
+## Kalan Isler — Sprint 32+
 
 | Task | Aciklama |
 |------|----------|
@@ -429,7 +440,7 @@ Tum kriterler karsilanirsa: apps/fraud-tester/ → ayri repo, adapter npm paketi
 | integration tests | 22 |
 | load test mock | 19 |
 | fraud-tester | 58 unit + 7 integration (Sprint 21 — GenericHttpAdapter +6) |
-| E2E (SKIP_DOCKER guard) | 48/48 pass (Docker stack gerektirir) |
+| E2E (SKIP_DOCKER guard) | 62/62 pass (Docker stack gerektirir) |
 | **TOPLAM** | **~1090+** |
 
 ---
