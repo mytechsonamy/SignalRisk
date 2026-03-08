@@ -360,7 +360,18 @@ STREAM B: FraudTester
 
 ---
 
-## Kalan Isler — Sprint 30+
+## [DONE] Sprint 30 — Analytics & Decision Query E2E
+
+| Task | Durum |
+|------|-------|
+| T1: Analytics E2E test suite | DONE — 5 endpoint: trends, risk-buckets, kpi, merchants, minute-trend |
+| T2: Decision query tests | DONE — GET by requestId, 404 for unknown, metrics latency |
+
+**Sonuc:** E2E 48/48 (40 → 48). Decision-service analytics + query endpointleri tam test edildi.
+
+---
+
+## Kalan Isler — Sprint 31+
 
 | Task | Aciklama |
 |------|----------|
@@ -398,7 +409,7 @@ Tum kriterler karsilanirsa: apps/fraud-tester/ → ayri repo, adapter npm paketi
 
 ---
 
-## Test Sayilari (Sprint 29 sonu)
+## Test Sayilari (Sprint 30 sonu)
 
 | Servis | Test Sayisi |
 |--------|-------------|
@@ -418,7 +429,7 @@ Tum kriterler karsilanirsa: apps/fraud-tester/ → ayri repo, adapter npm paketi
 | integration tests | 22 |
 | load test mock | 19 |
 | fraud-tester | 58 unit + 7 integration (Sprint 21 — GenericHttpAdapter +6) |
-| E2E (SKIP_DOCKER guard) | 40/40 pass (Docker stack gerektirir) |
+| E2E (SKIP_DOCKER guard) | 48/48 pass (Docker stack gerektirir) |
 | **TOPLAM** | **~1090+** |
 
 ---

@@ -13,7 +13,7 @@ export default defineConfig({
     // Light tests first — no heavy Kafka traffic
     {
       name: 'e2e-light',
-      testMatch: /happy-path|jwt-revoke|multi-tenant/,
+      testMatch: /happy-path|jwt-revoke|multi-tenant|analytics-decision/,
       fullyParallel: false,
     },
     // Heavy load tests — fraud blast + performance gate generate significant Kafka lag
