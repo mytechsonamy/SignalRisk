@@ -137,22 +137,30 @@ export class EventsService {
       }
     }
 
-    // Route invalid events to DLQ via DlqService
+    // Route invalid events to DLQ via DlqService (fire-and-forget with timeout)
     if (invalidEvents.length > 0) {
+      const dlqPayload = invalidEvents.map(({ event, result }) => ({
+        originalEvent: event,
+        validationErrors: result.errors.map((e) => ({
+          path: e.path,
+          message: e.message,
+          keyword: e.keyword,
+        })),
+        failureReason: 'validation-failed' as const,
+        retryCount: 0,
+        originalTopic: 'http-ingestion',
+      }));
+
+      // DLQ send with 5s timeout to avoid hanging the HTTP response
+      const dlqTimeout = new Promise<void>((_, reject) =>
+        setTimeout(() => reject(new Error('DLQ send timed out after 5s')), 5000),
+      );
+
       try {
-        await this.dlqService.sendBatchToDlq(
-          invalidEvents.map(({ event, result }) => ({
-            originalEvent: event,
-            validationErrors: result.errors.map((e) => ({
-              path: e.path,
-              message: e.message,
-              keyword: e.keyword,
-            })),
-            failureReason: 'validation-failed' as const,
-            retryCount: 0,
-            originalTopic: 'http-ingestion',
-          })),
-        );
+        await Promise.race([
+          this.dlqService.sendBatchToDlq(dlqPayload),
+          dlqTimeout,
+        ]);
         this.logger.log(
           `Routed ${invalidEvents.length} invalid events to DLQ`,
         );
@@ -160,7 +168,6 @@ export class EventsService {
         // DLQ send failure is logged but not thrown -- don't fail the whole batch
         this.logger.error(
           `Failed to route events to DLQ: ${(error as Error).message}`,
-          (error as Error).stack,
         );
       }
     }

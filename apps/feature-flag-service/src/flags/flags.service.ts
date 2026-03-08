@@ -27,12 +27,12 @@ export class FlagsService {
     }
 
     // Explicit allowlist takes priority
-    if (flag.merchantIds.includes(merchantId)) {
+    if (flag.merchantIds?.includes(merchantId)) {
       return { flagName, merchantId, enabled: true, reason: 'allowlist' };
     }
 
-    // Full rollout
-    if (flag.rolloutPercentage >= 100) {
+    // Full rollout (default to 100% if not set)
+    if ((flag.rolloutPercentage ?? 100) >= 100) {
       return { flagName, merchantId, enabled: true, reason: 'full_rollout' };
     }
 
