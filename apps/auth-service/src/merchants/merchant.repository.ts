@@ -50,8 +50,8 @@ export class MerchantRepository {
   async create(data: CreateMerchantData, rawApiKey: string): Promise<Merchant> {
     const id = crypto.randomUUID();
     const apiKeyHash = await bcryptjs.hash(rawApiKey, BCRYPT_ROUNDS);
-    // The prefix is the first 8 chars of the full key (including prefix "sk_test_")
-    const apiKeyPrefix = rawApiKey.substring(0, 8);
+    // The prefix includes "sk_test_" (8 chars) + first 4 hex chars for uniqueness
+    const apiKeyPrefix = rawApiKey.substring(0, 12);
 
     const result = await this.pool.query(
       `INSERT INTO merchants
@@ -136,7 +136,7 @@ export class MerchantRepository {
 
   async rotateApiKey(id: string, rawApiKey: string): Promise<Merchant | null> {
     const apiKeyHash = await bcryptjs.hash(rawApiKey, BCRYPT_ROUNDS);
-    const apiKeyPrefix = rawApiKey.substring(0, 8);
+    const apiKeyPrefix = rawApiKey.substring(0, 12);
 
     const result = await this.pool.query(
       `UPDATE merchants

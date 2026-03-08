@@ -382,7 +382,20 @@ STREAM B: FraudTester
 
 ---
 
-## Kalan Isler — Sprint 32+
+## [DONE] Sprint 32 — Merchant CRUD E2E + Schema Migration
+
+| Task | Durum |
+|------|-------|
+| T1: Merchant CRUD E2E test suite | DONE — 8 test: create, get, update, rotate key, delete, 404, non-admin 403, no auth 401 |
+| T2: Merchants table schema migration | DONE — `07_merchants_extend.sql` (api_key_hash, webhook_url, rate_limit, tier, is_active, deleted_at) |
+| T3: apiKeyPrefix uniqueness fix | DONE — prefix 8→12 chars for unique constraint |
+| T4: Playwright config guncelle | DONE — merchant-crud added to e2e-light |
+
+**Sonuc:** E2E 70/70 (62 → 70). Merchant CRUD lifecycle tam test edildi. Schema migration + apiKeyPrefix bug fixlendi.
+
+---
+
+## Kalan Isler — Sprint 33+
 
 | Task | Aciklama |
 |------|----------|
@@ -420,7 +433,7 @@ Tum kriterler karsilanirsa: apps/fraud-tester/ → ayri repo, adapter npm paketi
 
 ---
 
-## Test Sayilari (Sprint 30 sonu)
+## Test Sayilari (Sprint 32 sonu)
 
 | Servis | Test Sayisi |
 |--------|-------------|
@@ -440,7 +453,7 @@ Tum kriterler karsilanirsa: apps/fraud-tester/ → ayri repo, adapter npm paketi
 | integration tests | 22 |
 | load test mock | 19 |
 | fraud-tester | 58 unit + 7 integration (Sprint 21 — GenericHttpAdapter +6) |
-| E2E (SKIP_DOCKER guard) | 62/62 pass (Docker stack gerektirir) |
+| E2E (SKIP_DOCKER guard) | 70/70 pass (Docker stack gerektirir) |
 | **TOPLAM** | **~1090+** |
 
 ---
