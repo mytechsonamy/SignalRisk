@@ -99,9 +99,14 @@ test.describe('Analytics & Decision Query', () => {
     });
     expect(decisionResp.status()).toBe(202);
 
-    // Now GET the decision by requestId
-    const getResp = await request.get(`${DECISION_URL}/v1/decisions/${requestId}`);
-    expect(getResp.status()).toBe(200);
+    // Poll GET until the decision is persisted (async processing)
+    let getResp;
+    for (let i = 0; i < 10; i++) {
+      getResp = await request.get(`${DECISION_URL}/v1/decisions/${requestId}`);
+      if (getResp.status() === 200) break;
+      await new Promise(r => setTimeout(r, 500));
+    }
+    expect(getResp!.status()).toBe(200);
 
     const decision = (await getResp.json()) as {
       requestId: string;

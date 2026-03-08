@@ -158,12 +158,14 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
       };
 
       try {
-        const metadata = await this.producer.send(record);
+        const sendTimeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`Kafka send to ${topic} timed out after 10s`)), 10_000),
+        );
+        const metadata = await Promise.race([this.producer.send(record), sendTimeout]);
         allMetadata.push(...metadata);
       } catch (error) {
         this.logger.error(
           `Failed to send batch to topic ${topic}: ${(error as Error).message}`,
-          (error as Error).stack,
         );
         throw error;
       }
@@ -192,38 +194,21 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
     const intervalMs = this.configService.get<number>('backpressure.lagCheckIntervalMs') || 5000;
 
     const poll = async () => {
+      // Timeout to prevent hanging when Kafka metadata is stale
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Lag poll timed out')), 10_000),
+      );
+
       try {
-        const topics = await this.admin.fetchTopicOffsets('signalrisk.events.raw');
-        const latestOffsets = topics.reduce(
-          (sum, p) => sum + parseInt(p.offset, 10),
-          0,
-        );
-
-        // Try to get consumer group offsets for the decision engine consumer
-        try {
-          const groupOffsets = await this.admin.fetchOffsets({
-            groupId: 'signalrisk.cg.decision-engine',
-            topics: ['signalrisk.events.raw'],
-          });
-
-          const committedOffsets = groupOffsets[0]?.partitions?.reduce(
-            (sum, p) => sum + Math.max(0, parseInt(p.offset, 10)),
-            0,
-          ) ?? 0;
-
-          this.consumerLag = Math.max(0, latestOffsets - committedOffsets);
-        } catch {
-          // Consumer group may not exist yet; assume no lag
-          this.consumerLag = 0;
-        }
+        await Promise.race([this.pollLagInternal(), timeout]);
       } catch {
-        // If we can't fetch offsets, keep the last known lag
+        // If we can't fetch offsets (error or timeout), keep the last known lag
         this.logger.warn('Failed to fetch consumer lag, keeping last known value');
       }
     };
 
-    // Initial poll
-    poll();
+    // Initial poll (deferred to avoid blocking startup)
+    setTimeout(() => poll(), 2000);
 
     // Recurring poll
     const interval = setInterval(poll, intervalMs);
@@ -232,6 +217,31 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
     this.producer.on('producer.disconnect', () => {
       clearInterval(interval);
     });
+  }
+
+  private async pollLagInternal(): Promise<void> {
+    const topics = await this.admin.fetchTopicOffsets('signalrisk.events.raw');
+    const latestOffsets = topics.reduce(
+      (sum, p) => sum + parseInt(p.offset, 10),
+      0,
+    );
+
+    try {
+      const groupOffsets = await this.admin.fetchOffsets({
+        groupId: 'signalrisk.cg.decision-engine',
+        topics: ['signalrisk.events.raw'],
+      });
+
+      const committedOffsets = groupOffsets[0]?.partitions?.reduce(
+        (sum, p) => sum + Math.max(0, parseInt(p.offset, 10)),
+        0,
+      ) ?? 0;
+
+      this.consumerLag = Math.max(0, latestOffsets - committedOffsets);
+    } catch {
+      // Consumer group may not exist yet; assume no lag
+      this.consumerLag = 0;
+    }
   }
 
   private resolveCompression(): CompressionTypes {
