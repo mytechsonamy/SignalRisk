@@ -304,7 +304,8 @@ gate_g7() {
   if docker compose -f docker-compose.full.yml stop decision-service 2>/dev/null; then
     # Check remaining services are still healthy
     local others_ok=true
-    for port in 3001 3002 3004 3005 3006 3007 3008 3009 3010 3011 3012 3013 3014; do
+    # Check all ports EXCEPT 3009 (decision-service, which is stopped)
+    for port in 3001 3002 3003 3004 3005 3006 3007 3008 3010 3011 3012 3013 3014; do
       if ! curl -sf "http://localhost:$port/health" > /dev/null 2>&1; then
         others_ok=false
         echo "    Port $port: DOWN after decision-service stop"
@@ -318,7 +319,7 @@ gate_g7() {
     docker compose -f docker-compose.full.yml start decision-service 2>/dev/null
     local waited=0
     while [ "$waited" -lt 60 ]; do
-      if curl -sf "http://localhost:3003/health" > /dev/null 2>&1; then
+      if curl -sf "http://localhost:3009/health" > /dev/null 2>&1; then
         break
       fi
       sleep 5

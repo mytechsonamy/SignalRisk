@@ -85,10 +85,10 @@ export class UsersService {
   ): Promise<AdminUserDto & { tempPassword: string }> {
     const dbRole = ROLE_MAP_TO_DB[role] || 'ANALYST';
 
-    // Check if user already exists for this merchant
+    // Check if email already exists globally (FD-1: users.email is globally unique)
     const existing = await this.pool.query(
-      `SELECT id FROM users WHERE merchant_id = $1 AND email = $2`,
-      [merchantId, email],
+      `SELECT id, merchant_id FROM users WHERE email = $1`,
+      [email],
     );
     if (existing.rows.length > 0) {
       throw new ConflictException('User with this email already exists');

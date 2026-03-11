@@ -420,7 +420,8 @@ export class DecisionOrchestratorService implements OnModuleInit {
       this.decisionStore.updateEntityProfile(req.merchantId, entityType, req.entityId).catch(() => {});
       // Save feature snapshot for ML export (fire-and-forget, AR-6)
       this.decisionStore.saveFeatureSnapshot(
-        req.requestId, req.merchantId, req.entityId, entityType, bundle as any,
+        req.requestId, req.merchantId, req.entityId, entityType,
+        result.action, result.riskScore, bundle as any,
       ).catch(() => {});
     }
 

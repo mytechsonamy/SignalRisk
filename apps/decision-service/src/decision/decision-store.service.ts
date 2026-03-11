@@ -226,15 +226,26 @@ export class DecisionStoreService {
 
   /**
    * Save feature snapshot for ML export and audit trail (P1-2).
+   * Writes structured feature columns matching migration 009 schema.
    * Fire-and-forget: never blocks the decision flow.
    * Logs warn on failure (AR-6: feature_snapshot_write_errors_total).
    */
   async saveFeatureSnapshot(
-    requestId: string,
+    decisionId: string,
     merchantId: string,
     entityId: string,
     entityType: string,
-    signalBundle: Record<string, unknown>,
+    action: string,
+    riskScore: number,
+    signalBundle: {
+      device?: { trustScore?: number; isEmulator?: boolean; daysSinceFirst?: number } | null;
+      velocity?: { dimensions?: { txCount10m?: number; txCount1h?: number; txCount24h?: number; amountSum1h?: number; amountSum24h?: number; uniqueDevices24h?: number; uniqueIps24h?: number }; burstDetected?: boolean } | null;
+      behavioral?: { sessionRiskScore?: number; isBot?: boolean; botProbability?: number } | null;
+      network?: { riskScore?: number; isProxy?: boolean; isVpn?: boolean; isTor?: boolean; geoMismatchScore?: number } | null;
+      telco?: { prepaidProbability?: number; isPorted?: boolean } | null;
+      stateful?: { customer?: { previousBlockCount30d?: number; previousReviewCount7d?: number } } | null;
+      [key: string]: unknown;
+    },
   ): Promise<void> {
     let client;
     try {
@@ -242,15 +253,58 @@ export class DecisionStoreService {
       await client.query("SELECT set_config('app.merchant_id', $1, true)", [merchantId]);
 
       await client.query(
-        `INSERT INTO decision_feature_snapshots
-           (decision_request_id, merchant_id, entity_id, entity_type, features, created_at)
-         VALUES ($1, $2, $3, $4, $5::jsonb, NOW())
-         ON CONFLICT DO NOTHING`,
-        [requestId, merchantId, entityId, entityType, JSON.stringify(signalBundle)],
+        `INSERT INTO decision_feature_snapshots (
+           decision_id, merchant_id, entity_id, entity_type, decision, risk_score,
+           f_device_trust_score, f_device_is_emulator, f_device_days_since_first,
+           f_velocity_tx_count_10m, f_velocity_tx_count_1h, f_velocity_tx_count_24h,
+           f_velocity_amount_sum_1h, f_velocity_amount_sum_24h,
+           f_velocity_unique_devices, f_velocity_unique_ips, f_velocity_burst_detected,
+           f_behavioral_risk_score, f_behavioral_is_bot, f_behavioral_bot_prob,
+           f_network_risk_score, f_network_is_proxy, f_network_is_vpn, f_network_is_tor, f_network_geo_mismatch,
+           f_telco_prepaid_prob, f_telco_is_ported,
+           f_stateful_prev_block_30d, f_stateful_prev_review_7d,
+           signals_raw, created_at
+         ) VALUES (
+           $1::uuid, $2, $3, $4, $5, $6,
+           $7, $8, $9,
+           $10, $11, $12, $13, $14, $15, $16, $17,
+           $18, $19, $20,
+           $21, $22, $23, $24, $25,
+           $26, $27,
+           $28, $29,
+           $30::jsonb, NOW()
+         )`,
+        [
+          decisionId, merchantId, entityId, entityType, action, riskScore,
+          signalBundle.device?.trustScore ?? null,
+          signalBundle.device?.isEmulator ?? null,
+          signalBundle.device?.daysSinceFirst ?? null,
+          signalBundle.velocity?.dimensions?.txCount10m ?? null,
+          signalBundle.velocity?.dimensions?.txCount1h ?? null,
+          signalBundle.velocity?.dimensions?.txCount24h ?? null,
+          signalBundle.velocity?.dimensions?.amountSum1h ?? null,
+          signalBundle.velocity?.dimensions?.amountSum24h ?? null,
+          signalBundle.velocity?.dimensions?.uniqueDevices24h ?? null,
+          signalBundle.velocity?.dimensions?.uniqueIps24h ?? null,
+          signalBundle.velocity?.burstDetected ?? null,
+          signalBundle.behavioral?.sessionRiskScore ?? null,
+          signalBundle.behavioral?.isBot ?? null,
+          signalBundle.behavioral?.botProbability ?? null,
+          signalBundle.network?.riskScore ?? null,
+          signalBundle.network?.isProxy ?? null,
+          signalBundle.network?.isVpn ?? null,
+          signalBundle.network?.isTor ?? null,
+          signalBundle.network?.geoMismatchScore ?? null,
+          signalBundle.telco?.prepaidProbability ?? null,
+          signalBundle.telco?.isPorted ?? null,
+          signalBundle.stateful?.customer?.previousBlockCount30d ?? null,
+          signalBundle.stateful?.customer?.previousReviewCount7d ?? null,
+          JSON.stringify(signalBundle),
+        ],
       );
     } catch (err) {
       this.logger.warn(
-        `Feature snapshot write failed for ${requestId}: ${(err as Error).message}`,
+        `Feature snapshot write failed for ${decisionId}: ${(err as Error).message}`,
       );
       // AR-6: feature_snapshot_write_errors_total metric would be incremented here
     } finally {
