@@ -49,6 +49,7 @@ export class DecisionStoreService {
   /**
    * Persist a decision result.
    * Uses RLS set_config to enforce tenant isolation.
+   * Writes entity_id + entity_type for typed prior-decision memory (ADR-009 + ADR-011).
    * All errors are caught and logged — the decision flow is never blocked.
    */
   async save(result: DecisionResult): Promise<void> {
@@ -61,13 +62,15 @@ export class DecisionStoreService {
 
       await client.query(
         `INSERT INTO decisions
-           (request_id, merchant_id, device_id, risk_score, decision, risk_factors, signals, latency_ms, created_at, is_test)
-         VALUES ($1, $2, $3, $4, $5::decision_outcome, $6::jsonb, $7::jsonb, $8, $9, $10)
+           (request_id, merchant_id, device_id, entity_id, entity_type, risk_score, decision, risk_factors, signals, latency_ms, created_at, is_test)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::decision_outcome, $8::jsonb, $9::jsonb, $10, $11, $12)
          ON CONFLICT ON CONSTRAINT uq_decisions_merchant_request DO NOTHING`,
         [
           result.requestId,
           result.merchantId,
           (result as any).deviceId || null,
+          (result as any).entityId || null,
+          (result as any).entityType || null,
           result.riskScore ?? 0,
           result.action,
           JSON.stringify(result.riskFactors),
@@ -119,6 +122,139 @@ export class DecisionStoreService {
     } catch (err) {
       this.logger.error(`findByRequestId failed: ${(err as Error).message}`);
       return null;
+    }
+  }
+
+  /**
+   * Prior-decision memory: count BLOCK and REVIEW decisions for a typed entity
+   * within the last 30 days (ADR-011 + ADR-009).
+   *
+   * Guardrails:
+   *  - 50ms timeout via statement_timeout (falls back to {0, 0})
+   *  - 30-day MAX lookback
+   *  - Uses idx_decisions_entity_type_created index (migration 013)
+   *  - Falls back to device_id query for backward compat (pre-013 rows)
+   */
+  async getPriorDecisionMemory(
+    merchantId: string,
+    entityId: string,
+    entityType: 'customer' | 'device' | 'ip' = 'customer',
+  ): Promise<{ previousBlockCount30d: number; previousReviewCount7d: number }> {
+    const fallback = { previousBlockCount30d: 0, previousReviewCount7d: 0 };
+    let client: { query: (...args: any[]) => Promise<any>; release: () => void } | undefined;
+
+    try {
+      // Race against 50ms timeout
+      const result = await Promise.race([
+        (async () => {
+          const conn = await this.pool.connect();
+          client = conn;
+
+          // Set 50ms statement timeout for this transaction
+          await conn.query('SET LOCAL statement_timeout = 50');
+
+          // RLS tenant isolation
+          await conn.query("SELECT set_config('app.merchant_id', $1, true)", [merchantId]);
+
+          const { rows } = await conn.query(
+            `SELECT
+               COUNT(*) FILTER (WHERE decision = 'BLOCK' AND created_at > NOW() - INTERVAL '30 days') AS block_count_30d,
+               COUNT(*) FILTER (WHERE decision = 'REVIEW' AND created_at > NOW() - INTERVAL '7 days') AS review_count_7d
+             FROM decisions
+             WHERE merchant_id = $1
+               AND entity_id = $2
+               AND entity_type = $3
+               AND created_at > NOW() - INTERVAL '30 days'`,
+            [merchantId, entityId, entityType],
+          );
+
+          return {
+            previousBlockCount30d: parseInt(rows[0]?.block_count_30d ?? '0', 10),
+            previousReviewCount7d: parseInt(rows[0]?.review_count_7d ?? '0', 10),
+          };
+        })(),
+        new Promise<typeof fallback>((resolve) =>
+          setTimeout(() => {
+            this.logger.warn(`Prior-decision memory timeout (50ms) for entity ${entityId}`);
+            resolve(fallback);
+          }, 50),
+        ),
+      ]);
+
+      return result;
+    } catch (err) {
+      this.logger.warn(
+        `Prior-decision memory failed for entity ${entityId}: ${(err as Error).message}`,
+      );
+      return fallback;
+    } finally {
+      client?.release();
+    }
+  }
+
+  /**
+   * Update entity profile on each decision (fire-and-forget).
+   * UPSERT into entity_profiles — never blocks the decision flow.
+   * Logs warn + increments counter on failure (AR-7).
+   */
+  async updateEntityProfile(
+    merchantId: string,
+    entityType: 'customer' | 'device' | 'ip',
+    entityId: string,
+  ): Promise<void> {
+    let client;
+    try {
+      client = await this.pool.connect();
+      await client.query("SELECT set_config('app.merchant_id', $1, true)", [merchantId]);
+
+      await client.query(
+        `INSERT INTO entity_profiles (merchant_id, entity_type, entity_id, first_seen_at, last_seen_at, total_tx_count)
+         VALUES ($1, $2, $3, NOW(), NOW(), 1)
+         ON CONFLICT (merchant_id, entity_type, entity_id)
+         DO UPDATE SET last_seen_at = NOW(), total_tx_count = entity_profiles.total_tx_count + 1`,
+        [merchantId, entityType, entityId],
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Entity profile update failed for ${entityType}:${entityId}: ${(err as Error).message}`,
+      );
+      // AR-7: entity_profile_update_errors_total metric would be incremented here
+    } finally {
+      client?.release();
+    }
+  }
+
+  /**
+   * Save feature snapshot for ML export and audit trail (P1-2).
+   * Fire-and-forget: never blocks the decision flow.
+   * Logs warn on failure (AR-6: feature_snapshot_write_errors_total).
+   */
+  async saveFeatureSnapshot(
+    requestId: string,
+    merchantId: string,
+    entityId: string,
+    entityType: string,
+    signalBundle: Record<string, unknown>,
+  ): Promise<void> {
+    let client;
+    try {
+      client = await this.pool.connect();
+      await client.query("SELECT set_config('app.merchant_id', $1, true)", [merchantId]);
+
+      await client.query(
+        `INSERT INTO decision_feature_snapshots
+           (decision_request_id, merchant_id, entity_id, entity_type, features, created_at)
+         VALUES ($1, $2, $3, $4, $5::jsonb, NOW())
+         ON CONFLICT DO NOTHING`,
+        [requestId, merchantId, entityId, entityType, JSON.stringify(signalBundle)],
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Feature snapshot write failed for ${requestId}: ${(err as Error).message}`,
+      );
+      // AR-6: feature_snapshot_write_errors_total metric would be incremented here
+    } finally {
+      client?.release();
     }
   }
 

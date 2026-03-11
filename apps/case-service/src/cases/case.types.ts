@@ -14,6 +14,7 @@ export interface Case {
   merchantId: string;
   decisionId: string;       // requestId from decision-service
   entityId: string;
+  entityType?: 'customer' | 'device' | 'ip';
   action: 'REVIEW' | 'BLOCK';
   riskScore: number;
   riskFactors: RiskFactor[];
@@ -33,6 +34,7 @@ export interface CreateCaseData {
   merchantId: string;
   decisionId: string;
   entityId: string;
+  entityType?: 'customer' | 'device' | 'ip';
   action: 'REVIEW' | 'BLOCK';
   riskScore: number;
   riskFactors: RiskFactor[];
@@ -64,6 +66,7 @@ export interface DecisionEvent {
   requestId: string;
   merchantId: string;
   entityId: string;
+  entityType?: 'customer' | 'device' | 'ip';
   action: 'ALLOW' | 'REVIEW' | 'BLOCK';
   riskScore: number;
   riskFactors: RiskFactor[];

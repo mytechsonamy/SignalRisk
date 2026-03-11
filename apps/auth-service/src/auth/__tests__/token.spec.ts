@@ -4,6 +4,7 @@ import { AuthService } from '../auth.service';
 import { JwtTokenService } from '../../jwt/jwt.service';
 import { KeyManager, ManagedKey } from '../../jwt/key-manager';
 import { MerchantsService, Merchant } from '../../merchants/merchants.service';
+import { RefreshTokenStore, RefreshTokenEntity } from '../entities/refresh-token.entity';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 
@@ -75,11 +76,43 @@ describe('Token Flow (issue, refresh, revoke)', () => {
     jwtTokenService = new JwtTokenService(keyManager, configService);
 
     merchantsService = {
-      findByClientId: jest.fn().mockReturnValue(mockMerchant),
-      findById: jest.fn().mockReturnValue(mockMerchant),
+      findByClientId: jest.fn().mockResolvedValue(mockMerchant),
+      findById: jest.fn().mockResolvedValue(mockMerchant),
     } as any;
 
-    authService = new AuthService(jwtTokenService, configService, merchantsService);
+    // Functional in-memory mock for refresh token store
+    const tokenMap = new Map<string, RefreshTokenEntity>();
+    const refreshTokenStore = {
+      save: jest.fn(async (entity: RefreshTokenEntity) => { tokenMap.set(entity.id, entity); }),
+      findByTokenHash: jest.fn(async (hash: string) => {
+        for (const e of tokenMap.values()) {
+          if (e.tokenHash === hash) return e;
+        }
+        return undefined;
+      }),
+      findById: jest.fn(async (id: string) => tokenMap.get(id)),
+      revokeById: jest.fn(async (id: string) => {
+        const e = tokenMap.get(id);
+        if (!e) return false;
+        e.revokedAt = new Date();
+        return true;
+      }),
+      revokeByTokenHash: jest.fn(async (hash: string) => {
+        for (const e of tokenMap.values()) {
+          if (e.tokenHash === hash) { e.revokedAt = new Date(); return true; }
+        }
+        return false;
+      }),
+      revokeAllForUser: jest.fn(async () => 0),
+      isValid: jest.fn((entity: RefreshTokenEntity) => {
+        if (entity.revokedAt) return false;
+        if (entity.expiresAt < new Date()) return false;
+        return true;
+      }),
+      purgeExpired: jest.fn(async () => 0),
+    } as any as RefreshTokenStore;
+
+    authService = new AuthService(jwtTokenService, configService, merchantsService, refreshTokenStore, {} as any);
   });
 
   describe('Issue token', () => {

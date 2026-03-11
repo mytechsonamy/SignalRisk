@@ -10,9 +10,10 @@ import { DecisionMetricsController } from './decision-metrics.controller';
 import { IdempotencyModule } from '../idempotency/idempotency.module';
 import { KafkaModule } from '../kafka/kafka.module';
 import { RedisModule } from '@signalrisk/redis-module';
+import { FeedbackModule } from '../feedback/feedback.module';
 
 @Module({
-  imports: [IdempotencyModule, RedisModule.forRoot(), forwardRef(() => KafkaModule)],
+  imports: [IdempotencyModule, RedisModule.forRoot(), forwardRef(() => KafkaModule), FeedbackModule],
   controllers: [DecisionController, DecisionMetricsController],
   providers: [
     DecisionOrchestratorService,

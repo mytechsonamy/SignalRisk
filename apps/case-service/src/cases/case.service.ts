@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { CaseRepository } from './case.repository';
 import {
   Case,
@@ -10,17 +10,28 @@ import {
 } from './case.types';
 import { UpdateCaseDto } from './dto/update-case.dto';
 import { BulkActionDto } from './dto/bulk-action.dto';
+import { LabelPublisherService } from '../kafka/label-publisher.service';
 
 @Injectable()
 export class CaseService {
   private readonly logger = new Logger(CaseService.name);
 
-  constructor(private readonly caseRepository: CaseRepository) {}
+  constructor(
+    private readonly caseRepository: CaseRepository,
+    @Optional() private readonly labelPublisher?: LabelPublisherService,
+  ) {}
 
   async createFromDecision(decision: DecisionEvent): Promise<Case> {
     const priority = this.computePriority(decision.riskScore);
     const slaHours = decision.action === 'BLOCK' ? 4 : 24;
     const slaDeadline = new Date(Date.now() + slaHours * 3_600_000);
+
+    const entityType = decision.entityType;
+    if (!entityType) {
+      this.logger.warn(
+        `Decision ${decision.requestId} missing entityType — defaulting to 'customer'`,
+      );
+    }
 
     this.logger.log(
       `Creating case for decision ${decision.requestId} ` +
@@ -31,6 +42,7 @@ export class CaseService {
       merchantId: decision.merchantId,
       decisionId: decision.requestId,
       entityId: decision.entityId,
+      entityType: entityType || 'customer',
       action: decision.action as 'REVIEW' | 'BLOCK',
       riskScore: decision.riskScore,
       riskFactors: decision.riskFactors,
@@ -71,6 +83,22 @@ export class CaseService {
 
     if (!updated) {
       throw new NotFoundException(`Case ${id} not found`);
+    }
+
+    // Publish analyst label on resolution (ADR-012)
+    if (updated.resolution != null && this.labelPublisher) {
+      this.labelPublisher.publishLabel({
+        caseId: updated.id,
+        merchantId: updated.merchantId,
+        entityId: updated.entityId,
+        entityType: updated.entityType || 'customer',
+        resolution: updated.resolution,
+        resolutionNotes: updated.resolutionNotes,
+        resolvedAt: updated.resolvedAt?.toISOString() ?? new Date().toISOString(),
+        timestamp: new Date().toISOString(),
+      }).catch((err) => {
+        this.logger.warn(`Failed to publish label for case ${updated.id}: ${(err as Error).message}`);
+      });
     }
 
     return updated;

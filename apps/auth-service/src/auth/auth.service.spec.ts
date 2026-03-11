@@ -7,6 +7,7 @@ import { AuthService } from './auth.service';
 import { MerchantsService, Merchant } from '../merchants/merchants.service';
 import { JwtTokenService } from '../jwt/jwt.service';
 import { KeyManager, ManagedKey } from '../jwt/key-manager';
+import { RefreshTokenStore } from './entities/refresh-token.entity';
 
 // Silence OpenTelemetry in tests
 jest.mock('@opentelemetry/api', () => ({
@@ -78,10 +79,23 @@ describe('AuthService', () => {
       findByClientId: jest.fn(),
     } as any;
 
+    const refreshTokenStore = {
+      save: jest.fn().mockResolvedValue(undefined),
+      findByTokenHash: jest.fn().mockResolvedValue(undefined),
+      findById: jest.fn().mockResolvedValue(undefined),
+      revokeById: jest.fn().mockResolvedValue(true),
+      revokeByTokenHash: jest.fn().mockResolvedValue(true),
+      revokeAllForUser: jest.fn().mockResolvedValue(0),
+      isValid: jest.fn().mockReturnValue(true),
+      purgeExpired: jest.fn().mockResolvedValue(0),
+    } as any as RefreshTokenStore;
+
     authService = new AuthService(
       jwtTokenService,
       configService,
       merchantsService,
+      refreshTokenStore,
+      {} as any,
     );
   });
 
@@ -89,7 +103,7 @@ describe('AuthService', () => {
     it('should return merchant when credentials are valid', async () => {
       jest
         .spyOn(merchantsService, 'findByClientId')
-        .mockReturnValue(mockMerchant);
+        .mockResolvedValue(mockMerchant);
 
       const result = await authService.validateCredentials(
         'sr_test_client_id',
@@ -105,7 +119,7 @@ describe('AuthService', () => {
     it('should throw UnauthorizedException when client_id is unknown', async () => {
       jest
         .spyOn(merchantsService, 'findByClientId')
-        .mockReturnValue(undefined);
+        .mockResolvedValue(undefined);
 
       await expect(
         authService.validateCredentials('unknown_id', 'any-secret'),
@@ -116,7 +130,7 @@ describe('AuthService', () => {
       const inactiveMerchant = { ...mockMerchant, active: false };
       jest
         .spyOn(merchantsService, 'findByClientId')
-        .mockReturnValue(inactiveMerchant);
+        .mockResolvedValue(inactiveMerchant);
 
       await expect(
         authService.validateCredentials('sr_test_client_id', 'test-secret'),
@@ -126,7 +140,7 @@ describe('AuthService', () => {
     it('should throw UnauthorizedException when secret is wrong', async () => {
       jest
         .spyOn(merchantsService, 'findByClientId')
-        .mockReturnValue(mockMerchant);
+        .mockResolvedValue(mockMerchant);
 
       await expect(
         authService.validateCredentials('sr_test_client_id', 'wrong-secret'),

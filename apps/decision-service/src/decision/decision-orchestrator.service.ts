@@ -1,8 +1,9 @@
 /**
  * SignalRisk Decision Service — Decision Orchestrator
  *
- * Orchestrates all intelligence signals in parallel (with per-signal timeout),
- * aggregates weighted risk scores, and produces a final ALLOW/REVIEW/BLOCK decision.
+ * Orchestrates all intelligence signals via fetchAllSignals() (6 parallel fetches),
+ * aggregates weighted risk scores, evaluates DSL rules, and produces a final
+ * ALLOW/REVIEW/BLOCK decision.
  *
  * Signal weights:
  *   device:    0.35
@@ -15,11 +16,20 @@
  *   riskScore >= 70  → BLOCK
  *   riskScore >= 40  → REVIEW
  *   riskScore <  40  → ALLOW
+ *
+ * DSL rule override (Strategy A):
+ *   - Weighted score computed first
+ *   - DSL rules evaluated against full SignalContext (including stateful)
+ *   - Any DSL BLOCK match → final action = BLOCK
+ *   - Any DSL REVIEW match + current ALLOW → upgrade to REVIEW
+ *   - No DSL match → threshold-based action stands
  */
 
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
+import * as fs from 'fs';
+import * as path from 'path';
 import {
   DecisionRequest,
   DecisionResult,
@@ -34,9 +44,17 @@ import {
   TelcoSignal,
   SignalFetcher,
   SignalBundle,
+  PriorDecisionMemory,
 } from './signal-fetchers';
 import { DecisionGateway, DecisionBroadcastEvent } from './decision.gateway';
 import { DecisionCacheService } from './decision-cache.service';
+import { DecisionStoreService } from './decision-store.service';
+import { WatchlistService } from '../feedback/watchlist.service';
+
+// DSL rule engine — pure TypeScript, no NestJS deps
+import { RuleNode } from '../../../rule-engine-service/src/dsl/ast';
+import { RuleEvaluator, SignalContext, EvaluationResult } from '../../../rule-engine-service/src/dsl/evaluator';
+import { parseAll } from '../../../rule-engine-service/src/dsl/parser';
 
 interface SignalWeight {
   name: string;
@@ -57,11 +75,19 @@ const REVIEW_THRESHOLD = 40;
 // Circular buffer size for timing instrumentation
 const TIMING_BUFFER_SIZE = 100;
 
+// Path to default.rules — resolved at module init
+const DEFAULT_RULES_PATH = path.join(
+  __dirname,
+  '..', '..', '..', 'rule-engine-service', 'src', 'rules', 'default.rules',
+);
+
 @Injectable()
-export class DecisionOrchestratorService {
+export class DecisionOrchestratorService implements OnModuleInit {
   private readonly logger = new Logger(DecisionOrchestratorService.name);
   private readonly signalTimeoutMs: number;
   private readonly tracer = trace.getTracer('decision-orchestrator', '1.0.0');
+  private readonly ruleEvaluator = new RuleEvaluator();
+  private parsedRules: RuleNode[] = [];
 
   // Circular buffer for signal fetch timings
   private readonly fetchTimings: Array<{ signalName: string; ms: number }> = [];
@@ -71,9 +97,37 @@ export class DecisionOrchestratorService {
     private readonly signalFetcher: SignalFetcher,
     @Optional() private readonly decisionGateway?: DecisionGateway,
     @Optional() private readonly decisionCache?: DecisionCacheService,
+    @Optional() private readonly decisionStore?: DecisionStoreService,
+    @Optional() private readonly watchlistService?: WatchlistService,
   ) {
     this.signalTimeoutMs =
       this.configService.get<number>('decision.signalTimeoutMs') ?? 150;
+  }
+
+  onModuleInit(): void {
+    this.loadRules();
+  }
+
+  /**
+   * Load DSL rules from default.rules file.
+   * Falls back to empty ruleset if the file is not found.
+   */
+  loadRules(rulesText?: string): void {
+    try {
+      const source = rulesText ?? fs.readFileSync(DEFAULT_RULES_PATH, 'utf-8');
+      this.parsedRules = parseAll(source);
+      this.logger.log(`Loaded ${this.parsedRules.length} DSL rules`);
+    } catch (err) {
+      this.logger.warn(
+        `Failed to load DSL rules: ${(err as Error).message}. Falling back to empty ruleset.`,
+      );
+      this.parsedRules = [];
+    }
+  }
+
+  /** Expose parsed rules for testing */
+  getParsedRules(): RuleNode[] {
+    return this.parsedRules;
   }
 
   // ---------------------------------------------------------------------------
@@ -91,74 +145,90 @@ export class DecisionOrchestratorService {
       }
     }
 
-    // Fetch all signals in parallel with per-signal timeout, each wrapped in a span
-    const [device, velocity, behavioral, network, telco] = await Promise.allSettled([
-      this.withTimeout(
-        this.fetchWithSpanTimed(
-          'fetch.device-signal',
-          { 'signal.type': 'device', 'merchant.id': req.merchantId },
-          req.deviceId
-            ? this.signalFetcher.fetchDeviceSignal(req.deviceId, req.merchantId)
-            : Promise.resolve(null),
-          'device',
-        ),
-        this.signalTimeoutMs,
-        'device',
-      ),
-      this.withTimeout(
-        this.fetchWithSpanTimed(
-          'fetch.velocity-signal',
-          { 'signal.type': 'velocity', 'merchant.id': req.merchantId },
-          this.signalFetcher.fetchVelocitySignal(req.entityId, req.merchantId),
-          'velocity',
-        ),
-        this.signalTimeoutMs,
-        'velocity',
-      ),
-      this.withTimeout(
-        this.fetchWithSpanTimed(
-          'fetch.behavioral-signal',
-          { 'signal.type': 'behavioral', 'merchant.id': req.merchantId },
-          req.sessionId
-            ? this.signalFetcher.fetchBehavioralSignal(req.sessionId, req.merchantId)
-            : Promise.resolve(null),
-          'behavioral',
-        ),
-        this.signalTimeoutMs,
-        'behavioral',
-      ),
-      this.withTimeout(
-        this.fetchWithSpanTimed(
-          'fetch.network-signal',
-          { 'signal.type': 'network', 'merchant.id': req.merchantId },
-          req.ip
-            ? this.signalFetcher.fetchNetworkSignal(req.ip, req.merchantId, undefined, req.billingCountry)
-            : Promise.resolve(null),
-          'network',
-        ),
-        this.signalTimeoutMs,
-        'network',
-      ),
-      this.withTimeout(
-        this.fetchWithSpanTimed(
-          'fetch.telco-signal',
-          { 'signal.type': 'telco', 'merchant.id': req.merchantId },
-          req.msisdn
-            ? this.signalFetcher.fetchTelcoSignal(req.msisdn, req.merchantId)
-            : Promise.resolve(null),
-          'telco',
-        ),
-        this.signalTimeoutMs,
-        'telco',
-      ),
-    ]);
+    // Determine entity type for prior-decision memory (ADR-009)
+    const entityType = (req as any).entityType ?? 'customer';
 
-    // Extract values from settled results — null on timeout/rejection
-    const deviceSignal    = this.extractSignal<DeviceSignal | null>(device,    'device');
-    const velocitySignal  = this.extractSignal<VelocitySignal | null>(velocity,  'velocity');
-    const behavioralSignal = this.extractSignal<BehavioralSignal | null>(behavioral, 'behavioral');
-    const networkSignal   = this.extractSignal<NetworkSignal | null>(network,   'network');
-    const telcoSignal     = this.extractSignal<TelcoSignal | null>(telco,     'telco');
+    // Watchlist check — denylist short-circuits to BLOCK (FD-2)
+    if (this.watchlistService) {
+      const watchlistResult = await this.watchlistService.checkWatchlist(
+        req.merchantId, req.entityId, entityType,
+      );
+
+      if (watchlistResult.isDenylisted) {
+        const latencyMs = Date.now() - startedAt;
+        const denyResult: DecisionResult = {
+          requestId: req.requestId,
+          merchantId: req.merchantId,
+          action: 'BLOCK',
+          riskScore: 100,
+          riskFactors: [{
+            signal: 'watchlist.denylist',
+            value: true,
+            contribution: 100,
+            description: watchlistResult.denylistReason || 'Entity is on denylist',
+          }],
+          appliedRules: ['watchlist.denylist'],
+          latencyMs,
+          cached: false,
+          createdAt: new Date(),
+        };
+
+        // Persist + broadcast + cache
+        if (this.decisionCache) await this.decisionCache.set(req.merchantId, req.entityId, denyResult);
+        if (this.decisionStore) {
+          await this.decisionStore.save({ ...denyResult, entityId: req.entityId, entityType, deviceId: req.deviceId } as any);
+          this.decisionStore.updateEntityProfile(req.merchantId, entityType, req.entityId).catch(() => {});
+        }
+        if (this.decisionGateway) {
+          this.decisionGateway.broadcastDecision({
+            decisionId: req.requestId, merchantId: req.merchantId, entityId: req.entityId,
+            action: 'BLOCK', riskScore: 100, timestamp: denyResult.createdAt.toISOString(),
+            topRiskFactors: ['watchlist.denylist'],
+          });
+        }
+        return denyResult;
+      }
+
+      // Store watchlist info for score adjustment after scoring
+      (req as any)._watchlistResult = watchlistResult;
+    }
+
+    // Fetch prior-decision memory in parallel with signal fetches (ADR-011)
+    const priorMemoryPromise: Promise<PriorDecisionMemory> = this.decisionStore
+      ? this.decisionStore.getPriorDecisionMemory(req.merchantId, req.entityId, entityType)
+      : Promise.resolve({ previousBlockCount30d: 0, previousReviewCount7d: 0 });
+
+    // Fetch all signals via fetchAllSignals() — 6 parallel fetches with circuit breakers
+    // This replaces the previous 5-way Promise.allSettled + manual timeout wrapping.
+    // fetchAllSignals() returns SignalBundle including stateful context (ADR-010).
+    const fetchStart = Date.now();
+    const bundle = await this.fetchWithSpan<SignalBundle>(
+      'fetch.all-signals',
+      { 'merchant.id': req.merchantId },
+      this.signalFetcher.fetchAllSignals({
+        deviceId: req.deviceId,
+        entityId: req.entityId,
+        merchantId: req.merchantId,
+        sessionId: req.sessionId,
+        ip: req.ip,
+        msisdn: req.msisdn,
+        billingCountry: req.billingCountry,
+        customerId: (req as any).customerId,
+        priorDecisionMemory: await priorMemoryPromise,
+      }),
+    );
+    const fetchMs = Date.now() - fetchStart;
+    this.recordFetchTiming('all-signals', fetchMs);
+
+    // Extract signals from bundle
+    const deviceSignal    = bundle.device;
+    const velocitySignal  = bundle.velocity;
+    const behavioralSignal = bundle.behavioral;
+    const networkSignal   = bundle.network;
+    const telcoSignal     = bundle.telco;
+
+    // Await prior-decision memory (already resolved by now since we awaited it above)
+    const priorMemory = await priorMemoryPromise;
 
     // Compute individual risk scores per signal
     const deviceScore    = deviceSignal    ? this.deviceRiskScore(deviceSignal)    : null;
@@ -176,10 +246,31 @@ export class DecisionOrchestratorService {
     ];
 
     // Compute weighted average — skip unavailable signals, renormalize weights
-    const riskScore = this.computeWeightedScore(scores);
+    let riskScore = this.computeWeightedScore(scores);
 
-    // Determine action
-    const action = this.computeAction(riskScore);
+    // Prior-decision memory boost (ADR-011):
+    // Previous BLOCKs in 30d increase risk; previous REVIEWs in 7d add minor boost
+    if (priorMemory.previousBlockCount30d > 0) {
+      const blockBoost = Math.min(15, priorMemory.previousBlockCount30d * 5);
+      riskScore = Math.round(Math.min(100, riskScore + blockBoost));
+    }
+    if (priorMemory.previousReviewCount7d > 2) {
+      const reviewBoost = Math.min(10, (priorMemory.previousReviewCount7d - 2) * 3);
+      riskScore = Math.round(Math.min(100, riskScore + reviewBoost));
+    }
+
+    // Watchlist score adjustments (FD-2)
+    const watchlistResult = (req as any)._watchlistResult;
+    if (watchlistResult) {
+      if (watchlistResult.isWatchlisted) {
+        riskScore = Math.round(Math.min(100, riskScore + 20));
+      } else if (watchlistResult.isAllowlisted) {
+        riskScore = Math.round(Math.max(0, riskScore - 15));
+      }
+    }
+
+    // Determine threshold-based action
+    let action = this.computeAction(riskScore);
 
     // Extract risk factors
     const riskFactors = this.extractRiskFactors(
@@ -191,8 +282,112 @@ export class DecisionOrchestratorService {
       scores,
     );
 
-    // Determine which rules matched
-    const appliedRules = this.matchRules(riskScore, riskFactors);
+    // Add prior-decision memory risk factor (ADR-011)
+    if (priorMemory.previousBlockCount30d > 0) {
+      riskFactors.push({
+        signal: 'stateful.customer.previousBlockCount30d',
+        value: priorMemory.previousBlockCount30d,
+        contribution: Math.min(15, priorMemory.previousBlockCount30d * 5),
+        description: `${priorMemory.previousBlockCount30d} previous BLOCK decision(s) in last 30 days`,
+      });
+    }
+    if (priorMemory.previousReviewCount7d > 2) {
+      riskFactors.push({
+        signal: 'stateful.customer.previousReviewCount7d',
+        value: priorMemory.previousReviewCount7d,
+        contribution: Math.min(10, (priorMemory.previousReviewCount7d - 2) * 3),
+        description: `${priorMemory.previousReviewCount7d} previous REVIEW decision(s) in last 7 days`,
+      });
+    }
+
+    // Watchlist risk factors
+    if (watchlistResult?.isWatchlisted) {
+      riskFactors.push({
+        signal: 'watchlist.watchlist',
+        value: true,
+        contribution: 20,
+        description: watchlistResult.watchlistReason || 'Entity is on watchlist',
+      });
+    }
+    if (watchlistResult?.isAllowlisted && !watchlistResult?.isWatchlisted) {
+      riskFactors.push({
+        signal: 'watchlist.allowlist',
+        value: true,
+        contribution: -15,
+        description: 'Entity is on allowlist (score suppression)',
+      });
+    }
+
+    // Graph intelligence risk factors (P1-1 Explainability)
+    if (bundle.stateful?.graph) {
+      const graph = bundle.stateful.graph;
+      if (graph.fraudRingDetected) {
+        riskFactors.push({
+          signal: 'stateful.graph.fraudRingDetected',
+          value: true,
+          contribution: graph.fraudRingScore ?? 30,
+          description: `Fraud ring detected (score: ${graph.fraudRingScore ?? 'N/A'})`,
+        });
+      }
+      if (graph.sharedDeviceCount && graph.sharedDeviceCount > 1) {
+        riskFactors.push({
+          signal: 'stateful.graph.sharedDeviceCount',
+          value: graph.sharedDeviceCount,
+          contribution: Math.min(20, graph.sharedDeviceCount * 5),
+          description: `${graph.sharedDeviceCount} entities share this device`,
+        });
+      }
+    }
+
+    // Sequence detection risk factors (P1-1 Explainability)
+    if (bundle.stateful?.customer) {
+      const seq = bundle.stateful.customer;
+      if (seq.loginThenPayment15m) {
+        riskFactors.push({
+          signal: 'stateful.sequence.loginToPayment',
+          value: true,
+          contribution: 15,
+          description: 'Login followed by payment within 15 minutes',
+        });
+      }
+      if (seq.failedPaymentX3ThenSuccess10m) {
+        riskFactors.push({
+          signal: 'stateful.sequence.failedPaymentX3',
+          value: true,
+          contribution: 25,
+          description: '3+ failed payments followed by success within 10 minutes',
+        });
+      }
+      if (seq.deviceChangeThenPayment30m) {
+        riskFactors.push({
+          signal: 'stateful.sequence.deviceChangePayment',
+          value: true,
+          contribution: 20,
+          description: 'Device change followed by payment within 30 minutes',
+        });
+      }
+    }
+
+    // --- DSL Rule Evaluation (Strategy A: override) ---
+    // Compose SignalContext for the DSL evaluator from the SignalBundle
+    const signalContext = this.composeSignalContext(bundle);
+    let appliedRules: string[] = [];
+
+    try {
+      const ruleResults = this.ruleEvaluator.evaluateAll(this.parsedRules, signalContext);
+      const matchedRules = ruleResults.filter(r => r.matched && !r.skipped);
+      appliedRules = matchedRules.map(r => r.ruleId);
+
+      // DSL override: BLOCK rules override everything, REVIEW upgrades ALLOW
+      const hasBlockRule = matchedRules.some(r => r.action === 'BLOCK');
+      const hasReviewRule = matchedRules.some(r => r.action === 'REVIEW');
+
+      if (hasBlockRule) action = 'BLOCK';
+      else if (hasReviewRule && action === 'ALLOW') action = 'REVIEW';
+    } catch (err) {
+      // DSL evaluation failure → fallback to threshold-based action (graceful degradation)
+      this.logger.warn(`DSL rule evaluation failed: ${(err as Error).message}. Using threshold-based action.`);
+    }
 
     const latencyMs = Date.now() - startedAt;
 
@@ -213,6 +408,22 @@ export class DecisionOrchestratorService {
       await this.decisionCache.set(req.merchantId, req.entityId, result);
     }
 
+    // Persist decision with entity info for typed prior-decision memory
+    if (this.decisionStore) {
+      await this.decisionStore.save({
+        ...result,
+        entityId: req.entityId,
+        entityType,
+        deviceId: req.deviceId,
+      } as any);
+      // Update entity profile (fire-and-forget, AR-7)
+      this.decisionStore.updateEntityProfile(req.merchantId, entityType, req.entityId).catch(() => {});
+      // Save feature snapshot for ML export (fire-and-forget, AR-6)
+      this.decisionStore.saveFeatureSnapshot(
+        req.requestId, req.merchantId, req.entityId, entityType, bundle as any,
+      ).catch(() => {});
+    }
+
     // Broadcast to WebSocket clients
     if (this.decisionGateway) {
       const broadcastEvent: DecisionBroadcastEvent = {
@@ -231,7 +442,7 @@ export class DecisionOrchestratorService {
   }
 
   // ---------------------------------------------------------------------------
-  // Per-signal span wrapper
+  // Span wrapper for tracing
   // ---------------------------------------------------------------------------
 
   private async fetchWithSpan<T>(
@@ -253,35 +464,6 @@ export class DecisionOrchestratorService {
     }
   }
 
-  // fetchWithSpan + timing instrumentation
-  private async fetchWithSpanTimed<T>(
-    spanName: string,
-    attributes: Record<string, string>,
-    promise: Promise<T>,
-    signalName: string,
-  ): Promise<T> {
-    const fetchStart = Date.now();
-    const span = this.tracer.startSpan(spanName, { attributes });
-    try {
-      const result = await promise;
-      span.setAttribute('signal.found', result !== null);
-      span.setStatus({ code: SpanStatusCode.OK });
-      const fetchMs = Date.now() - fetchStart;
-      this.recordFetchTiming(signalName, fetchMs);
-      if (fetchMs > 100) {
-        this.logger.warn(`Signal fetch slow: ${signalName} took ${fetchMs}ms`);
-      }
-      return result;
-    } catch (err) {
-      const fetchMs = Date.now() - fetchStart;
-      this.recordFetchTiming(signalName, fetchMs);
-      span.setStatus({ code: SpanStatusCode.ERROR, message: (err as Error)?.message });
-      throw err;
-    } finally {
-      span.end();
-    }
-  }
-
   // Stores last 100 timings in memory circular buffer
   private recordFetchTiming(signalName: string, ms: number): void {
     if (this.fetchTimings.length >= TIMING_BUFFER_SIZE) {
@@ -293,28 +475,6 @@ export class DecisionOrchestratorService {
   // Expose timings for testing/monitoring
   getFetchTimings(): Array<{ signalName: string; ms: number }> {
     return [...this.fetchTimings];
-  }
-
-  // ---------------------------------------------------------------------------
-  // Signal timeout wrapper
-  // ---------------------------------------------------------------------------
-
-  private withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T | null> {
-    const timeout = new Promise<null>((resolve) =>
-      setTimeout(() => {
-        this.logger.warn(`Signal fetch timed out: ${label} (${ms}ms)`);
-        resolve(null);
-      }, ms),
-    );
-    return Promise.race([promise, timeout]) as Promise<T | null>;
-  }
-
-  private extractSignal<T>(settled: PromiseSettledResult<T | null>, label: string): T | null {
-    if (settled.status === 'fulfilled') {
-      return settled.value;
-    }
-    this.logger.warn(`Signal fetch rejected: ${label} — ${(settled.reason as Error)?.message}`);
-    return null;
   }
 
   // ---------------------------------------------------------------------------
@@ -587,25 +747,59 @@ export class DecisionOrchestratorService {
   }
 
   // ---------------------------------------------------------------------------
-  // Rule matching
+  // SignalBundle → DSL SignalContext mapping
   // ---------------------------------------------------------------------------
 
-  private matchRules(riskScore: number, factors: RiskFactor[]): string[] {
-    const rules: string[] = [];
-
-    if (riskScore >= BLOCK_THRESHOLD)  rules.push('rule:auto-block-high-risk');
-    if (riskScore >= REVIEW_THRESHOLD) rules.push('rule:review-elevated-risk');
-
-    const hasEmulator  = factors.some((f) => f.signal === 'device.isEmulator'   && f.value === true);
-    const hasBurst     = factors.some((f) => f.signal === 'velocity.burstDetected' && f.value === true);
-    const hasTor       = factors.some((f) => f.signal === 'network.riskScore'   && f.description.includes('Tor'));
-    const hasBot       = factors.some((f) => f.signal === 'behavioral.sessionRiskScore' && f.description.includes('Bot'));
-
-    if (hasEmulator) rules.push('rule:emulator-detected');
-    if (hasBurst)    rules.push('rule:velocity-burst');
-    if (hasTor)      rules.push('rule:tor-exit-node');
-    if (hasBot)      rules.push('rule:bot-behavioral-pattern');
-
-    return rules;
+  /**
+   * Compose a SignalContext suitable for the DSL RuleEvaluator from a SignalBundle.
+   * Flattens velocity dimensions to top-level fields for DSL field resolution.
+   */
+  composeSignalContext(bundle: SignalBundle): SignalContext {
+    return {
+      device: bundle.device ? {
+        deviceId: bundle.device.deviceId,
+        trustScore: bundle.device.trustScore,
+        isEmulator: bundle.device.isEmulator,
+        emulatorConfidence: bundle.device.emulatorConfidence,
+        platform: bundle.device.platform,
+      } : undefined,
+      velocity: bundle.velocity ? {
+        entityId: bundle.velocity.entityId,
+        // Flatten dimensions to top-level for DSL resolution (velocity.txCount1h)
+        txCount1h: bundle.velocity.dimensions.txCount1h,
+        txCount10m: bundle.velocity.dimensions.txCount10m,
+        txCount24h: bundle.velocity.dimensions.txCount24h,
+        amountSum1h: bundle.velocity.dimensions.amountSum1h,
+        amountSum24h: bundle.velocity.dimensions.amountSum24h,
+        uniqueDevices24h: bundle.velocity.dimensions.uniqueDevices24h,
+        uniqueIps24h: bundle.velocity.dimensions.uniqueIps24h,
+        uniqueSessions1h: bundle.velocity.dimensions.uniqueSessions1h,
+        burstDetected: bundle.velocity.burstDetected,
+        burstRatio: bundle.velocity.burstRatio,
+        dimensions: bundle.velocity.dimensions,
+      } as any : undefined,
+      behavioral: bundle.behavioral ? {
+        sessionId: bundle.behavioral.sessionId,
+        sessionRiskScore: bundle.behavioral.sessionRiskScore,
+        isBot: bundle.behavioral.isBot,
+        botProbability: bundle.behavioral.botProbability,
+      } : undefined,
+      network: bundle.network ? {
+        ip: bundle.network.ip,
+        isTor: bundle.network.isTor,
+        isProxy: bundle.network.isProxy,
+        isVpn: bundle.network.isVpn,
+        isDatacenter: bundle.network.isDatacenter,
+        geoMismatchScore: bundle.network.geoMismatchScore,
+        riskScore: bundle.network.riskScore,
+      } : undefined,
+      telco: bundle.telco ? {
+        msisdn: bundle.telco.msisdn,
+        prepaidProbability: bundle.telco.prepaidProbability,
+        isPorted: bundle.telco.isPorted,
+        lineType: bundle.telco.lineType,
+      } : undefined,
+      stateful: bundle.stateful ?? undefined,
+    };
   }
 }

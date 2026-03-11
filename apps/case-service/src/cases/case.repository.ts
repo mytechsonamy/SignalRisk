@@ -22,13 +22,13 @@ export class CaseRepository {
       const id = uuidv4();
       const result = await client.query(
         `INSERT INTO cases (
-          id, merchant_id, decision_id, entity_id, action, risk_score,
+          id, merchant_id, decision_id, entity_id, entity_type, action, risk_score,
           risk_factors, status, priority, sla_deadline, assigned_to,
           resolution, resolution_notes, resolved_at, created_at, updated_at
         ) VALUES (
-          $1, $2, $3, $4, $5, $6,
-          $7, $8, $9, $10, $11,
-          $12, $13, $14, NOW(), NOW()
+          $1, $2, $3, $4, $5, $6, $7,
+          $8, $9, $10, $11, $12,
+          $13, $14, $15, NOW(), NOW()
         )
         RETURNING *`,
         [
@@ -36,6 +36,7 @@ export class CaseRepository {
           data.merchantId,
           data.decisionId,
           data.entityId,
+          data.entityType || 'customer',
           data.action,
           data.riskScore,
           JSON.stringify(data.riskFactors),
@@ -295,6 +296,7 @@ export class CaseRepository {
       merchantId: row.merchant_id as string,
       decisionId: row.decision_id as string,
       entityId: row.entity_id as string,
+      entityType: (row.entity_type as 'customer' | 'device' | 'ip') || undefined,
       action: row.action as 'REVIEW' | 'BLOCK',
       riskScore: parseFloat(String(row.risk_score)),
       riskFactors: typeof row.risk_factors === 'string'

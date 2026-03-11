@@ -50,11 +50,46 @@ export class AuthController {
   @Throttle({ token: { limit: 10, ttl: 60_000 } })
   async login(
     @Body() body: { email: string; password: string },
-  ): Promise<{ accessToken: string; user: { id: string; email: string; role: string } }> {
-    // Seed admin users (in-memory, for development)
+  ): Promise<{
+    accessToken: string;
+    refreshToken: string;
+    user: { id: string; email: string; role: string; merchantId: string };
+  }> {
+    // Try DB-backed login first
+    try {
+      const result = await this.authService.loginWithPassword(
+        body.email,
+        body.password,
+      );
+      return {
+        accessToken: result.access_token,
+        refreshToken: result.refresh_token!,
+        user: result.user,
+      };
+    } catch (err) {
+      // In production, DB login is the only path
+      if (process.env.NODE_ENV === 'production') {
+        throw err;
+      }
+      // Development/test fallback: seed users
+    }
+
+    // Seed admin users (in-memory, for development ONLY)
     const seedUsers = [
-      { id: 'usr-admin-001', email: 'admin@signalrisk.io', password: 'admin123', role: 'admin' },
-      { id: 'usr-analyst-001', email: 'analyst@signalrisk.io', password: 'analyst123', role: 'analyst' },
+      {
+        id: 'usr-admin-001',
+        email: 'admin@signalrisk.io',
+        password: process.env.SEED_ADMIN_PASSWORD || 'admin123',
+        role: 'admin',
+        merchantId: 'merchant-signalrisk',
+      },
+      {
+        id: 'usr-analyst-001',
+        email: 'analyst@signalrisk.io',
+        password: process.env.SEED_ANALYST_PASSWORD || 'analyst123',
+        role: 'analyst',
+        merchantId: 'merchant-signalrisk',
+      },
     ];
 
     const user = seedUsers.find(
@@ -66,14 +101,20 @@ export class AuthController {
 
     const tokenResult = await this.authService.issueTokenForUser({
       userId: user.id,
-      merchantId: 'merchant-signalrisk',
+      merchantId: user.merchantId,
       role: user.role,
       permissions: [user.role],
     });
 
     return {
       accessToken: tokenResult.access_token,
-      user: { id: user.id, email: user.email, role: user.role },
+      refreshToken: tokenResult.refresh_token!,
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        merchantId: user.merchantId,
+      },
     };
   }
 

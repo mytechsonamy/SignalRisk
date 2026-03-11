@@ -5,6 +5,7 @@ import * as crypto from 'crypto';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
 import { TokenResponseDto, IntrospectResponseDto } from './dto';
 import { MerchantsService, Merchant } from '../merchants/merchants.service';
+import { UsersService } from '../users/users.service';
 import { JwtTokenService } from '../jwt/jwt.service';
 import {
   RefreshTokenStore,
@@ -15,12 +16,12 @@ const tracer = trace.getTracer('auth-service');
 
 @Injectable()
 export class AuthService {
-  private readonly refreshTokenStore = new RefreshTokenStore();
-
   constructor(
     private readonly jwtTokenService: JwtTokenService,
     private readonly configService: ConfigService,
     private readonly merchantsService: MerchantsService,
+    private readonly refreshTokenStore: RefreshTokenStore,
+    private readonly usersService: UsersService,
   ) {}
 
   async validateCredentials(
@@ -29,7 +30,7 @@ export class AuthService {
   ): Promise<Merchant> {
     return tracer.startActiveSpan('auth.validateCredentials', async (span) => {
       try {
-        const merchant = this.merchantsService.findByClientId(clientId);
+        const merchant = await this.merchantsService.findByClientId(clientId);
         if (!merchant) {
           span.setStatus({
             code: SpanStatusCode.ERROR,
@@ -83,7 +84,7 @@ export class AuthService {
           merchant.id,
           merchant.id,
         );
-        this.refreshTokenStore.save({
+        await this.refreshTokenStore.save({
           id: refreshResult.jti,
           userId: merchant.id,
           merchantId: merchant.id,
@@ -124,7 +125,7 @@ export class AuthService {
           params.userId,
           params.merchantId,
         );
-        this.refreshTokenStore.save({
+        await this.refreshTokenStore.save({
           id: refreshResult.jti,
           userId: params.userId,
           merchantId: params.merchantId,
@@ -151,13 +152,70 @@ export class AuthService {
     });
   }
 
+  async loginWithPassword(
+    email: string,
+    password: string,
+  ): Promise<
+    TokenResponseDto & {
+      user: { id: string; email: string; role: string; merchantId: string };
+    }
+  > {
+    return tracer.startActiveSpan('auth.loginWithPassword', async (span) => {
+      try {
+        const user = await this.usersService.findByEmail(email);
+        if (!user) {
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: 'User not found',
+          });
+          throw new UnauthorizedException('Invalid email or password');
+        }
+
+        const passwordValid = await bcrypt.compare(
+          password,
+          user.passwordHash,
+        );
+        if (!passwordValid) {
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: 'Invalid password',
+          });
+          throw new UnauthorizedException('Invalid email or password');
+        }
+
+        const tokenResult = await this.issueTokenForUser({
+          userId: user.id,
+          merchantId: user.merchantId,
+          role: user.role,
+          permissions: [user.role],
+        });
+
+        span.setAttribute('user.id', user.id);
+        span.setAttribute('user.email', user.email);
+        span.setStatus({ code: SpanStatusCode.OK });
+
+        return {
+          ...tokenResult,
+          user: {
+            id: user.id,
+            email: user.email,
+            role: user.role,
+            merchantId: user.merchantId,
+          },
+        };
+      } finally {
+        span.end();
+      }
+    });
+  }
+
   async refreshAccessToken(
     refreshToken: string,
   ): Promise<TokenResponseDto> {
     return tracer.startActiveSpan('auth.refreshAccessToken', async (span) => {
       try {
         const tokenHash = JwtTokenService.hashRefreshToken(refreshToken);
-        const stored = this.refreshTokenStore.findByTokenHash(tokenHash);
+        const stored = await this.refreshTokenStore.findByTokenHash(tokenHash);
 
         if (!stored || !this.refreshTokenStore.isValid(stored)) {
           span.setStatus({
@@ -168,10 +226,10 @@ export class AuthService {
         }
 
         // Revoke old refresh token (rotation)
-        this.refreshTokenStore.revokeById(stored.id);
+        await this.refreshTokenStore.revokeById(stored.id);
 
         // Look up the merchant's stored role instead of hardcoding 'merchant'
-        const merchant = this.merchantsService.findById(stored.userId);
+        const merchant = await this.merchantsService.findById(stored.userId);
         if (!merchant) throw new UnauthorizedException('Account not found');
         const ROLE_PRIORITY = ['admin', 'analyst', 'merchant'];
         const role = ROLE_PRIORITY.find(r => merchant.roles.includes(r)) ?? 'merchant';
@@ -190,7 +248,7 @@ export class AuthService {
           stored.userId,
           stored.merchantId,
         );
-        this.refreshTokenStore.save({
+        await this.refreshTokenStore.save({
           id: newRefresh.jti,
           userId: stored.userId,
           merchantId: stored.merchantId,
@@ -221,7 +279,7 @@ export class AuthService {
       try {
         // Default to refresh_token revocation
         const tokenHash = JwtTokenService.hashRefreshToken(token);
-        const revoked = this.refreshTokenStore.revokeByTokenHash(tokenHash);
+        const revoked = await this.refreshTokenStore.revokeByTokenHash(tokenHash);
 
         if (!revoked) {
           span.setStatus({
@@ -269,7 +327,7 @@ export class AuthService {
 
         // Try as refresh token
         const tokenHash = JwtTokenService.hashRefreshToken(token);
-        const stored = this.refreshTokenStore.findByTokenHash(tokenHash);
+        const stored = await this.refreshTokenStore.findByTokenHash(tokenHash);
         if (stored && this.refreshTokenStore.isValid(stored)) {
           span.setStatus({ code: SpanStatusCode.OK });
           return {

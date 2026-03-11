@@ -8,9 +8,10 @@ import { ConfigService } from '@nestjs/config';
 import { Kafka, Consumer, Producer, EachMessagePayload, logLevel } from 'kafkajs';
 import { CaseService } from '../cases/case.service';
 import { DecisionEvent } from '../cases/case.types';
+import { TOPICS } from '@signalrisk/kafka-config';
 
-const TOPIC = 'signalrisk.decisions';
-const DLQ_TOPIC = 'signalrisk.decisions.dlq';
+const TOPIC = TOPICS.DECISIONS;
+const DLQ_TOPIC = `${TOPICS.DECISIONS}.dlq`;
 const CONSUMER_GROUP = 'case-service-consumer';
 
 @Injectable()
