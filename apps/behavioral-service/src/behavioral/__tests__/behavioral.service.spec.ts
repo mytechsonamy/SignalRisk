@@ -7,6 +7,7 @@
 
 import { BehavioralService } from '../behavioral.service';
 import { SessionRiskService } from '../session-risk.service';
+import { BehavioralMlService } from '../behavioral-ml.service';
 import { SessionAttributes, BehavioralResult } from '../behavioral.types';
 
 function makeAttrs(overrides?: Partial<SessionAttributes>): SessionAttributes {
@@ -23,7 +24,8 @@ describe('BehavioralService', () => {
 
   beforeEach(() => {
     sessionRiskService = new SessionRiskService();
-    service = new BehavioralService(sessionRiskService);
+    const mlService = new BehavioralMlService();
+    service = new BehavioralService(sessionRiskService, mlService);
   });
 
   // -------------------------------------------------------------------------

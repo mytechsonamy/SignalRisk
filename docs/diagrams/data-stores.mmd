@@ -1,0 +1,53 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#1e3a5f', 'primaryTextColor': '#fff', 'lineColor': '#475569', 'fontSize': '13px'}}}%%
+
+graph TB
+    subgraph PostgreSQL["<b>🐘 PostgreSQL 15 — Primary Relational Store</b>"]
+        direction LR
+        PG_RLS["Row-Level Security<br/><i>set_config('app.merchant_id')</i>"]
+        subgraph Tables["Tables"]
+            direction TB
+            T1["merchants"]
+            T2["api_keys"]
+            T3["cases"]
+            T4["rules / rule_weights"]
+            T5["webhook_subscriptions"]
+            T6["decisions"]
+            T7["fraud_feedback"]
+            T8["outbox"]
+        end
+    end
+
+    subgraph Redis["<b>🔴 Redis 7 — Cache & Counters</b>"]
+        direction LR
+        R1["decision:{eventId}<br/><i>TTL 5s</i>"]
+        R2["velocity:{mid}:{eid}<br/><i>Sliding window</i>"]
+        R3["test:{mid}:{eid}<br/><i>Test isolation</i>"]
+        R4["rate:{mid}:{endpoint}<br/><i>Lua atomic</i>"]
+        R5["rule:weight:{id}<br/><i>[0.1, 1.0]</i>"]
+        R6["jwt:revoked:{jti}<br/><i>TTL = remaining</i>"]
+    end
+
+    subgraph KafkaTopics["<b>📨 Apache Kafka (KRaft) — Event Streaming</b>"]
+        direction LR
+        K1["signalrisk.events.raw<br/><i>event-collector → decision, velocity</i>"]
+        K2["signalrisk.decisions<br/><i>decision → case, webhook</i>"]
+        K3["signalrisk.events.dlq<br/><i>Failed events</i>"]
+        K4["signalrisk.feedback<br/><i>case → rule-engine</i>"]
+    end
+
+    subgraph Neo4j["<b>🔵 Neo4j 5 — Graph Store</b>"]
+        direction LR
+        N1["Entity nodes<br/><i>Devices, Accounts, IPs</i>"]
+        N2["Relationships<br/><i>shared_ip, shared_device</i>"]
+        N3["Fraud ring detection<br/><i>Clustering algorithm</i>"]
+    end
+
+    classDef pgStyle fill:#336791,stroke:#1e3a5f,color:#fff
+    classDef redisStyle fill:#dc382d,stroke:#a32a23,color:#fff
+    classDef kafkaStyle fill:#231f20,stroke:#000,color:#fff
+    classDef neoStyle fill:#018bff,stroke:#0066cc,color:#fff
+
+    class PG_RLS,T1,T2,T3,T4,T5,T6,T7,T8 pgStyle
+    class R1,R2,R3,R4,R5,R6 redisStyle
+    class K1,K2,K3,K4 kafkaStyle
+    class N1,N2,N3 neoStyle

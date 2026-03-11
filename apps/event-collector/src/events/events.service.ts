@@ -10,6 +10,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { EventSchemaValidator, ValidationResult } from '@signalrisk/event-schemas';
+import { TOPICS } from '@signalrisk/kafka-config';
 import { KafkaService, KafkaMessagePayload } from '../kafka/kafka.service';
 import { DlqService, DlqValidationError } from '../dlq/dlq.service';
 import { CreateEventDto } from './dto/create-event.dto';
@@ -31,8 +32,6 @@ export interface IngestResult {
 export class EventsService {
   private readonly logger = new Logger(EventsService.name);
   private readonly validator: EventSchemaValidator;
-
-  private static readonly TOPIC_RAW = 'signalrisk.events.raw';
 
   constructor(
     private readonly kafkaService: KafkaService,
@@ -67,7 +66,7 @@ export class EventsService {
         const partitionKey = `${event.merchantId}:${event.sessionId}`;
 
         const message: KafkaMessagePayload = {
-          topic: EventsService.TOPIC_RAW,
+          topic: TOPICS.EVENTS_RAW,
           key: partitionKey,
           value: JSON.stringify({
             eventId,
@@ -126,11 +125,11 @@ export class EventsService {
       try {
         await this.kafkaService.sendBatch(validPayloads);
         this.logger.log(
-          `Produced ${validPayloads.length} events to ${EventsService.TOPIC_RAW}`,
+          `Produced ${validPayloads.length} events to ${TOPICS.EVENTS_RAW}`,
         );
       } catch (error) {
         this.logger.error(
-          `Failed to produce events to ${EventsService.TOPIC_RAW}`,
+          `Failed to produce events to ${TOPICS.EVENTS_RAW}`,
           (error as Error).stack,
         );
         throw error;

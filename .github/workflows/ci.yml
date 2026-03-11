@@ -6,7 +6,35 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  # ── G1: Build + Lint + TypeScript ─────────────────────────────────
+  build-lint:
+    name: Build & Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: TypeScript check (all services)
+        run: |
+          for dir in apps/*/; do
+            if [ -f "$dir/tsconfig.json" ]; then
+              echo "::group::tsc $dir"
+              npx tsc --noEmit --project "$dir/tsconfig.json"
+              echo "::endgroup::"
+            fi
+          done
+      - name: Lint
+        run: npm run lint:all
+
+  # ── G2: Unit Tests ────────────────────────────────────────────────
   test-services:
     name: Test ${{ matrix.service }}
     runs-on: ubuntu-latest
@@ -26,19 +54,19 @@ jobs:
           - case-service
           - webhook-service
           - graph-intel-service
+          - feature-flag-service
+          - outbox-relay
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: apps/${{ matrix.service }}/package-lock.json
-      - name: Install dependencies
-        run: npm ci
-        working-directory: apps/${{ matrix.service }}
+      - run: npm ci
       - name: Run tests
-        run: npm test -- --passWithNoTests --forceExit
-        working-directory: apps/${{ matrix.service }}
+        run: npx jest --config apps/${{ matrix.service }}/jest.config.ts --no-coverage --passWithNoTests --forceExit
+        env:
+          NODE_ENV: test
 
   test-packages:
     name: Test packages/${{ matrix.package }}
@@ -49,102 +77,27 @@ jobs:
         package:
           - signal-contracts
           - web-sdk
+          - kafka-config
+          - event-schemas
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: packages/${{ matrix.package }}/package-lock.json
-      - name: Install dependencies
-        run: npm ci
-        working-directory: packages/${{ matrix.package }}
+      - run: npm ci
       - name: Run tests
-        run: npm test
-        working-directory: packages/${{ matrix.package }}
+        run: |
+          cd packages/${{ matrix.package }}
+          if [ -f "jest.config.ts" ] || [ -f "jest.config.js" ] || grep -q '"test"' package.json 2>/dev/null; then
+            npm test -- --passWithNoTests --forceExit
+          else
+            echo "No tests found, skipping"
+          fi
 
-  validate-infrastructure:
-    name: Validate Infrastructure
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: Validate K8s manifests
-        run: node scripts/validate-k8s.js
-      - name: Validate OpenAPI specs
-        run: node scripts/validate-openapi.js
-
-  test-integration:
-    name: Integration Tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: tests/integration/package-lock.json
-      - name: Install dependencies
-        run: npm ci
-        working-directory: tests/integration
-      - name: Run integration tests
-        run: npm test -- --forceExit
-        working-directory: tests/integration
-
-  e2e-smoke:
-    name: E2E Smoke Tests
-    runs-on: ubuntu-latest
-    needs: [test-integration]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install mock server dependencies
-        run: cd tests/e2e/mock-server && npm ci
-
-      - name: Install E2E test dependencies
-        run: cd tests/e2e && npm ci
-
-      - name: Install Playwright browsers
-        run: cd tests/e2e && npx playwright install chromium --with-deps
-
-      - name: Run mock server unit tests
-        run: cd tests/e2e/mock-server && npx jest --no-coverage
-
-      - name: Start mock API server
-        run: cd tests/e2e/mock-server && npx ts-node server.ts &
-        env:
-          PORT: 3099
-
-      - name: Wait for mock server
-        run: npx wait-on http://localhost:3099/health --timeout 15000
-
-      - name: Run Playwright E2E tests
-        run: cd tests/e2e && npx playwright test
-        env:
-          CI: true
-
-      - name: Upload Playwright report on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report
-          path: tests/e2e/playwright-report/
-
-      - name: Upload Playwright screenshots on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-screenshots
-          path: tests/e2e/test-results/
-
+  # ── Dashboard Build ───────────────────────────────────────────────
   dashboard-build:
-    name: Dashboard Production Build
+    name: Dashboard Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -152,19 +105,11 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-
-      - name: Install dashboard dependencies
-        run: cd apps/dashboard && npm ci
-
+      - run: npm ci
       - name: TypeScript check
-        run: cd apps/dashboard && npx tsc --noEmit 2>&1 || true
-
-      - name: Build dashboard
+        run: cd apps/dashboard && npx tsc --noEmit
+      - name: Build
         run: cd apps/dashboard && npm run build
-
-      - name: Check bundle size
-        run: chmod +x scripts/check-bundle-size.sh && ./scripts/check-bundle-size.sh 750
-
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
@@ -172,27 +117,79 @@ jobs:
           path: apps/dashboard/dist/
           retention-days: 7
 
-      - name: Upload bundle stats
+  # ── Docker Build Smoke ────────────────────────────────────────────
+  docker-build:
+    name: Docker Build (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - auth-service
+          - event-collector
+          - decision-service
+          - case-service
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: |
+          docker build \
+            -f apps/${{ matrix.service }}/Dockerfile \
+            -t signalrisk/${{ matrix.service }}:ci \
+            --build-arg SERVICE=${{ matrix.service }} \
+            .
+
+  # ── E2E (Mock Server) ────────────────────────────────────────────
+  e2e-smoke:
+    name: E2E Smoke (Mock)
+    runs-on: ubuntu-latest
+    needs: [build-lint, test-services]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Install Playwright browsers
+        run: npx playwright install chromium --with-deps
+      - name: Start mock API server
+        run: cd tests/e2e/mock-server && npx ts-node server.ts &
+        env:
+          PORT: 3099
+      - name: Wait for mock server
+        run: npx wait-on http://localhost:3099/health --timeout 15000
+      - name: Run Playwright E2E tests
+        run: npx playwright test --config tests/e2e/playwright.config.ts
+        env:
+          CI: true
+      - name: Upload Playwright report on failure
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: bundle-stats-${{ github.sha }}
-          path: apps/dashboard/dist/stats.html
-          retention-days: 7
-          if-no-files-found: ignore
+          name: playwright-report
+          path: tests/e2e/playwright-report/
+      - name: Upload test results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-screenshots
+          path: tests/e2e/test-results/
 
+  # ── CI Status Gate ────────────────────────────────────────────────
   ci-status:
     name: CI Status
     runs-on: ubuntu-latest
-    needs: [test-services, test-packages, validate-infrastructure, test-integration]
+    needs: [build-lint, test-services, test-packages, dashboard-build]
     if: always()
     steps:
       - name: Check CI status
         run: |
-          if [ "${{ needs.test-services.result }}" != "success" ] || \
+          if [ "${{ needs.build-lint.result }}" != "success" ] || \
+             [ "${{ needs.test-services.result }}" != "success" ] || \
              [ "${{ needs.test-packages.result }}" != "success" ] || \
-             [ "${{ needs.validate-infrastructure.result }}" != "success" ] || \
-             [ "${{ needs.test-integration.result }}" != "success" ]; then
-            echo "CI failed"
+             [ "${{ needs.dashboard-build.result }}" != "success" ]; then
+            echo "::error::CI failed — check individual job results"
             exit 1
           fi
           echo "All CI checks passed"

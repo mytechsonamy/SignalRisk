@@ -46,7 +46,7 @@ async function bootstrap() {
   };
   logger.log(`Feature flags: jti=${flags.jti} vpn=${flags.vpn} apiKey=${flags.apiKey}`);
 
-  const port = process.env.PORT || 3015;
+  const port = process.env.PORT || 3001;
   await app.listen(port);
   console.log(`Auth service listening on port ${port}`);
 }

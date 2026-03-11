@@ -5,7 +5,7 @@ BEGIN;
 
 CREATE TABLE refresh_tokens (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id         UUID NOT NULL,  -- stores merchant_id until real user model is added
     merchant_id     UUID NOT NULL REFERENCES merchants(id) ON DELETE CASCADE,
     token_hash      VARCHAR(64) NOT NULL,
     expires_at      TIMESTAMPTZ NOT NULL,

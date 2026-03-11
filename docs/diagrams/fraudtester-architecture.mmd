@@ -1,0 +1,66 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#1e3a5f', 'primaryTextColor': '#fff', 'primaryBorderColor': '#3b82f6', 'lineColor': '#475569', 'fontSize': '13px'}}}%%
+
+graph LR
+    subgraph Dashboard["<b>Dashboard (Battle Arena)</b>"]
+        BA["🎯 Battle Arena UI<br/><i>Socket.io client</i>"]
+    end
+
+    subgraph FraudTester["<b>fraud-tester :3020</b>"]
+        direction TB
+        subgraph Agents["<b>AI Agents</b>"]
+            direction LR
+            A1["🤖 Fraud Sim<br/><i>Known patterns</i>"]
+            A2["🧬 Adversarial<br/><i>Evasion techniques</i>"]
+            A3["💥 Chaos<br/><i>Random noise</i>"]
+            A4["🔎 Recon<br/><i>Reconnaissance</i>"]
+            A5["🔄 Replay<br/><i>Replay attacks</i>"]
+        end
+
+        SR["🎮 ScenarioRunner"]
+        DR["📊 DetectionReporter"]
+    end
+
+    subgraph Adapters["<b>Adapter Interface (FROZEN)</b>"]
+        direction TB
+        IA{{"IFraudSystemAdapter"}}
+        AD1["SignalRiskAdapter"]
+        AD2["GenericHttpAdapter"]
+        AD3["MockAdapter"]
+    end
+
+    subgraph Pipeline["<b>SignalRisk Pipeline</b>"]
+        EC["📥 event-collector<br/><i>X-SignalRisk-Test: true</i>"]
+        KF["📨 Kafka<br/><i>is-test header</i>"]
+        DS["⚡ decision-service"]
+    end
+
+    subgraph Isolation["<b>Test Isolation</b>"]
+        direction TB
+        I1["🔴 Redis: test: prefix"]
+        I2["🐘 PG: is_test column"]
+        I3["📊 Analytics: excluded"]
+        I4["🔔 Webhooks: skipped"]
+    end
+
+    BA <-->|WebSocket| FraudTester
+    Agents --> SR
+    SR --> DR
+
+    A1 & A2 & A3 & A4 & A5 --> IA
+    IA --> AD1 & AD2 & AD3
+    AD1 --> EC
+    EC --> KF --> DS
+
+    DS -.-> Isolation
+
+    classDef dashStyle fill:#dbeafe,stroke:#3b82f6,color:#1e3a5f
+    classDef agentStyle fill:#fef3c7,stroke:#f59e0b,color:#92400e
+    classDef adapterStyle fill:#f0fdf4,stroke:#22c55e,color:#166534
+    classDef pipelineStyle fill:#1e3a5f,stroke:#3b82f6,color:#fff
+    classDef isolationStyle fill:#fce7f3,stroke:#ec4899,color:#831843
+
+    class BA dashStyle
+    class A1,A2,A3,A4,A5 agentStyle
+    class IA,AD1,AD2,AD3 adapterStyle
+    class EC,KF,DS pipelineStyle
+    class I1,I2,I3,I4 isolationStyle

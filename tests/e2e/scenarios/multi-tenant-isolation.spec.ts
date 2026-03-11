@@ -31,8 +31,8 @@ test.describe.configure({ mode: 'serial' });
 // Test fixture credentials (must match docker-compose seed / test DB fixtures)
 // ---------------------------------------------------------------------------
 
-const MERCHANT_A = { clientId: 'merchant-a', clientSecret: 'secret-a', merchantId: 'merchant-001' };
-const MERCHANT_B = { clientId: 'merchant-b', clientSecret: 'secret-b', merchantId: 'merchant-002' };
+const MERCHANT_A = { clientId: 'merchant-a', clientSecret: 'secret-a', merchantId: '00000000-0000-0000-0000-000000000003' };
+const MERCHANT_B = { clientId: 'merchant-b', clientSecret: 'secret-b', merchantId: '00000000-0000-0000-0000-000000000002' };
 
 // ---------------------------------------------------------------------------
 // Test suite

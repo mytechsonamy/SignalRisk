@@ -1,11 +1,13 @@
--- Cases table for case-service — Sprint 26
+-- Cases table for case-service — Sprint 26 (updated: UUID columns)
 -- Stores fraud investigation cases created from REVIEW/BLOCK decisions
 
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 CREATE TABLE IF NOT EXISTS cases (
-    id               TEXT PRIMARY KEY,
-    merchant_id      TEXT NOT NULL,
-    decision_id      TEXT NOT NULL,
-    entity_id        TEXT NOT NULL,
+    id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    merchant_id      UUID NOT NULL,
+    decision_id      UUID NOT NULL,
+    entity_id        UUID NOT NULL,
     action           TEXT NOT NULL CHECK (action IN ('REVIEW', 'BLOCK')),
     risk_score       NUMERIC(5,2) NOT NULL DEFAULT 0,
     risk_factors     JSONB NOT NULL DEFAULT '[]',

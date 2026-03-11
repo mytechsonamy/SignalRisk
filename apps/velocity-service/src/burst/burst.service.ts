@@ -4,13 +4,15 @@
  * Detects velocity bursts by comparing current dimensions against a
  * rolling 7-day baseline. A burst is flagged when any dimension exceeds
  * the configured multiplier threshold (default: 3x).
+ *
+ * Sprint 1 (Stateful Fraud): entityType parameter added (ADR-009).
  */
 
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { VelocityService } from '../velocity/velocity.service';
 import { DecayService } from '../decay/decay.service';
-import { BurstResult } from '../velocity/velocity.types';
+import { EntityType, BurstResult } from '../velocity/velocity.types';
 
 @Injectable()
 export class BurstService {
@@ -32,9 +34,13 @@ export class BurstService {
    * against the 7-day rolling baseline. If any dimension exceeds the
    * multiplier threshold, a burst is flagged.
    */
-  async detectBurst(merchantId: string, entityId: string): Promise<BurstResult> {
-    const signals = await this.velocityService.getVelocitySignals(merchantId, entityId);
-    const baseline = await this.velocityService.getBaseline(merchantId, entityId);
+  async detectBurst(
+    merchantId: string,
+    entityId: string,
+    entityType: EntityType = 'customer',
+  ): Promise<BurstResult> {
+    const signals = await this.velocityService.getVelocitySignals(merchantId, entityId, entityType);
+    const baseline = await this.velocityService.getBaseline(merchantId, entityId, entityType);
 
     // If baseline is zero or negligible, we cannot meaningfully detect bursts
     if (baseline < 0.1) {
@@ -104,7 +110,7 @@ export class BurstService {
 
     if (detected) {
       this.logger.warn(
-        `Burst detected for ${merchantId}:${entityId} — ` +
+        `Burst detected for ${merchantId}:${entityType}:${entityId} — ` +
         `dimensions=[${triggeredDimensions.join(',')}] multiplier=${maxMultiplier.toFixed(2)}`,
       );
     }

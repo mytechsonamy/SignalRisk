@@ -16,8 +16,8 @@ import { ConfigService } from '@nestjs/config';
 import { Kafka, Consumer, EachMessagePayload, logLevel } from 'kafkajs';
 import { Pool } from 'pg';
 import { FingerprintService } from '../fingerprint/fingerprint.service';
+import { TOPICS } from '@signalrisk/kafka-config';
 
-const TOPIC = 'signalrisk.events.raw';
 const CONSUMER_GROUP = 'signalrisk.cg.device-intel';
 
 @Injectable()
@@ -91,7 +91,7 @@ export class DeviceEventConsumer implements OnModuleInit, OnModuleDestroy {
 
   private async connectConsumer(): Promise<void> {
     await this.consumer.connect();
-    await this.consumer.subscribe({ topic: TOPIC, fromBeginning: false });
+    await this.consumer.subscribe({ topic: TOPICS.EVENTS_RAW, fromBeginning: false });
 
     await this.consumer.run({
       eachMessage: async (payload: EachMessagePayload) => {
@@ -100,7 +100,7 @@ export class DeviceEventConsumer implements OnModuleInit, OnModuleDestroy {
     });
 
     this.connected = true;
-    this.logger.log(`Kafka consumer connected, subscribed to ${TOPIC}`);
+    this.logger.log(`Kafka consumer connected, subscribed to ${TOPICS.EVENTS_RAW}`);
   }
 
   async onModuleDestroy(): Promise<void> {

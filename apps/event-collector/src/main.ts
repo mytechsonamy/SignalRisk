@@ -48,7 +48,7 @@ async function bootstrap() {
   };
   logger.log(`Feature flags: jti=${flags.jti} vpn=${flags.vpn} apiKey=${flags.apiKey}`);
 
-  const port = process.env.PORT || 3001;
+  const port = process.env.PORT || 3002;
   await app.listen(port);
   console.log(`Event Collector service listening on port ${port}`);
 }

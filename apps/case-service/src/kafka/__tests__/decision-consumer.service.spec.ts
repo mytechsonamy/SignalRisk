@@ -160,7 +160,7 @@ describe('DecisionConsumerService', () => {
     expect(mockCaseService.createFromDecision).not.toHaveBeenCalled();
     expect(mockProducerSend).toHaveBeenCalledWith(
       expect.objectContaining({
-        topic: 'decisions.dlq',
+        topic: 'signalrisk.decisions.dlq',
         messages: expect.arrayContaining([
           expect.objectContaining({
             value: expect.stringContaining('PARSE_ERROR'),
@@ -178,7 +178,7 @@ describe('DecisionConsumerService', () => {
     expect(mockCaseService.createFromDecision).not.toHaveBeenCalled();
     expect(mockProducerSend).toHaveBeenCalledWith(
       expect.objectContaining({
-        topic: 'decisions.dlq',
+        topic: 'signalrisk.decisions.dlq',
       }),
     );
   });

@@ -54,7 +54,7 @@ function buildDecision(overrides: Record<string, unknown> = {}): Record<string, 
   return {
     requestId: 'req-001',
     merchantId: 'merchant-001',
-    outcome: 'BLOCK',
+    action: 'BLOCK',
     riskScore: 85,
     timestamp: '2026-03-06T00:00:00.000Z',
     signals: {},
@@ -120,7 +120,7 @@ describe('DecisionConsumerService', () => {
     mockWebhookConfigService.getWebhookConfig.mockResolvedValue(config);
     mockWebhookDeliveryService.deliver.mockResolvedValue(undefined);
 
-    const decision = buildDecision({ outcome: 'BLOCK' });
+    const decision = buildDecision({ action: 'BLOCK' });
     await triggerMessage(JSON.stringify(decision));
 
     expect(mockWebhookDeliveryService.deliver).toHaveBeenCalledWith(
@@ -134,7 +134,7 @@ describe('DecisionConsumerService', () => {
     mockWebhookConfigService.getWebhookConfig.mockResolvedValue(config);
     mockWebhookDeliveryService.deliver.mockResolvedValue(undefined);
 
-    const decision = buildDecision({ outcome: 'REVIEW' });
+    const decision = buildDecision({ action: 'REVIEW' });
     await triggerMessage(JSON.stringify(decision));
 
     expect(mockWebhookDeliveryService.deliver).toHaveBeenCalledWith(
@@ -146,7 +146,7 @@ describe('DecisionConsumerService', () => {
   it('should NOT call deliver for ALLOW decision', async () => {
     mockWebhookConfigService.getWebhookConfig.mockResolvedValue(buildWebhookConfig());
 
-    const decision = buildDecision({ outcome: 'ALLOW' });
+    const decision = buildDecision({ action: 'ALLOW' });
     await triggerMessage(JSON.stringify(decision));
 
     expect(mockWebhookDeliveryService.deliver).not.toHaveBeenCalled();
@@ -155,7 +155,7 @@ describe('DecisionConsumerService', () => {
   it('should skip delivery when no webhook config found for merchant', async () => {
     mockWebhookConfigService.getWebhookConfig.mockResolvedValue(null);
 
-    const decision = buildDecision({ outcome: 'BLOCK' });
+    const decision = buildDecision({ action: 'BLOCK' });
     await triggerMessage(JSON.stringify(decision));
 
     expect(mockWebhookDeliveryService.deliver).not.toHaveBeenCalled();
@@ -172,7 +172,7 @@ describe('DecisionConsumerService', () => {
     mockWebhookConfigService.getWebhookConfig.mockResolvedValue(buildWebhookConfig());
     mockWebhookDeliveryService.deliver.mockRejectedValue(new Error('Delivery failed'));
 
-    const decision = buildDecision({ outcome: 'BLOCK' });
+    const decision = buildDecision({ action: 'BLOCK' });
     // Should NOT throw
     await expect(triggerMessage(JSON.stringify(decision))).resolves.not.toThrow();
   });
@@ -187,7 +187,7 @@ describe('DecisionConsumerService', () => {
     mockWebhookConfigService.getWebhookConfig.mockResolvedValue(config);
     mockWebhookDeliveryService.deliver.mockResolvedValue(undefined);
 
-    const decision = buildDecision({ outcome: 'BLOCK', requestId: 'req-block-test' });
+    const decision = buildDecision({ action: 'BLOCK', requestId: 'req-block-test' });
     await triggerMessage(JSON.stringify(decision));
 
     const deliveredPayload = mockWebhookDeliveryService.deliver.mock.calls[0][1] as WebhookPayload;

@@ -23,9 +23,9 @@ import { DecisionOrchestratorService } from '../decision/decision-orchestrator.s
 import { DecisionStoreService } from '../decision/decision-store.service';
 import { DecisionsProducerService } from './decisions-producer.service';
 import { DecisionRequest } from '../decision/decision.types';
+import { TOPICS } from '@signalrisk/kafka-config';
 
 const CONSUMER_GROUP = 'decision-service';
-const TOPIC = 'signalrisk.events.raw';
 
 @Injectable()
 export class EventsConsumerService implements OnModuleInit, OnModuleDestroy {
@@ -82,7 +82,7 @@ export class EventsConsumerService implements OnModuleInit, OnModuleDestroy {
 
   private async connectConsumer(): Promise<void> {
     await this.consumer.connect();
-    await this.consumer.subscribe({ topic: TOPIC, fromBeginning: false });
+    await this.consumer.subscribe({ topic: TOPICS.EVENTS_RAW, fromBeginning: false });
 
     await this.consumer.run({
       eachMessage: async (payload: EachMessagePayload) => {
@@ -91,7 +91,7 @@ export class EventsConsumerService implements OnModuleInit, OnModuleDestroy {
     });
 
     this.connected = true;
-    this.logger.log(`Events consumer connected, subscribed to ${TOPIC} (group: ${CONSUMER_GROUP})`);
+    this.logger.log(`Events consumer connected, subscribed to ${TOPICS.EVENTS_RAW} (group: ${CONSUMER_GROUP})`);
   }
 
   async onModuleDestroy(): Promise<void> {

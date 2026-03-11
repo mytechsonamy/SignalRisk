@@ -27,7 +27,7 @@ export const CASE_URL     = process.env.CASE_URL     ?? 'http://localhost:3010';
 export const TEST_MERCHANT = {
   clientId:   'test-merchant-001',
   clientSecret: 'test-secret-001',
-  merchantId: 'merchant-001',
+  merchantId: '00000000-0000-0000-0000-000000000001',
   /** Valid sk_test_ API key configured in docker-compose ALLOWED_API_KEYS. */
   apiKey: 'sk_test_00000000000000000000000000000001',
 } as const;

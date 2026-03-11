@@ -21,6 +21,7 @@ import {
   Admin,
   logLevel,
 } from 'kafkajs';
+import { TOPICS, CONSUMER_GROUPS } from '@signalrisk/kafka-config';
 
 export interface KafkaMessagePayload {
   topic: string;
@@ -220,7 +221,7 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async pollLagInternal(): Promise<void> {
-    const topics = await this.admin.fetchTopicOffsets('signalrisk.events.raw');
+    const topics = await this.admin.fetchTopicOffsets(TOPICS.EVENTS_RAW);
     const latestOffsets = topics.reduce(
       (sum, p) => sum + parseInt(p.offset, 10),
       0,
@@ -228,8 +229,8 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
 
     try {
       const groupOffsets = await this.admin.fetchOffsets({
-        groupId: 'signalrisk.cg.decision-engine',
-        topics: ['signalrisk.events.raw'],
+        groupId: CONSUMER_GROUPS.DECISION_ENGINE,
+        topics: [TOPICS.EVENTS_RAW],
       });
 
       const committedOffsets = groupOffsets[0]?.partitions?.reduce(

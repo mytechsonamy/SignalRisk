@@ -1,0 +1,95 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#1e3a5f', 'primaryTextColor': '#fff', 'primaryBorderColor': '#3b82f6', 'lineColor': '#64748b', 'secondaryColor': '#f1f5f9', 'tertiaryColor': '#eff6ff', 'fontSize': '13px'}}}%%
+
+graph TD
+    subgraph Clients["Clients"]
+        SDK_WEB["Web SDK"]
+        SDK_MOB["Mobile SDK"]
+        DASH["Dashboard :5173"]
+    end
+
+    subgraph Gateway["API Gateway"]
+        AUTH["auth-service :3001\nJWT RS256 | API Keys\nRate limit 1K/min"]
+        EC["event-collector :3002\nSchema validation\nDLQ 5s | Kafka 10s TO\nBackpressure 429"]
+    end
+
+    subgraph KafkaBus["Kafka KRaft"]
+        T_RAW["events.raw"]
+        T_DEC["decisions"]
+        T_DLQ["events.dlq"]
+        T_FB["feedback"]
+    end
+
+    subgraph Decision["Decision Engine"]
+        DS["decision-service :3009\nCircuit breaker\nScore renormalization"]
+        RE["rule-engine :3008\nDSL eval | Weights"]
+    end
+
+    subgraph Signals["Intelligence Signals"]
+        DEV["device-intel\n:3003"]
+        VEL["velocity\n:3004"]
+        BEH["behavioral\n:3005"]
+        NET["network-intel\n:3006"]
+        TEL["telco-intel\n:3007"]
+        GRA["graph-intel\n:3012"]
+    end
+
+    subgraph Downstream["Downstream"]
+        CASE["case-service :3010\nTenantGuard | SLA"]
+        WH["webhook :3011\nHMAC-SHA256 | Retry"]
+        FF["feature-flag :3013\nRollout % | Allowlist"]
+    end
+
+    subgraph Support["Support"]
+        OUTBOX["outbox-relay :3014"]
+        FT["fraud-tester :3020\n5 agents | 9+ scenarios"]
+    end
+
+    subgraph Stores["Data Stores"]
+        PG[("PostgreSQL\nRLS | 9+ tables")]
+        RD[("Redis\nCache | Velocity")]
+        N4[("Neo4j\nGraph store")]
+    end
+
+    SDK_WEB & SDK_MOB & DASH --> AUTH
+    SDK_WEB & SDK_MOB --> EC
+    AUTH -.->|validate| EC
+    EC -->|publish| T_RAW
+    EC -->|failed| T_DLQ
+
+    T_RAW --> DS
+    T_RAW --> VEL
+
+    DS -->|"150ms timeout\nPromise.allSettled"| DEV & VEL & BEH & NET & TEL & GRA
+    DS --> RE
+    DS -->|publish| T_DEC
+
+    T_DEC --> CASE
+    T_DEC --> WH
+
+    CASE -->|labels| T_FB
+    T_FB --> RE
+
+    DS & CASE & RE --> PG
+    DS & VEL & AUTH --> RD
+    GRA --> N4
+
+    FF -.-> DS & EC
+    FT --> EC
+
+    classDef client fill:#dbeafe,stroke:#3b82f6,color:#1e3a5f,stroke-width:2px
+    classDef gateway fill:#1e3a5f,stroke:#60a5fa,color:#fff,stroke-width:2px
+    classDef kafka fill:#fef3c7,stroke:#f59e0b,color:#92400e,stroke-width:2px
+    classDef decision fill:#dc2626,stroke:#991b1b,color:#fff,stroke-width:2px
+    classDef signal fill:#dcfce7,stroke:#22c55e,color:#166534,stroke-width:2px
+    classDef downstream fill:#f3e8ff,stroke:#a855f7,color:#581c87,stroke-width:2px
+    classDef support fill:#fff7ed,stroke:#f97316,color:#9a3412,stroke-width:2px
+    classDef store fill:#475569,stroke:#1e293b,color:#fff,stroke-width:2px
+
+    class SDK_WEB,SDK_MOB,DASH client
+    class AUTH,EC gateway
+    class T_RAW,T_DEC,T_DLQ,T_FB kafka
+    class DS,RE decision
+    class DEV,VEL,BEH,NET,TEL,GRA signal
+    class CASE,WH,FF downstream
+    class OUTBOX,FT support
+    class PG,RD,N4 store

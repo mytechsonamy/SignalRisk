@@ -32,8 +32,8 @@ export class MerchantsController {
   @ApiOperation({ summary: 'List all merchants' })
   @ApiResponse({ status: 200, description: 'Array of merchant records' })
   @Get()
-  findAll() {
-    return this.merchantsService.findAll();
+  async findAll() {
+    return this.merchantsService.findAllAsync();
   }
 
   @ApiOperation({ summary: 'Get a merchant by ID' })
@@ -41,8 +41,8 @@ export class MerchantsController {
   @ApiResponse({ status: 200, description: 'Merchant record (without client secret hash)' })
   @ApiResponse({ status: 404, description: 'Merchant not found' })
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    const merchant = this.merchantsService.findById(id);
+  async findOne(@Param('id') id: string) {
+    const merchant = await this.merchantsService.findById(id);
     if (!merchant) {
       throw new NotFoundException(`Merchant ${id} not found`);
     }
@@ -70,8 +70,8 @@ export class MerchantsController {
   @ApiResponse({ status: 404, description: 'Merchant not found' })
   @Post(':id/deactivate')
   @HttpCode(HttpStatus.OK)
-  deactivate(@Param('id') id: string) {
-    const success = this.merchantsService.deactivate(id);
+  async deactivate(@Param('id') id: string) {
+    const success = await this.merchantsService.deactivate(id);
     if (!success) {
       throw new NotFoundException(`Merchant ${id} not found`);
     }
@@ -84,8 +84,8 @@ export class MerchantsController {
   @ApiResponse({ status: 404, description: 'Merchant not found' })
   @Post(':id/activate')
   @HttpCode(HttpStatus.OK)
-  activate(@Param('id') id: string) {
-    const success = this.merchantsService.activate(id);
+  async activate(@Param('id') id: string) {
+    const success = await this.merchantsService.activate(id);
     if (!success) {
       throw new NotFoundException(`Merchant ${id} not found`);
     }

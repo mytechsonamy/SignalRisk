@@ -14,7 +14,7 @@ async function bootstrap() {
 
   app.enableShutdownHooks();
 
-  const port = process.env.PORT || 3006;
+  const port = process.env.PORT || 3008;
   await app.listen(port);
   Logger.log(`Rule Engine service listening on port ${port}`, 'Bootstrap');
 }

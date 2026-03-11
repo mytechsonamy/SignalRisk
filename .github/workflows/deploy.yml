@@ -8,16 +8,12 @@ on:
 env:
   AWS_REGION: us-east-1
   ECR_REGISTRY: ${{ vars.ECR_REGISTRY }}
-  ARGOCD_REPO: ${{ github.repository }}
 
 permissions:
   id-token: write
   contents: write
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # Build & Push — Docker images to ECR for every service
-  # ---------------------------------------------------------------------------
   build-and-push:
     name: Build & Push ${{ matrix.service }}
     runs-on: ubuntu-latest
@@ -26,14 +22,19 @@ jobs:
       matrix:
         service:
           - auth-service
+          - event-collector
           - device-intel-service
-          - behavioral-intel-service
+          - velocity-service
+          - behavioral-service
           - network-intel-service
           - telco-intel-service
-          - case-management-service
-          - consent-service
-          - erasure-service
+          - rule-engine-service
+          - decision-service
+          - case-service
           - webhook-service
+          - graph-intel-service
+          - feature-flag-service
+          - outbox-relay
     steps:
       - uses: actions/checkout@v4
 
@@ -66,9 +67,8 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile.base
-          build-args: |
-            SERVICE=${{ matrix.service }}
+          file: Dockerfile
+          build-args: SERVICE=${{ matrix.service }}
           push: true
           tags: |
             ${{ env.ECR_REGISTRY }}/signalrisk/${{ matrix.service }}:${{ steps.version.outputs.VERSION }}
@@ -81,9 +81,6 @@ jobs:
           rm -rf /tmp/.buildx-cache
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
-  # ---------------------------------------------------------------------------
-  # Update Manifests — Patch image tags in ArgoCD-watched K8s manifests
-  # ---------------------------------------------------------------------------
   update-manifests:
     name: Update K8s Manifests
     runs-on: ubuntu-latest
@@ -97,26 +94,21 @@ jobs:
         id: version
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Update image tags in kustomization
+      - name: Update image tags
         run: |
-          cd infrastructure/k8s/base
-          for svc in auth-service device-intel-service behavioral-intel-service \
-                     network-intel-service telco-intel-service case-management-service \
-                     consent-service erasure-service webhook-service; do
-            # Update kustomization.yaml image references
-            if [ -f "kustomization.yaml" ]; then
-              sed -i "s|newTag: .*# ${svc}|newTag: ${{ steps.version.outputs.VERSION }} # ${svc}|g" kustomization.yaml
-            fi
-            # Update individual deployment manifests if they exist
-            if [ -f "${svc}/deployment.yaml" ]; then
-              sed -i "s|image: .*/signalrisk/${svc}:.*|image: ${{ env.ECR_REGISTRY }}/signalrisk/${svc}:${{ steps.version.outputs.VERSION }}|g" "${svc}/deployment.yaml"
-            fi
-          done
+          # Update Helm production values
+          if [ -f infrastructure/helm/signalrisk/values-production.yaml ]; then
+            sed -i "s/imageTag: .*/imageTag: \"${{ steps.version.outputs.VERSION }}\"/" \
+              infrastructure/helm/signalrisk/values-production.yaml
+          fi
+          # Update K8s deployment manifests
+          find infrastructure/k8s/services -name "deployment.yaml" \
+            -exec sed -i "s|image: .*/signalrisk/\(.*\):.*|image: ${{ env.ECR_REGISTRY }}/signalrisk/\1:${{ steps.version.outputs.VERSION }}|g" {} \;
 
       - name: Commit manifest updates
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add infrastructure/k8s/
+          git add infrastructure/
           git diff --cached --quiet || git commit -m "chore: update image tags to ${{ steps.version.outputs.VERSION }}"
           git push origin HEAD:main

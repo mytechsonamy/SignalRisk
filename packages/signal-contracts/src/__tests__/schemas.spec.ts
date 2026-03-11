@@ -76,9 +76,11 @@ describe('VelocitySignalSchema', () => {
     entityId: 'user-123',
     merchantId: 'merchant-abc',
     dimensions: {
+      txCount10m: 2,
       txCount1h: 5,
       txCount24h: 20,
       amountSum1h: 500.0,
+      amountSum24h: 2000.0,
       uniqueDevices24h: 2,
       uniqueIps24h: 1,
       uniqueSessions1h: 3,

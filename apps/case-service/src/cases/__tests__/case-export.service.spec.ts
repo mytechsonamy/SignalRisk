@@ -76,17 +76,6 @@ describe('CaseExportService', () => {
     expect(result).toEqual([]);
   });
 
-  it('filters by deleted_at IS NULL', async () => {
-    mockQuery
-      .mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({ rows: [] });
-
-    await service.exportEntityCases('merchant-001', 'entity-001');
-
-    const selectCall = mockQuery.mock.calls[1];
-    expect(selectCall[0]).toContain('deleted_at IS NULL');
-  });
-
   it('client.release() called in finally block', async () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [] })

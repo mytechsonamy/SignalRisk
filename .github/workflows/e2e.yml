@@ -6,14 +6,18 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   COMPOSE_FILE: docker-compose.full.yml
 
 jobs:
-  e2e:
-    name: E2E — Real Services
+  e2e-docker:
+    name: E2E — Docker Compose
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v4
@@ -23,29 +27,29 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: tests/e2e/package.json
 
-      - name: Cache Docker layers
-        uses: actions/cache@v4
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
-
-      - name: Install E2E dependencies
+      - name: Install dependencies
         run: npm ci
-        working-directory: tests/e2e
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
-        working-directory: tests/e2e
 
-      - name: Run E2E tests (Docker skipped in CI)
-        run: cd tests/e2e && npx playwright test --config=playwright.config.real.ts
+      - name: Build and start services
+        run: |
+          docker compose -f docker-compose.full.yml up -d --build --wait
+        timeout-minutes: 15
+
+      - name: Verify all services healthy
+        run: |
+          docker compose -f docker-compose.full.yml ps
+          for port in 3001 3002 3003 3004 3005 3006 3007 3008 3009 3010 3011 3012 3013; do
+            curl -sf http://localhost:$port/health || echo "WARNING: port $port not healthy"
+          done
+
+      - name: Run E2E tests (real services)
+        run: npx playwright test --config tests/e2e/playwright.config.real.ts
         env:
-          SKIP_DOCKER: "true"
-        # Not: SKIP_DOCKER=true ile 28 test test.skip olur — bu beklenen davranis
+          CI: true
 
       - name: Upload test results
         if: always()
@@ -55,6 +59,33 @@ jobs:
           path: tests/e2e/playwright-report/
           retention-days: 7
 
+      - name: Upload screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-screenshots
+          path: tests/e2e/test-results/
+          retention-days: 7
+
+      - name: Collect Docker logs on failure
+        if: failure()
+        run: |
+          mkdir -p docker-logs
+          docker compose -f docker-compose.full.yml logs > docker-logs/all.log 2>&1
+        continue-on-error: true
+
+      - name: Upload Docker logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-logs
+          path: docker-logs/
+          retention-days: 3
+
+      - name: Stop services
+        if: always()
+        run: docker compose -f docker-compose.full.yml down -v
+
   fraud-tester-tests:
     runs-on: ubuntu-latest
     steps:
@@ -63,9 +94,8 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: apps/fraud-tester/package-lock.json
       - name: Install dependencies
-        run: cd apps/fraud-tester && npm ci
+        run: npm ci
       - name: Run unit tests
         run: cd apps/fraud-tester && npm test
         env:

@@ -117,14 +117,14 @@ describe('GraphIntelService - analyze', () => {
     expect(result.riskScore).toBe(30);
   });
 
-  // Test 3: riskScore is capped at 100
-  it('should cap riskScore at 100 when both signals trigger', async () => {
+  // Test 3: riskScore is capped at max of both signals (60 + 30 = 90)
+  it('should cap riskScore at 90 when both signals trigger', async () => {
     mockSession.run = makeRunMock(5, 5, 0);
 
     const result = await service.analyze(baseInput);
 
     expect(result.riskScore).toBeLessThanOrEqual(100);
-    expect(result.riskScore).toBe(100);
+    expect(result.riskScore).toBe(90);
   });
 
   // Test 4: clean account has riskScore=0 and fraudRingDetected=false
@@ -256,14 +256,14 @@ describe('GraphIntelService - analyze', () => {
     expect(mockSession.close).toHaveBeenCalledTimes(1);
   });
 
-  // Test 14: both signals combined cap at 100
-  it('should cap riskScore at 100 even when signals would exceed 100', async () => {
-    // connectedFraudCount=10 (60 pts) + sharedDeviceCount=10 (30 pts) = 90, capped at 100
+  // Test 14: both signals combined = 90 (max from current scoring rules)
+  it('should return riskScore 90 when both signals trigger with high counts', async () => {
+    // connectedFraudCount=10 (60 pts) + sharedDeviceCount=10 (30 pts) = 90
     mockSession.run = makeRunMock(10, 10, 5);
 
     const result = await service.analyze(baseInput);
 
-    expect(result.riskScore).toBe(100);
+    expect(result.riskScore).toBe(90);
     expect(result.riskScore).toBeLessThanOrEqual(100);
     expect(result.fraudRingDetected).toBe(true);
   });

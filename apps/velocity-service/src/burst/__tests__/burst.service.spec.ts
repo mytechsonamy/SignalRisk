@@ -20,9 +20,11 @@ describe('BurstService', () => {
   };
 
   const baseSignals: VelocitySignals = {
+    tx_count_10m: 0,
     tx_count_1h: 0,
     tx_count_24h: 0,
     amount_sum_1h: 0,
+    amount_sum_24h: 0,
     unique_devices_24h: 0,
     unique_ips_24h: 0,
     unique_sessions_1h: 0,

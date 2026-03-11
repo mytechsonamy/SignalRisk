@@ -3,30 +3,32 @@
  * to the target Kafka topic.
  */
 
+import { TOPICS } from '@signalrisk/kafka-config';
+
 const TOPIC_MAP: Record<string, Record<string, string>> = {
   DECISION: {
-    created: 'signalrisk.decisions',
-    updated: 'signalrisk.decisions',
+    created: TOPICS.DECISIONS,
+    updated: TOPICS.DECISIONS,
   },
   DEVICE: {
-    created: 'signalrisk.events.raw',
-    updated: 'signalrisk.events.raw',
+    created: TOPICS.EVENTS_RAW,
+    updated: TOPICS.EVENTS_RAW,
   },
   RULE: {
-    created: 'signalrisk.rules.changes',
-    changed: 'signalrisk.rules.changes',
-    deleted: 'signalrisk.rules.changes',
+    created: TOPICS.RULES_CHANGES,
+    changed: TOPICS.RULES_CHANGES,
+    deleted: TOPICS.RULES_CHANGES,
   },
   EVENT: {
-    created: 'signalrisk.events.raw',
+    created: TOPICS.EVENTS_RAW,
   },
   MERCHANT: {
-    created: 'signalrisk.merchants',
-    updated: 'signalrisk.merchants',
+    created: TOPICS.MERCHANTS,
+    updated: TOPICS.MERCHANTS,
   },
 };
 
-const DEFAULT_TOPIC = 'signalrisk.events.unrouted';
+const DEFAULT_TOPIC = TOPICS.EVENTS_UNROUTED;
 
 export function resolveTopicForEvent(
   aggregateType: string,

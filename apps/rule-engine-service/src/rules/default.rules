@@ -8,3 +8,17 @@ RULE vpn_proxy WHEN network.isVpn == true THEN REVIEW WEIGHT 0.5 MISSING SKIP
 RULE bot_block WHEN behavioral.isBot == true THEN BLOCK WEIGHT 0.9 MISSING SKIP
 RULE geo_mismatch WHEN network.geoMismatchScore > 50 THEN REVIEW WEIGHT 0.6 MISSING SKIP
 RULE high_prepaid_velocity WHEN telco.prepaidProbability > 0.8 AND velocity.txCount1h > 30 THEN REVIEW WEIGHT 0.5 MISSING SKIP
+
+RULE stateful_repeat_blocker WHEN stateful.customer.previousBlockCount30d > 0 AND stateful.customer.txCount1h > 3 THEN BLOCK WEIGHT 0.9 MISSING SKIP
+RULE stateful_high_velocity_10m WHEN stateful.customer.txCount10m > 5 THEN REVIEW WEIGHT 0.7 MISSING SKIP
+RULE stateful_device_spread WHEN stateful.device.uniqueIps24h > 10 THEN REVIEW WEIGHT 0.6 MISSING SKIP
+RULE stateful_ip_burst WHEN stateful.ip.txCount1h > 50 THEN BLOCK WEIGHT 0.8 MISSING SKIP
+RULE stateful_review_escalation WHEN stateful.customer.previousReviewCount7d > 3 AND stateful.customer.txCount1h > 5 THEN BLOCK WEIGHT 0.7 MISSING SKIP
+
+RULE seq_login_then_payment WHEN stateful.customer.loginThenPayment15m == true THEN REVIEW WEIGHT 0.6 MISSING SKIP
+RULE seq_failed_x3_then_success WHEN stateful.customer.failedPaymentX3ThenSuccess10m == true THEN BLOCK WEIGHT 0.9 MISSING SKIP
+RULE seq_device_change_payment WHEN stateful.customer.deviceChangeThenPayment30m == true THEN REVIEW WEIGHT 0.7 MISSING SKIP
+
+RULE graph_fraud_ring WHEN stateful.graph.fraudRingDetected == true THEN BLOCK WEIGHT 1.0 MISSING SKIP
+RULE graph_shared_device_high WHEN stateful.graph.sharedDeviceCount > 5 THEN REVIEW WEIGHT 0.7 MISSING SKIP
+RULE graph_shared_ip_high WHEN stateful.graph.sharedIpCount > 10 THEN REVIEW WEIGHT 0.6 MISSING SKIP

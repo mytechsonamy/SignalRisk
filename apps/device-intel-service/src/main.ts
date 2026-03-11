@@ -18,7 +18,7 @@ async function bootstrap() {
 
   app.enableShutdownHooks();
 
-  const port = process.env.PORT || 3002;
+  const port = process.env.PORT || 3003;
   await app.listen(port);
   console.log(`Device Intel service listening on port ${port}`);
 }

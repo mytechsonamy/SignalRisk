@@ -8,14 +8,13 @@ import {
   BehavioralSignal,
   NetworkSignal,
   TelcoSignal,
+  SignalBundle,
 } from '../signal-fetchers';
 import { DecisionRequest } from '../decision.types';
 import { DecisionCacheService } from '../decision-cache.service';
 
 // ---------------------------------------------------------------------------
-// OpenTelemetry mock (must be defined before the module under test is imported,
-// but the module is already imported above so we set up the mock via the
-// mockStartSpan helper captured in the factory below)
+// OpenTelemetry mock
 // ---------------------------------------------------------------------------
 const mockSpanEnd = jest.fn();
 const mockSpanSetAttribute = jest.fn();
@@ -34,6 +33,27 @@ jest.mock('@opentelemetry/api', () => ({
   SpanStatusCode: { OK: 1, ERROR: 2 },
 }));
 
+// Mock fs for rule loading
+jest.mock('fs', () => ({
+  readFileSync: jest.fn(() => `
+RULE emulator_block WHEN device.isEmulator == true THEN BLOCK WEIGHT 1.0
+RULE very_low_trust WHEN device.trustScore < 20 THEN BLOCK WEIGHT 0.9
+RULE low_trust WHEN device.trustScore < 40 THEN REVIEW WEIGHT 0.7 MISSING SKIP
+RULE velocity_burst WHEN velocity.burstDetected == true THEN REVIEW WEIGHT 0.8 MISSING SKIP
+RULE high_velocity WHEN velocity.txCount1h > 100 THEN REVIEW WEIGHT 0.6 MISSING SKIP
+RULE tor_exit WHEN network.isTor == true THEN BLOCK WEIGHT 1.0 MISSING SKIP
+RULE vpn_proxy WHEN network.isVpn == true THEN REVIEW WEIGHT 0.5 MISSING SKIP
+RULE bot_block WHEN behavioral.isBot == true THEN BLOCK WEIGHT 0.9 MISSING SKIP
+RULE geo_mismatch WHEN network.geoMismatchScore > 50 THEN REVIEW WEIGHT 0.6 MISSING SKIP
+RULE stateful_repeat_blocker WHEN stateful.customer.previousBlockCount30d > 0 AND stateful.customer.txCount1h > 3 THEN BLOCK WEIGHT 0.9 MISSING SKIP
+RULE stateful_device_spread WHEN stateful.device.uniqueIps24h > 10 THEN REVIEW WEIGHT 0.6 MISSING SKIP
+RULE stateful_ip_burst WHEN stateful.ip.txCount1h > 50 THEN BLOCK WEIGHT 0.8 MISSING SKIP
+RULE graph_fraud_ring WHEN stateful.graph.fraudRingDetected == true THEN BLOCK WEIGHT 1.0 MISSING SKIP
+RULE seq_failed_x3_then_success WHEN stateful.customer.failedPaymentX3ThenSuccess10m == true THEN BLOCK WEIGHT 0.9 MISSING SKIP
+RULE seq_login_then_payment WHEN stateful.customer.loginThenPayment15m == true THEN REVIEW WEIGHT 0.6 MISSING SKIP
+  `.trim()),
+}));
+
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
@@ -47,43 +67,11 @@ const mockConfigService = {
   }),
 };
 
-const mockSignalFetcher = {
-  fetchDeviceSignal:    jest.fn(),
-  fetchVelocitySignal:  jest.fn(),
-  fetchBehavioralSignal: jest.fn(),
-  fetchNetworkSignal:   jest.fn(),
-  fetchTelcoSignal:     jest.fn(),
-};
-
-const mockDecisionCache = {
-  get: jest.fn().mockResolvedValue(null),
-  set: jest.fn().mockResolvedValue(undefined),
-  invalidate: jest.fn().mockResolvedValue(undefined),
-  cacheKey: jest.fn(),
-};
-
-// ---------------------------------------------------------------------------
-// Fixtures
-// ---------------------------------------------------------------------------
-
-function makeRequest(overrides: Partial<DecisionRequest> = {}): DecisionRequest {
-  return {
-    requestId:  'req-001',
-    merchantId: 'merchant-001',
-    entityId:   'user-001',
-    deviceId:   'device-001',
-    sessionId:  'session-001',
-    ip:         '1.2.3.4',
-    msisdn:     '+905001234567',
-    ...overrides,
-  };
-}
-
 const mockDeviceSignal: DeviceSignal = {
   deviceId:           'device-001',
   merchantId:         'merchant-001',
   fingerprint:        'fp-001',
-  trustScore:         80,     // low risk → riskScore 20
+  trustScore:         80,
   isEmulator:         false,
   emulatorConfidence: 0,
   platform:           'web',
@@ -96,9 +84,11 @@ const mockVelocitySignal: VelocitySignal = {
   entityId:   'user-001',
   merchantId: 'merchant-001',
   dimensions: {
+    txCount10m:       1,
     txCount1h:        2,
     txCount24h:       8,
     amountSum1h:      100,
+    amountSum24h:     400,
     uniqueDevices24h: 1,
     uniqueIps24h:     1,
     uniqueSessions1h: 1,
@@ -134,16 +124,48 @@ const mockTelcoSignal: TelcoSignal = {
   prepaidProbability: 0.05,
 };
 
+function makeLowRiskBundle(): SignalBundle {
+  return {
+    device:     mockDeviceSignal,
+    velocity:   mockVelocitySignal,
+    behavioral: mockBehavioralSignal,
+    network:    mockNetworkSignal,
+    telco:      mockTelcoSignal,
+    stateful:   null,
+  };
+}
+
+const mockSignalFetcher = {
+  fetchAllSignals: jest.fn().mockResolvedValue(makeLowRiskBundle()),
+  fetchDeviceSignal:     jest.fn(),
+  fetchVelocitySignal:   jest.fn(),
+  fetchBehavioralSignal: jest.fn(),
+  fetchNetworkSignal:    jest.fn(),
+  fetchTelcoSignal:      jest.fn(),
+};
+
+const mockDecisionCache = {
+  get: jest.fn().mockResolvedValue(null),
+  set: jest.fn().mockResolvedValue(undefined),
+  invalidate: jest.fn().mockResolvedValue(undefined),
+  cacheKey: jest.fn(),
+};
+
 // ---------------------------------------------------------------------------
-// Helpers
+// Fixtures
 // ---------------------------------------------------------------------------
 
-function setupAllSignals() {
-  mockSignalFetcher.fetchDeviceSignal.mockResolvedValue(mockDeviceSignal);
-  mockSignalFetcher.fetchVelocitySignal.mockResolvedValue(mockVelocitySignal);
-  mockSignalFetcher.fetchBehavioralSignal.mockResolvedValue(mockBehavioralSignal);
-  mockSignalFetcher.fetchNetworkSignal.mockResolvedValue(mockNetworkSignal);
-  mockSignalFetcher.fetchTelcoSignal.mockResolvedValue(mockTelcoSignal);
+function makeRequest(overrides: Partial<DecisionRequest> = {}): DecisionRequest {
+  return {
+    requestId:  'req-001',
+    merchantId: 'merchant-001',
+    entityId:   'user-001',
+    deviceId:   'device-001',
+    sessionId:  'session-001',
+    ip:         '1.2.3.4',
+    msisdn:     '+905001234567',
+    ...overrides,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -157,6 +179,8 @@ describe('DecisionOrchestratorService', () => {
     jest.clearAllMocks();
     mockDecisionCache.get.mockResolvedValue(null);
     mockDecisionCache.set.mockResolvedValue(undefined);
+    mockSignalFetcher.fetchAllSignals.mockResolvedValue(makeLowRiskBundle());
+    mockStartSpan.mockReturnValue(mockSpan);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -168,6 +192,8 @@ describe('DecisionOrchestratorService', () => {
     }).compile();
 
     service = module.get<DecisionOrchestratorService>(DecisionOrchestratorService);
+    // Trigger rule loading
+    service.onModuleInit();
   });
 
   // -------------------------------------------------------------------------
@@ -187,11 +213,6 @@ describe('DecisionOrchestratorService', () => {
     });
 
     it('renormalizes weights when one signal is missing', () => {
-      // Only device (0.35) and velocity (0.25) available — total weight 0.60
-      // device score 60, velocity score 40
-      // weighted = (60 * 0.35 + 40 * 0.25) / 0.60
-      //          = (21 + 10) / 0.60
-      //          = 31 / 0.60 ≈ 51.67 → 52
       const scores = [
         { name: 'device',     score: 60,   weight: 0.35 },
         { name: 'velocity',   score: 40,   weight: 0.25 },
@@ -234,16 +255,12 @@ describe('DecisionOrchestratorService', () => {
 
   describe('decide', () => {
     it('all signals available → computes weighted score and correct action (ALLOW)', async () => {
-      setupAllSignals();
-
       const result = await service.decide(makeRequest());
 
       expect(result.requestId).toBe('req-001');
       expect(result.merchantId).toBe('merchant-001');
       expect(result.riskScore).toBeGreaterThanOrEqual(0);
       expect(result.riskScore).toBeLessThanOrEqual(100);
-      // With trustScore=80 → deviceRisk=20, low velocity, low behavioral, low network, low telco
-      // → expect ALLOW
       expect(result.action).toBe('ALLOW');
       expect(result.cached).toBe(false);
       expect(result.createdAt).toBeInstanceOf(Date);
@@ -251,33 +268,34 @@ describe('DecisionOrchestratorService', () => {
       expect(result.riskFactors.length).toBeGreaterThan(0);
     });
 
-    it('riskScore=75 → BLOCK', async () => {
-      // device with very low trust score → high device risk
-      mockSignalFetcher.fetchDeviceSignal.mockResolvedValue({
-        ...mockDeviceSignal,
-        trustScore: 10,     // deviceRisk = 90
-        isEmulator: false,
-      });
-      mockSignalFetcher.fetchVelocitySignal.mockResolvedValue({
-        ...mockVelocitySignal,
-        dimensions: { ...mockVelocitySignal.dimensions, txCount1h: 25 }, // +50
-        burstDetected: true,
-        burstRatio: 5,
-      });
-      mockSignalFetcher.fetchBehavioralSignal.mockResolvedValue({
-        ...mockBehavioralSignal,
-        sessionRiskScore: 80,
-        isBot: true,
-      });
-      mockSignalFetcher.fetchNetworkSignal.mockResolvedValue({
-        ...mockNetworkSignal,
-        isTor: true,
-        riskScore: 90,
-      });
-      mockSignalFetcher.fetchTelcoSignal.mockResolvedValue({
-        ...mockTelcoSignal,
-        isPorted: true,
-        prepaidProbability: 0.9,
+    it('calls fetchAllSignals with correct params', async () => {
+      await service.decide(makeRequest());
+
+      expect(mockSignalFetcher.fetchAllSignals).toHaveBeenCalledWith(
+        expect.objectContaining({
+          deviceId: 'device-001',
+          entityId: 'user-001',
+          merchantId: 'merchant-001',
+          sessionId: 'session-001',
+          ip: '1.2.3.4',
+          msisdn: '+905001234567',
+        }),
+      );
+    });
+
+    it('high risk signals → BLOCK', async () => {
+      mockSignalFetcher.fetchAllSignals.mockResolvedValue({
+        device: { ...mockDeviceSignal, trustScore: 10, isEmulator: true, emulatorConfidence: 0.9 },
+        velocity: {
+          ...mockVelocitySignal,
+          dimensions: { ...mockVelocitySignal.dimensions, txCount1h: 25 },
+          burstDetected: true,
+          burstRatio: 5,
+        },
+        behavioral: { ...mockBehavioralSignal, sessionRiskScore: 80, isBot: true },
+        network: { ...mockNetworkSignal, isTor: true, riskScore: 90 },
+        telco: { ...mockTelcoSignal, isPorted: true, prepaidProbability: 0.9 },
+        stateful: null,
       });
 
       const result = await service.decide(makeRequest());
@@ -285,29 +303,17 @@ describe('DecisionOrchestratorService', () => {
       expect(result.riskScore).toBeGreaterThanOrEqual(70);
     });
 
-    it('riskScore=50 → REVIEW', async () => {
-      // Moderate risk: device trust=50, velocity ok, behavioral=50, network=30, telco ok
-      mockSignalFetcher.fetchDeviceSignal.mockResolvedValue({
-        ...mockDeviceSignal,
-        trustScore: 50,  // deviceRisk = 50
-      });
-      mockSignalFetcher.fetchVelocitySignal.mockResolvedValue({
-        ...mockVelocitySignal,
-        dimensions: { ...mockVelocitySignal.dimensions, txCount1h: 8 }, // +10
-      });
-      mockSignalFetcher.fetchBehavioralSignal.mockResolvedValue({
-        ...mockBehavioralSignal,
-        sessionRiskScore: 60,
-      });
-      mockSignalFetcher.fetchNetworkSignal.mockResolvedValue({
-        ...mockNetworkSignal,
-        isProxy: true,
-        riskScore: 40,
-      });
-      mockSignalFetcher.fetchTelcoSignal.mockResolvedValue({
-        ...mockTelcoSignal,
-        isPorted: false,
-        prepaidProbability: 0.3,
+    it('moderate risk signals → REVIEW', async () => {
+      mockSignalFetcher.fetchAllSignals.mockResolvedValue({
+        device: { ...mockDeviceSignal, trustScore: 50 },
+        velocity: {
+          ...mockVelocitySignal,
+          dimensions: { ...mockVelocitySignal.dimensions, txCount1h: 8 },
+        },
+        behavioral: { ...mockBehavioralSignal, sessionRiskScore: 60 },
+        network: { ...mockNetworkSignal, isProxy: true, riskScore: 40 },
+        telco: { ...mockTelcoSignal, prepaidProbability: 0.3 },
+        stateful: null,
       });
 
       const result = await service.decide(makeRequest());
@@ -316,302 +322,274 @@ describe('DecisionOrchestratorService', () => {
       expect(result.riskScore).toBeLessThan(70);
     });
 
-    it('riskScore=20 → ALLOW', async () => {
-      setupAllSignals();  // all low-risk mocks
+    it('all signals null → fallback to REVIEW (score=50)', async () => {
+      mockSignalFetcher.fetchAllSignals.mockResolvedValue({
+        device: null, velocity: null, behavioral: null,
+        network: null, telco: null, stateful: null,
+      });
 
       const result = await service.decide(makeRequest());
-      expect(result.action).toBe('ALLOW');
-      expect(result.riskScore).toBeLessThan(40);
-    });
-
-    it('one signal times out → excluded from scoring, weights renormalized', async () => {
-      // device signal takes 200ms > 150ms timeout → should be excluded
-      mockSignalFetcher.fetchDeviceSignal.mockImplementation(
-        () => new Promise((resolve) => setTimeout(() => resolve(mockDeviceSignal), 200)),
-      );
-      mockSignalFetcher.fetchVelocitySignal.mockResolvedValue(mockVelocitySignal);
-      mockSignalFetcher.fetchBehavioralSignal.mockResolvedValue(mockBehavioralSignal);
-      mockSignalFetcher.fetchNetworkSignal.mockResolvedValue(mockNetworkSignal);
-      mockSignalFetcher.fetchTelcoSignal.mockResolvedValue(mockTelcoSignal);
-
-      const result = await service.decide(makeRequest());
-
-      // Score should still be computed (device is excluded)
-      expect(result.riskScore).toBeGreaterThanOrEqual(0);
-      expect(result.riskScore).toBeLessThanOrEqual(100);
-      // Risk factors should not include device signal
-      const deviceFactor = result.riskFactors.find((f) => f.signal === 'device.trustScore');
-      expect(deviceFactor).toBeUndefined();
-    }, 1000);
-
-    it('all signals fail → fallback to REVIEW (score=50)', async () => {
-      mockSignalFetcher.fetchDeviceSignal.mockRejectedValue(new Error('timeout'));
-      mockSignalFetcher.fetchVelocitySignal.mockRejectedValue(new Error('timeout'));
-      mockSignalFetcher.fetchBehavioralSignal.mockRejectedValue(new Error('timeout'));
-      mockSignalFetcher.fetchNetworkSignal.mockRejectedValue(new Error('timeout'));
-      mockSignalFetcher.fetchTelcoSignal.mockRejectedValue(new Error('timeout'));
-
-      const result = await service.decide(makeRequest());
-
       expect(result.riskScore).toBe(50);
       expect(result.action).toBe('REVIEW');
     });
 
-    it('risk factors are populated with top contributors', async () => {
-      setupAllSignals();
-
+    it('risk factors are populated and sorted by contribution', async () => {
       const result = await service.decide(makeRequest());
 
       expect(result.riskFactors).toBeInstanceOf(Array);
       expect(result.riskFactors.length).toBeGreaterThan(0);
 
-      // Each factor must have required fields
       for (const factor of result.riskFactors) {
         expect(factor.signal).toBeTruthy();
         expect(factor.description).toBeTruthy();
         expect(typeof factor.contribution).toBe('number');
       }
 
-      // Factors should be sorted descending by contribution
       for (let i = 0; i < result.riskFactors.length - 1; i++) {
         expect(result.riskFactors[i].contribution).toBeGreaterThanOrEqual(
           result.riskFactors[i + 1].contribution,
         );
       }
     });
+  });
 
-    it('emulator device → rule:emulator-detected in appliedRules', async () => {
-      mockSignalFetcher.fetchDeviceSignal.mockResolvedValue({
-        ...mockDeviceSignal,
-        isEmulator: true,
-        emulatorConfidence: 0.9,
-        trustScore: 20,
+  // -------------------------------------------------------------------------
+  // DSL Rule Evaluation Integration
+  // -------------------------------------------------------------------------
+
+  describe('DSL rule evaluation', () => {
+    it('loads DSL rules at init', () => {
+      expect(service.getParsedRules().length).toBeGreaterThan(0);
+    });
+
+    it('emulator DSL rule → BLOCK and emulator_block in appliedRules', async () => {
+      mockSignalFetcher.fetchAllSignals.mockResolvedValue({
+        device: { ...mockDeviceSignal, isEmulator: true, emulatorConfidence: 0.9, trustScore: 20 },
+        velocity: mockVelocitySignal,
+        behavioral: mockBehavioralSignal,
+        network: mockNetworkSignal,
+        telco: mockTelcoSignal,
+        stateful: null,
       });
-      mockSignalFetcher.fetchVelocitySignal.mockResolvedValue(mockVelocitySignal);
-      mockSignalFetcher.fetchBehavioralSignal.mockResolvedValue(mockBehavioralSignal);
-      mockSignalFetcher.fetchNetworkSignal.mockResolvedValue(mockNetworkSignal);
-      mockSignalFetcher.fetchTelcoSignal.mockResolvedValue(mockTelcoSignal);
+
+      const result = await service.decide(makeRequest());
+      expect(result.appliedRules).toContain('emulator_block');
+      expect(result.action).toBe('BLOCK');
+    });
+
+    it('Tor exit DSL rule → BLOCK and tor_exit in appliedRules', async () => {
+      mockSignalFetcher.fetchAllSignals.mockResolvedValue({
+        device: mockDeviceSignal,
+        velocity: mockVelocitySignal,
+        behavioral: mockBehavioralSignal,
+        network: { ...mockNetworkSignal, isTor: true, riskScore: 90 },
+        telco: mockTelcoSignal,
+        stateful: null,
+      });
+
+      const result = await service.decide(makeRequest());
+      expect(result.appliedRules).toContain('tor_exit');
+      expect(result.action).toBe('BLOCK');
+    });
+
+    it('bot DSL rule → BLOCK and bot_block in appliedRules', async () => {
+      mockSignalFetcher.fetchAllSignals.mockResolvedValue({
+        device: mockDeviceSignal,
+        velocity: mockVelocitySignal,
+        behavioral: { ...mockBehavioralSignal, isBot: true, sessionRiskScore: 80 },
+        network: mockNetworkSignal,
+        telco: mockTelcoSignal,
+        stateful: null,
+      });
+
+      const result = await service.decide(makeRequest());
+      expect(result.appliedRules).toContain('bot_block');
+      expect(result.action).toBe('BLOCK');
+    });
+
+    it('velocity burst DSL rule → REVIEW upgrade for low-risk baseline', async () => {
+      mockSignalFetcher.fetchAllSignals.mockResolvedValue({
+        device: mockDeviceSignal,
+        velocity: { ...mockVelocitySignal, burstDetected: true, burstRatio: 3 },
+        behavioral: mockBehavioralSignal,
+        network: mockNetworkSignal,
+        telco: mockTelcoSignal,
+        stateful: null,
+      });
+
+      const result = await service.decide(makeRequest());
+      expect(result.appliedRules).toContain('velocity_burst');
+      // Low risk baseline would be ALLOW, but DSL REVIEW rule upgrades to REVIEW
+      expect(['REVIEW', 'BLOCK']).toContain(result.action);
+    });
+
+    it('stateful repeat blocker → BLOCK when previous blocks + active tx', async () => {
+      mockSignalFetcher.fetchAllSignals.mockResolvedValue({
+        device: mockDeviceSignal,
+        velocity: mockVelocitySignal,
+        behavioral: mockBehavioralSignal,
+        network: mockNetworkSignal,
+        telco: mockTelcoSignal,
+        stateful: {
+          customer: {
+            previousBlockCount30d: 2,
+            txCount1h: 5,
+          },
+        },
+      });
+
+      const result = await service.decide(makeRequest());
+      expect(result.appliedRules).toContain('stateful_repeat_blocker');
+      expect(result.action).toBe('BLOCK');
+    });
+
+    it('graph fraud ring detection → BLOCK', async () => {
+      mockSignalFetcher.fetchAllSignals.mockResolvedValue({
+        device: mockDeviceSignal,
+        velocity: mockVelocitySignal,
+        behavioral: mockBehavioralSignal,
+        network: mockNetworkSignal,
+        telco: mockTelcoSignal,
+        stateful: {
+          graph: {
+            fraudRingDetected: true,
+            fraudRingScore: 85,
+            sharedDeviceCount: 3,
+            sharedIpCount: 2,
+          },
+        },
+      });
+
+      const result = await service.decide(makeRequest());
+      expect(result.appliedRules).toContain('graph_fraud_ring');
+      expect(result.action).toBe('BLOCK');
+    });
+
+    it('sequence detection — failedX3ThenSuccess → BLOCK', async () => {
+      mockSignalFetcher.fetchAllSignals.mockResolvedValue({
+        device: mockDeviceSignal,
+        velocity: mockVelocitySignal,
+        behavioral: mockBehavioralSignal,
+        network: mockNetworkSignal,
+        telco: mockTelcoSignal,
+        stateful: {
+          customer: {
+            failedPaymentX3ThenSuccess10m: true,
+          },
+        },
+      });
+
+      const result = await service.decide(makeRequest());
+      expect(result.appliedRules).toContain('seq_failed_x3_then_success');
+      expect(result.action).toBe('BLOCK');
+    });
+
+    it('sequence detection — loginThenPayment → REVIEW', async () => {
+      mockSignalFetcher.fetchAllSignals.mockResolvedValue({
+        device: mockDeviceSignal,
+        velocity: mockVelocitySignal,
+        behavioral: mockBehavioralSignal,
+        network: mockNetworkSignal,
+        telco: mockTelcoSignal,
+        stateful: {
+          customer: {
+            loginThenPayment15m: true,
+          },
+        },
+      });
+
+      const result = await service.decide(makeRequest());
+      expect(result.appliedRules).toContain('seq_login_then_payment');
+      // Low risk baseline ALLOW → upgraded to REVIEW by DSL
+      expect(['REVIEW', 'BLOCK']).toContain(result.action);
+    });
+
+    it('no DSL rules match for clean signals → only threshold-based action', async () => {
+      const result = await service.decide(makeRequest());
+
+      // Low risk signals, no stateful context → no DSL rules should match
+      // (trustScore=80, no emulator, no burst, no tor, no bot)
+      expect(result.appliedRules).toEqual([]);
+      expect(result.action).toBe('ALLOW');
+    });
+
+    it('DSL evaluation failure → graceful degradation to threshold-based action', async () => {
+      // Force DSL evaluation to fail by corrupting parsedRules
+      (service as any).parsedRules = [{ type: 'rule', id: 'bad', condition: null, action: 'BLOCK', weight: 1, missingPolicy: 'SKIP' }];
 
       const result = await service.decide(makeRequest());
 
-      expect(result.appliedRules).toContain('rule:emulator-detected');
-    });
-
-    it('skips behavioral signal when sessionId is absent', async () => {
-      setupAllSignals();
-
-      const result = await service.decide(makeRequest({ sessionId: undefined }));
-
-      expect(mockSignalFetcher.fetchBehavioralSignal).not.toHaveBeenCalled();
+      // Should still produce a valid result using threshold-based scoring
+      expect(result.action).toBeDefined();
       expect(result.riskScore).toBeGreaterThanOrEqual(0);
     });
 
-    it('skips network signal when ip is absent', async () => {
-      setupAllSignals();
+    it('appliedRules only contains matched DSL rule IDs', async () => {
+      mockSignalFetcher.fetchAllSignals.mockResolvedValue({
+        device: { ...mockDeviceSignal, isEmulator: true, emulatorConfidence: 0.9, trustScore: 15 },
+        velocity: mockVelocitySignal,
+        behavioral: mockBehavioralSignal,
+        network: mockNetworkSignal,
+        telco: mockTelcoSignal,
+        stateful: null,
+      });
 
-      const result = await service.decide(makeRequest({ ip: undefined }));
-
-      expect(mockSignalFetcher.fetchNetworkSignal).not.toHaveBeenCalled();
-      expect(result.riskScore).toBeGreaterThanOrEqual(0);
-    });
-
-    it('skips telco signal when msisdn is absent', async () => {
-      setupAllSignals();
-
-      const result = await service.decide(makeRequest({ msisdn: undefined }));
-
-      expect(mockSignalFetcher.fetchTelcoSignal).not.toHaveBeenCalled();
-      expect(result.riskScore).toBeGreaterThanOrEqual(0);
-    });
-
-    it('skips device signal when deviceId is absent', async () => {
-      setupAllSignals();
-
-      const result = await service.decide(makeRequest({ deviceId: undefined }));
-
-      expect(mockSignalFetcher.fetchDeviceSignal).not.toHaveBeenCalled();
-      expect(result.riskScore).toBeGreaterThanOrEqual(0);
+      const result = await service.decide(makeRequest());
+      // Should contain emulator_block and very_low_trust (trustScore=15 < 20)
+      expect(result.appliedRules).toContain('emulator_block');
+      expect(result.appliedRules).toContain('very_low_trust');
+      // Should NOT contain rules that didn't match
+      expect(result.appliedRules).not.toContain('tor_exit');
+      expect(result.appliedRules).not.toContain('bot_block');
     });
   });
 
   // -------------------------------------------------------------------------
-  // Per-signal span instrumentation
+  // composeSignalContext (unit)
   // -------------------------------------------------------------------------
 
-  describe('per-signal span instrumentation', () => {
-    beforeEach(() => {
-      jest.clearAllMocks();
-      // Re-configure mockStartSpan after clearAllMocks
-      mockStartSpan.mockReturnValue(mockSpan);
-      setupAllSignals();
+  describe('composeSignalContext', () => {
+    it('flattens velocity dimensions to top-level', () => {
+      const bundle: SignalBundle = {
+        device: null,
+        velocity: mockVelocitySignal,
+        behavioral: null,
+        network: null,
+        telco: null,
+        stateful: null,
+      };
+
+      const ctx = service.composeSignalContext(bundle);
+      // velocity.txCount1h should be at top level for DSL resolution
+      expect((ctx.velocity as any).txCount1h).toBe(2);
+      expect((ctx.velocity as any).burstDetected).toBe(false);
     });
 
-    it('creates a span for device signal fetch with correct attributes', async () => {
-      await service.decide(makeRequest());
+    it('passes stateful context through', () => {
+      const bundle: SignalBundle = {
+        device: null, velocity: null, behavioral: null,
+        network: null, telco: null,
+        stateful: {
+          customer: { previousBlockCount30d: 3, txCount1h: 10 },
+          graph: { fraudRingDetected: true, fraudRingScore: 90, sharedDeviceCount: 5, sharedIpCount: 3 },
+        },
+      };
 
-      const allCalls = mockStartSpan.mock.calls as unknown as Array<[string, Record<string, unknown>]>;
-      const deviceSpanCall = allCalls.find((call) => call[0] === 'fetch.device-signal');
-      expect(deviceSpanCall).toBeDefined();
-      expect(deviceSpanCall![1]).toMatchObject({
-        attributes: expect.objectContaining({
-          'signal.type': 'device',
-          'merchant.id': 'merchant-001',
-        }),
-      });
+      const ctx = service.composeSignalContext(bundle);
+      expect(ctx.stateful?.customer?.previousBlockCount30d).toBe(3);
+      expect(ctx.stateful?.graph?.fraudRingDetected).toBe(true);
     });
 
-    it('creates a span for velocity signal fetch with correct attributes', async () => {
-      await service.decide(makeRequest());
+    it('handles all-null bundle gracefully', () => {
+      const bundle: SignalBundle = {
+        device: null, velocity: null, behavioral: null,
+        network: null, telco: null, stateful: null,
+      };
 
-      const allCalls = mockStartSpan.mock.calls as unknown as Array<[string, Record<string, unknown>]>;
-      const velocitySpanCall = allCalls.find((call) => call[0] === 'fetch.velocity-signal');
-      expect(velocitySpanCall).toBeDefined();
-      expect(velocitySpanCall![1]).toMatchObject({
-        attributes: expect.objectContaining({
-          'signal.type': 'velocity',
-          'merchant.id': 'merchant-001',
-        }),
-      });
-    });
-
-    it('creates a span for behavioral signal fetch with correct attributes', async () => {
-      await service.decide(makeRequest());
-
-      const allCalls = mockStartSpan.mock.calls as unknown as Array<[string, Record<string, unknown>]>;
-      const behavioralSpanCall = allCalls.find((call) => call[0] === 'fetch.behavioral-signal');
-      expect(behavioralSpanCall).toBeDefined();
-      expect(behavioralSpanCall![1]).toMatchObject({
-        attributes: expect.objectContaining({
-          'signal.type': 'behavioral',
-          'merchant.id': 'merchant-001',
-        }),
-      });
-    });
-
-    it('creates a span for network signal fetch with correct attributes', async () => {
-      await service.decide(makeRequest());
-
-      const allCalls = mockStartSpan.mock.calls as unknown as Array<[string, Record<string, unknown>]>;
-      const networkSpanCall = allCalls.find((call) => call[0] === 'fetch.network-signal');
-      expect(networkSpanCall).toBeDefined();
-      expect(networkSpanCall![1]).toMatchObject({
-        attributes: expect.objectContaining({
-          'signal.type': 'network',
-          'merchant.id': 'merchant-001',
-        }),
-      });
-    });
-
-    it('creates a span for telco signal fetch with correct attributes', async () => {
-      await service.decide(makeRequest());
-
-      const allCalls = mockStartSpan.mock.calls as unknown as Array<[string, Record<string, unknown>]>;
-      const telcoSpanCall = allCalls.find((call) => call[0] === 'fetch.telco-signal');
-      expect(telcoSpanCall).toBeDefined();
-      expect(telcoSpanCall![1]).toMatchObject({
-        attributes: expect.objectContaining({
-          'signal.type': 'telco',
-          'merchant.id': 'merchant-001',
-        }),
-      });
-    });
-
-    it('calls span.end() for every signal fetch span (5 total)', async () => {
-      await service.decide(makeRequest());
-
-      // 5 spans = device, velocity, behavioral, network, telco
-      expect(mockSpanEnd).toHaveBeenCalledTimes(5);
-    });
-
-    it('calls span.end() even when a signal fetch throws an error', async () => {
-      mockSignalFetcher.fetchDeviceSignal.mockRejectedValue(new Error('fetch failed'));
-
-      await service.decide(makeRequest());
-
-      // span.end() must still be called for the device span that errored
-      expect(mockSpanEnd).toHaveBeenCalled();
-    });
-
-    it('sets signal.found=false attribute when signal returns null', async () => {
-      // device fetch returns null (no deviceId in request)
-      await service.decide(makeRequest({ deviceId: undefined }));
-
-      // The device span should set signal.found=false
-      const attrCalls = mockSpanSetAttribute.mock.calls as unknown as Array<[string, unknown]>;
-      const signalFoundCalls = attrCalls.filter((call) => call[0] === 'signal.found');
-      expect(signalFoundCalls.some((call) => call[1] === false)).toBe(true);
-    });
-
-    it('creates 5 spans for a full request with all optional fields populated', async () => {
-      await service.decide(makeRequest());
-
-      // Each of the 5 signal types gets one span
-      const allCalls = mockStartSpan.mock.calls as unknown as Array<[string, Record<string, unknown>]>;
-      const spanNames = allCalls.map((call) => call[0]);
-      expect(spanNames).toContain('fetch.device-signal');
-      expect(spanNames).toContain('fetch.velocity-signal');
-      expect(spanNames).toContain('fetch.behavioral-signal');
-      expect(spanNames).toContain('fetch.network-signal');
-      expect(spanNames).toContain('fetch.telco-signal');
-    });
-  });
-
-  // -------------------------------------------------------------------------
-  // Signal fetch timing instrumentation
-  // -------------------------------------------------------------------------
-
-  describe('signal fetch timing instrumentation', () => {
-    beforeEach(() => {
-      jest.clearAllMocks();
-      mockStartSpan.mockReturnValue(mockSpan);
-      mockDecisionCache.get.mockResolvedValue(null);
-      mockDecisionCache.set.mockResolvedValue(undefined);
-    });
-
-    it('records timing for each signal name after a decide call', async () => {
-      setupAllSignals();
-
-      await service.decide(makeRequest());
-
-      const timings = service.getFetchTimings();
-      expect(timings.length).toBeGreaterThan(0);
-      const signalNames = timings.map((t) => t.signalName);
-      expect(signalNames).toContain('device');
-      expect(signalNames).toContain('velocity');
-    });
-
-    it('warns when a fetcher takes more than 100ms', async () => {
-      // device signal artificially delayed 110ms
-      mockSignalFetcher.fetchDeviceSignal.mockImplementation(
-        () => new Promise((resolve) => setTimeout(() => resolve(mockDeviceSignal), 110)),
-      );
-      mockSignalFetcher.fetchVelocitySignal.mockResolvedValue(mockVelocitySignal);
-      mockSignalFetcher.fetchBehavioralSignal.mockResolvedValue(mockBehavioralSignal);
-      mockSignalFetcher.fetchNetworkSignal.mockResolvedValue(mockNetworkSignal);
-      mockSignalFetcher.fetchTelcoSignal.mockResolvedValue(mockTelcoSignal);
-
-      const warnSpy = jest.spyOn((service as any).logger, 'warn');
-
-      await service.decide(makeRequest());
-
-      const slowWarnCalls = warnSpy.mock.calls.filter(
-        (args) => typeof args[0] === 'string' && args[0].includes('Signal fetch slow'),
-      );
-      expect(slowWarnCalls.length).toBeGreaterThan(0);
-      expect(slowWarnCalls[0][0]).toContain('device');
-    }, 2000);
-
-    it('does not warn when all fetchers are fast (under 100ms)', async () => {
-      setupAllSignals();
-
-      const warnSpy = jest.spyOn((service as any).logger, 'warn');
-
-      await service.decide(makeRequest());
-
-      const slowWarnCalls = warnSpy.mock.calls.filter(
-        (args) => typeof args[0] === 'string' && args[0].includes('Signal fetch slow'),
-      );
-      expect(slowWarnCalls.length).toBe(0);
+      const ctx = service.composeSignalContext(bundle);
+      expect(ctx.device).toBeUndefined();
+      expect(ctx.velocity).toBeUndefined();
+      expect(ctx.stateful).toBeUndefined();
     });
   });
 
@@ -620,11 +598,6 @@ describe('DecisionOrchestratorService', () => {
   // -------------------------------------------------------------------------
 
   describe('decision cache integration', () => {
-    beforeEach(() => {
-      jest.clearAllMocks();
-      mockStartSpan.mockReturnValue(mockSpan);
-    });
-
     it('returns cached result when cache hits, with cached=true', async () => {
       const cachedResult = {
         requestId: 'req-001',
@@ -644,14 +617,11 @@ describe('DecisionOrchestratorService', () => {
       expect(result.cached).toBe(true);
       expect(result.action).toBe('ALLOW');
       expect(result.riskScore).toBe(10);
-      // Signal fetchers should NOT be called on cache hit
-      expect(mockSignalFetcher.fetchDeviceSignal).not.toHaveBeenCalled();
-      expect(mockSignalFetcher.fetchVelocitySignal).not.toHaveBeenCalled();
+      expect(mockSignalFetcher.fetchAllSignals).not.toHaveBeenCalled();
     });
 
     it('stores result in cache after a fresh decision', async () => {
       mockDecisionCache.get.mockResolvedValue(null);
-      setupAllSignals();
 
       await service.decide(makeRequest());
 
@@ -664,11 +634,29 @@ describe('DecisionOrchestratorService', () => {
 
     it('checks cache with correct merchantId and entityId', async () => {
       mockDecisionCache.get.mockResolvedValue(null);
-      setupAllSignals();
 
       await service.decide(makeRequest({ merchantId: 'merch-x', entityId: 'ent-y' }));
 
       expect(mockDecisionCache.get).toHaveBeenCalledWith('merch-x', 'ent-y');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Span instrumentation
+  // -------------------------------------------------------------------------
+
+  describe('span instrumentation', () => {
+    it('creates a span for fetchAllSignals', async () => {
+      await service.decide(makeRequest());
+
+      const allCalls = mockStartSpan.mock.calls as unknown as Array<[string, Record<string, unknown>]>;
+      const spanCall = allCalls.find((call) => call[0] === 'fetch.all-signals');
+      expect(spanCall).toBeDefined();
+    });
+
+    it('calls span.end() after fetch completes', async () => {
+      await service.decide(makeRequest());
+      expect(mockSpanEnd).toHaveBeenCalled();
     });
   });
 });

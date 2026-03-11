@@ -28,6 +28,14 @@ export const TOPICS = {
   WEBHOOKS: 'signalrisk.webhooks',
   /** Consent change events -- POPIA/GDPR consent grants & revocations. */
   CONSENT: 'signalrisk.consent',
+  /** DLQ exhausted -- events that failed all retry attempts. */
+  EVENTS_DLQ_EXHAUSTED: 'signalrisk.events.dlq.exhausted',
+  /** Merchant lifecycle events -- onboarding, updates, deactivation. */
+  MERCHANTS: 'signalrisk.merchants',
+  /** Unrouted events -- events that could not be mapped to a known topic. */
+  EVENTS_UNROUTED: 'signalrisk.events.unrouted',
+  /** Analyst labels -- entity-level fraud/legitimate labels from case resolutions. */
+  STATE_LABELS: 'signalrisk.state.labels',
 } as const;
 
 export type TopicName = (typeof TOPICS)[keyof typeof TOPICS];
@@ -58,6 +66,8 @@ export const CONSUMER_GROUPS = {
   CONSENT_ENFORCER: 'signalrisk.cg.consent-enforcer',
   /** Notification service consuming case events. */
   NOTIFICATIONS: 'signalrisk.cg.notifications',
+  /** State labels consumer -- processes analyst label events. */
+  STATE_LABELS: 'signalrisk.cg.state-labels',
 } as const;
 
 export type ConsumerGroupId = (typeof CONSUMER_GROUPS)[keyof typeof CONSUMER_GROUPS];

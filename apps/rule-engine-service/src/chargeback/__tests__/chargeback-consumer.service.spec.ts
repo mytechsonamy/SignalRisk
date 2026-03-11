@@ -72,6 +72,8 @@ describe('ChargebackConsumerService', () => {
   describe('onModuleInit', () => {
     it('should connect consumer, subscribe to chargebacks topic, and run', async () => {
       await service.onModuleInit();
+      // onModuleInit fires connectConsumer() without awaiting; flush the microtask queue
+      await new Promise(process.nextTick);
 
       expect(mockConnect).toHaveBeenCalledTimes(1);
       expect(mockSubscribe).toHaveBeenCalledWith({ topic: 'chargebacks', fromBeginning: false });

@@ -1,0 +1,59 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#1e3a5f', 'primaryTextColor': '#fff', 'primaryBorderColor': '#3b82f6', 'lineColor': '#475569', 'fontSize': '13px', 'sequenceNumberColor': '#fff'}}}%%
+
+sequenceDiagram
+    autonumber
+    participant C as 🌐 Client (SDK)
+    participant EC as 📥 Event Collector
+    participant K as 📨 Kafka
+    participant DS as ⚡ Decision Service
+    participant S as 🔍 Signals (6x)
+    participant RE as 📏 Rule Engine
+    participant CS as 📋 Case Service
+    participant WH as 🔔 Webhook
+
+    C->>+EC: POST /v1/events<br/>(API Key: sk_test_...)
+    EC->>EC: Validate schema<br/>(AJV per-type)
+
+    alt Invalid Event
+        EC-->>C: 400 Bad Request
+        EC->>K: DLQ (5s timeout)
+    end
+
+    EC->>K: Publish to<br/>signalrisk.events.raw
+    EC-->>-C: 202 Accepted
+
+    K->>+DS: Consumer poll
+
+    par Signal Aggregation (Promise.allSettled, 150ms timeout)
+        DS->>S: device-intel
+        DS->>S: velocity (Redis)
+        DS->>S: behavioral
+        DS->>S: network-intel
+        DS->>S: telco-intel
+        DS->>S: graph-intel (Neo4j)
+    end
+
+    S-->>DS: Signal responses<br/>(or timeout/circuit open)
+
+    DS->>DS: Renormalize weights<br/>for available signals
+
+    DS->>+RE: Evaluate DSL rules
+    RE-->>-DS: Rule outcomes<br/>+ weighted score
+
+    DS->>DS: Final score →<br/>ALLOW / REVIEW / BLOCK
+
+    DS->>K: Publish to<br/>signalrisk.decisions
+
+    DS->>DS: Cache in Redis<br/>(5s TTL)
+
+    DS-->>-C: Decision ready
+
+    par Downstream Processing
+        K->>CS: REVIEW/BLOCK →<br/>Create case
+        K->>WH: Sign & deliver<br/>webhook (HMAC-SHA256)
+    end
+
+    Note over CS: Analyst reviews<br/>in Dashboard
+
+    CS->>K: Feedback →<br/>signalrisk.feedback
+    K->>RE: Adjust rule weight<br/>(+0.05 fraud / −0.03 FP)

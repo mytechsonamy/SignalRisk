@@ -8,6 +8,8 @@ import { HealthModule } from './health/health.module';
 import { TenantModule } from './tenant/tenant.module';
 import { TenantMiddleware } from './tenant/tenant.middleware';
 import { RateLimitModule } from './rate-limit/rate-limit.module';
+import { UsersModule } from './users/users.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -28,6 +30,8 @@ import { RateLimitModule } from './rate-limit/rate-limit.module';
     HealthModule,
     TenantModule,
     RateLimitModule,
+    UsersModule,
+    AdminModule,
   ],
 })
 export class AppModule implements NestModule {

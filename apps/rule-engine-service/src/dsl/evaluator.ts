@@ -9,12 +9,44 @@ import {
   MissingPolicy,
 } from './ast';
 
+/** Stateful feature context per entity type (ADR-010). */
+export interface StatefulEntityFeatures {
+  txCount10m?: number;
+  txCount1h?: number;
+  txCount24h?: number;
+  amountSum1h?: number;
+  amountSum24h?: number;
+  uniqueDevices24h?: number;
+  uniqueIps24h?: number;
+  uniqueSessions1h?: number;
+  burstDetected?: boolean;
+  previousBlockCount30d?: number;
+  previousReviewCount7d?: number;
+  /** Sequence detection flags (Sprint 7) */
+  loginThenPayment15m?: boolean;
+  failedPaymentX3ThenSuccess10m?: boolean;
+  deviceChangeThenPayment30m?: boolean;
+}
+
 export interface SignalContext {
   device?: Partial<DeviceSignal>;
   velocity?: Partial<VelocitySignal>;
   behavioral?: Partial<BehavioralSignal>;
   network?: Partial<NetworkSignal>;
   telco?: Partial<TelcoSignal>;
+  /** Stateful context: stateful.{entityType}.{feature} — ADR-010 */
+  stateful?: {
+    customer?: Partial<StatefulEntityFeatures>;
+    device?: Partial<StatefulEntityFeatures>;
+    ip?: Partial<StatefulEntityFeatures>;
+    /** Graph intelligence features (Sprint 8) */
+    graph?: {
+      sharedDeviceCount?: number;
+      sharedIpCount?: number;
+      fraudRingDetected?: boolean;
+      fraudRingScore?: number;
+    };
+  };
 }
 
 export interface EvaluationResult {

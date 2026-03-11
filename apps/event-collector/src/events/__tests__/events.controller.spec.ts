@@ -79,19 +79,19 @@ describe('EventsController', () => {
 
   describe('POST /v1/events', () => {
     it('should return 202 Accepted for valid events', async () => {
-      const result = await controller.ingestEvents('Bearer test-api-key', {
+      const result = await controller.ingestEvents('Bearer test-api-key', undefined, {
         events: validEvents,
       });
 
       expect(result.status).toBe('accepted');
       expect(result.accepted).toBe(2);
       expect(result.rejected).toBe(0);
-      expect(eventsService.ingest).toHaveBeenCalledWith(validEvents);
+      expect(eventsService.ingest).toHaveBeenCalledWith(validEvents, false);
     });
 
     it('should throw 401 when Authorization header is missing', async () => {
       await expect(
-        controller.ingestEvents(undefined, { events: validEvents }),
+        controller.ingestEvents(undefined, undefined, { events: validEvents }),
       ).rejects.toThrow(
         expect.objectContaining({
           status: HttpStatus.UNAUTHORIZED,
@@ -101,18 +101,18 @@ describe('EventsController', () => {
 
     it('should throw 401 for invalid Authorization format', async () => {
       await expect(
-        controller.ingestEvents('invalid-header', { events: validEvents }),
+        controller.ingestEvents('invalid-header', undefined, { events: validEvents }),
       ).rejects.toThrow(HttpException);
     });
 
     it('should throw 401 for unsupported auth scheme', async () => {
       await expect(
-        controller.ingestEvents('Basic abc123', { events: validEvents }),
+        controller.ingestEvents('Basic abc123', undefined, { events: validEvents }),
       ).rejects.toThrow(HttpException);
     });
 
     it('should accept ApiKey scheme', async () => {
-      const result = await controller.ingestEvents('ApiKey my-api-key', {
+      const result = await controller.ingestEvents('ApiKey my-api-key', undefined, {
         events: validEvents,
       });
 
@@ -121,7 +121,7 @@ describe('EventsController', () => {
 
     it('should throw 400 when events array is empty', async () => {
       await expect(
-        controller.ingestEvents('Bearer test-key', { events: [] }),
+        controller.ingestEvents('Bearer test-key', undefined, { events: [] }),
       ).rejects.toThrow(
         expect.objectContaining({
           status: HttpStatus.BAD_REQUEST,
@@ -133,7 +133,7 @@ describe('EventsController', () => {
     // and tested in backpressure.guard.spec.ts. The controller delegates
     // all backpressure decisions to the guard via @UseGuards(BackpressureGuard).
     it('should accept request when BackpressureGuard allows', async () => {
-      const result = await controller.ingestEvents('Bearer test-key', {
+      const result = await controller.ingestEvents('Bearer test-key', undefined, {
         events: validEvents,
       });
 

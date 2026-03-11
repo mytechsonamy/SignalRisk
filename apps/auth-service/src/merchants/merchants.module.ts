@@ -15,7 +15,8 @@ import { ApiKeyAuditService } from './api-key-audit.service';
 import { DataExportService } from './data-export.service';
 import { DataExportController } from './data-export.controller';
 
-export const PG_POOL = 'PG_POOL';
+import { PG_POOL } from './constants';
+export { PG_POOL };
 
 @Module({
   imports: [ConfigModule],
@@ -54,6 +55,6 @@ export const PG_POOL = 'PG_POOL';
       inject: [PG_POOL],
     },
   ],
-  exports: [MerchantsService, MerchantService, ApiKeyAuditService, DataExportService],
+  exports: [PG_POOL, MerchantsService, MerchantService, ApiKeyAuditService, DataExportService],
 })
 export class MerchantsModule {}

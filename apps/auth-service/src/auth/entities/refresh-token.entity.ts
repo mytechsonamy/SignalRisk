@@ -1,3 +1,5 @@
+import { Pool } from 'pg';
+
 export interface RefreshTokenEntity {
   id: string;
   userId: string;
@@ -9,53 +11,74 @@ export interface RefreshTokenEntity {
 }
 
 /**
- * In-memory refresh token store.
- * Replace with database-backed repository in production
- * (uses the refresh_tokens table from migration 004).
+ * PostgreSQL-backed refresh token store.
+ * Uses the refresh_tokens table (migration 004).
  */
 export class RefreshTokenStore {
-  private tokens: Map<string, RefreshTokenEntity> = new Map();
+  constructor(private readonly pool: Pool) {}
 
-  save(entity: RefreshTokenEntity): void {
-    this.tokens.set(entity.id, entity);
+  async save(entity: RefreshTokenEntity): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO refresh_tokens (id, user_id, merchant_id, token_hash, expires_at, revoked_at, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (id) DO UPDATE SET
+         token_hash = EXCLUDED.token_hash,
+         expires_at = EXCLUDED.expires_at,
+         revoked_at = EXCLUDED.revoked_at`,
+      [
+        entity.id,
+        entity.userId,
+        entity.merchantId,
+        entity.tokenHash,
+        entity.expiresAt,
+        entity.revokedAt,
+        entity.createdAt,
+      ],
+    );
   }
 
-  findByTokenHash(tokenHash: string): RefreshTokenEntity | undefined {
-    for (const entity of this.tokens.values()) {
-      if (entity.tokenHash === tokenHash) {
-        return entity;
-      }
-    }
-    return undefined;
+  async findByTokenHash(tokenHash: string): Promise<RefreshTokenEntity | undefined> {
+    const result = await this.pool.query(
+      `SELECT id, user_id, merchant_id, token_hash, expires_at, revoked_at, created_at
+       FROM refresh_tokens WHERE token_hash = $1`,
+      [tokenHash],
+    );
+    if (result.rows.length === 0) return undefined;
+    return this.rowToEntity(result.rows[0]);
   }
 
-  findById(id: string): RefreshTokenEntity | undefined {
-    return this.tokens.get(id);
+  async findById(id: string): Promise<RefreshTokenEntity | undefined> {
+    const result = await this.pool.query(
+      `SELECT id, user_id, merchant_id, token_hash, expires_at, revoked_at, created_at
+       FROM refresh_tokens WHERE id = $1`,
+      [id],
+    );
+    if (result.rows.length === 0) return undefined;
+    return this.rowToEntity(result.rows[0]);
   }
 
-  revokeById(id: string): boolean {
-    const entity = this.tokens.get(id);
-    if (!entity) return false;
-    entity.revokedAt = new Date();
-    return true;
+  async revokeById(id: string): Promise<boolean> {
+    const result = await this.pool.query(
+      `UPDATE refresh_tokens SET revoked_at = NOW() WHERE id = $1 AND revoked_at IS NULL`,
+      [id],
+    );
+    return (result.rowCount ?? 0) > 0;
   }
 
-  revokeByTokenHash(tokenHash: string): boolean {
-    const entity = this.findByTokenHash(tokenHash);
-    if (!entity) return false;
-    entity.revokedAt = new Date();
-    return true;
+  async revokeByTokenHash(tokenHash: string): Promise<boolean> {
+    const result = await this.pool.query(
+      `UPDATE refresh_tokens SET revoked_at = NOW() WHERE token_hash = $1 AND revoked_at IS NULL`,
+      [tokenHash],
+    );
+    return (result.rowCount ?? 0) > 0;
   }
 
-  revokeAllForUser(userId: string): number {
-    let count = 0;
-    for (const entity of this.tokens.values()) {
-      if (entity.userId === userId && !entity.revokedAt) {
-        entity.revokedAt = new Date();
-        count++;
-      }
-    }
-    return count;
+  async revokeAllForUser(userId: string): Promise<number> {
+    const result = await this.pool.query(
+      `UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL`,
+      [userId],
+    );
+    return result.rowCount ?? 0;
   }
 
   isValid(entity: RefreshTokenEntity): boolean {
@@ -64,18 +87,22 @@ export class RefreshTokenStore {
     return true;
   }
 
-  /**
-   * Clean up expired tokens (call periodically).
-   */
-  purgeExpired(): number {
-    const now = new Date();
-    let count = 0;
-    for (const [id, entity] of this.tokens.entries()) {
-      if (entity.expiresAt < now) {
-        this.tokens.delete(id);
-        count++;
-      }
-    }
-    return count;
+  async purgeExpired(): Promise<number> {
+    const result = await this.pool.query(
+      `DELETE FROM refresh_tokens WHERE expires_at < NOW()`,
+    );
+    return result.rowCount ?? 0;
+  }
+
+  private rowToEntity(row: Record<string, any>): RefreshTokenEntity {
+    return {
+      id: row.id,
+      userId: row.user_id,
+      merchantId: row.merchant_id,
+      tokenHash: row.token_hash,
+      expiresAt: new Date(row.expires_at),
+      revokedAt: row.revoked_at ? new Date(row.revoked_at) : null,
+      createdAt: new Date(row.created_at),
+    };
   }
 }

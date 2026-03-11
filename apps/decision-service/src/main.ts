@@ -37,7 +37,7 @@ async function bootstrap() {
 
   app.enableShutdownHooks();
 
-  const port = process.env.PORT || 3007;
+  const port = process.env.PORT || 3009;
   await app.listen(port);
   console.log(`Decision service listening on port ${port}`);
 }

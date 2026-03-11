@@ -80,9 +80,11 @@ const velocityPayload = {
   entityId:   'user-001',
   merchantId: 'merchant-001',
   dimensions: {
+    txCount10m:       1,
     txCount1h:        3,
     txCount24h:       10,
     amountSum1h:      300,
+    amountSum24h:     1200,
     uniqueDevices24h: 1,
     uniqueIps24h:     1,
     uniqueSessions1h: 2,
@@ -229,15 +231,16 @@ describe('SignalFetcher', () => {
       expect(result).toEqual(velocityPayload);
     });
 
-    it('constructs correct URL with entityId path param and merchantId query param', async () => {
+    it('constructs correct URL with entityId path param and merchantId header', async () => {
       mockFetch.mockResolvedValue(okResponse(velocityPayload));
 
       await fetcher.fetchVelocitySignal('user-001', 'merchant-001');
 
-      const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
+      const [url, options] = mockFetch.mock.calls[0] as [string, RequestInit];
       expect(url).toBe(
-        'http://velocity:3004/v1/velocity/user-001?merchantId=merchant-001',
+        'http://velocity:3004/v1/velocity/user-001',
       );
+      expect((options.headers as Record<string, string>)['X-Merchant-ID']).toBe('merchant-001');
     });
 
     it('404 response → returns null', async () => {

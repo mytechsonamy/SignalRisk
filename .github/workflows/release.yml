@@ -23,7 +23,7 @@ jobs:
           - event-collector
           - decision-service
           - device-intel-service
-          - velocity-engine
+          - velocity-service
           - behavioral-service
           - network-intel-service
           - telco-intel-service
@@ -32,6 +32,7 @@ jobs:
           - graph-intel-service
           - rule-engine-service
           - feature-flag-service
+          - outbox-relay
     steps:
       - uses: actions/checkout@v4
 
@@ -49,7 +50,9 @@ jobs:
       - name: Build and push ${{ matrix.service }}
         uses: docker/build-push-action@v5
         with:
-          context: apps/${{ matrix.service }}
+          context: .
+          file: ./Dockerfile
+          build-args: SERVICE=${{ matrix.service }}
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.ORG }}/${{ matrix.service }}:${{ steps.tag.outputs.VERSION }}

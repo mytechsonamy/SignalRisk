@@ -5,6 +5,7 @@ import { CaseController } from './case.controller';
 import { CaseService } from './case.service';
 import { CaseRepository } from './case.repository';
 import { CaseExportService } from './case-export.service';
+import { LabelPublisherService } from '../kafka/label-publisher.service';
 
 const PG_POOL_TOKEN = 'PG_POOL';
 
@@ -36,12 +37,13 @@ const PG_POOL_TOKEN = 'PG_POOL';
       useFactory: (pool: Pool) => new CaseRepository(pool),
     },
     CaseService,
+    LabelPublisherService,
     {
       provide: CaseExportService,
       useFactory: (pool: Pool) => new CaseExportService(pool),
       inject: [PG_POOL_TOKEN],
     },
   ],
-  exports: [CaseService, CaseRepository, CaseExportService],
+  exports: [CaseService, CaseRepository, CaseExportService, LabelPublisherService],
 })
 export class CaseModule {}

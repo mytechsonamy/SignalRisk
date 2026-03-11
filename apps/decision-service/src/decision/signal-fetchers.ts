@@ -34,10 +34,13 @@ export interface DeviceSignal {
 export interface VelocitySignal {
   entityId: string;
   merchantId: string;
+  entityType?: 'customer' | 'device' | 'ip';
   dimensions: {
+    txCount10m: number;
     txCount1h: number;
     txCount24h: number;
     amountSum1h: number;
+    amountSum24h: number;
     uniqueDevices24h: number;
     uniqueIps24h: number;
     uniqueSessions1h: number;
@@ -93,6 +96,60 @@ export interface SignalBundle {
   network:    NetworkSignal | null;
   telco:      TelcoSignal | null;
   velocity:   VelocitySignal | null;
+  /** Stateful context composed from multi-entity velocity fetches (ADR-010). */
+  stateful:   StatefulContext | null;
+}
+
+// ---------------------------------------------------------------------------
+// Stateful context — multi-entity-type velocity signals (ADR-009, ADR-010)
+// ---------------------------------------------------------------------------
+
+/** Velocity dimensions available per entity type */
+interface StatefulVelocityDims {
+  txCount10m?: number;
+  txCount1h?: number;
+  txCount24h?: number;
+  amountSum1h?: number;
+  amountSum24h?: number;
+  uniqueDevices24h?: number;
+  uniqueIps24h?: number;
+  uniqueSessions1h?: number;
+  burstDetected?: boolean;
+}
+
+/** Sequence detection results (Sprint 7) */
+interface SequenceFlags {
+  loginThenPayment15m?: boolean;
+  failedPaymentX3ThenSuccess10m?: boolean;
+  deviceChangeThenPayment30m?: boolean;
+}
+
+/** Graph intelligence features (Sprint 8) */
+interface GraphFeatures {
+  sharedDeviceCount?: number;
+  sharedIpCount?: number;
+  fraudRingDetected?: boolean;
+  fraudRingScore?: number;
+}
+
+/** Stateful feature context for rule evaluation. Namespace: stateful.{entityType}.{feature} */
+export interface StatefulContext {
+  customer?: StatefulVelocityDims & SequenceFlags & {
+    /** BLOCK count in last 30 days (ADR-011) */
+    previousBlockCount30d?: number;
+    /** REVIEW count in last 7 days (ADR-011) */
+    previousReviewCount7d?: number;
+  };
+  device?: StatefulVelocityDims;
+  ip?: StatefulVelocityDims;
+  /** Graph intelligence features (Sprint 8) */
+  graph?: GraphFeatures;
+}
+
+/** Prior-decision memory result */
+export interface PriorDecisionMemory {
+  previousBlockCount30d: number;
+  previousReviewCount7d: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -273,10 +330,12 @@ export class SignalFetcher {
     ip?:            string;
     msisdn?:        string;
     billingCountry?: string;
+    customerId?:    string;
+    priorDecisionMemory?: PriorDecisionMemory | null;
   }): Promise<SignalBundle> {
-    const { deviceId, entityId, merchantId, sessionId, ip, msisdn, billingCountry } = params;
+    const { deviceId, entityId, merchantId, sessionId, ip, msisdn, billingCountry, customerId, priorDecisionMemory } = params;
 
-    const [deviceResult, behavioralResult, networkResult, telcoResult, velocityResult] =
+    const [deviceResult, behavioralResult, networkResult, telcoResult, velocityResult, statefulResult] =
       await Promise.allSettled([
         this.withCircuitBreaker('device', () =>
           deviceId
@@ -299,8 +358,16 @@ export class SignalFetcher {
             : Promise.resolve(null),
         ),
         this.withCircuitBreaker('velocity', () =>
-          this.fetchVelocitySignal(entityId, merchantId),
+          this.fetchVelocitySignal(customerId || entityId, merchantId),
         ),
+        // Fetch stateful context: multi-entity velocity (ADR-009) + prior-decision (ADR-011)
+        this.fetchStatefulContext({
+          customerId: customerId || entityId,
+          deviceId,
+          ip,
+          merchantId,
+          priorDecisionMemory: priorDecisionMemory ?? undefined,
+        }),
       ]);
 
     const extractOrNull = <T>(result: PromiseSettledResult<T | null>): T | null => {
@@ -315,6 +382,7 @@ export class SignalFetcher {
       network:    extractOrNull(networkResult),
       telco:      extractOrNull(telcoResult),
       velocity:   extractOrNull(velocityResult),
+      stateful:   statefulResult.status === 'fulfilled' ? statefulResult.value : null,
     };
   }
 
@@ -339,10 +407,12 @@ export class SignalFetcher {
   async fetchVelocitySignal(
     entityId: string,
     merchantId: string,
+    entityType?: 'customer' | 'device' | 'ip',
   ): Promise<VelocitySignal | null> {
     const baseUrl =
       this.config.get<string>('services.velocityUrl') ?? 'http://localhost:3004';
-    const url = `${baseUrl}/v1/velocity/${encodeURIComponent(entityId)}`;
+    const typeParam = entityType ? `?entityType=${entityType}` : '';
+    const url = `${baseUrl}/v1/velocity/${encodeURIComponent(entityId)}${typeParam}`;
     const raw = await fetchWithTimeout<Record<string, unknown>>(url, {
       headers: { 'X-Merchant-ID': merchantId },
     });
@@ -354,16 +424,132 @@ export class SignalFetcher {
     return {
       entityId: (raw as any).entityId ?? entityId,
       merchantId: (raw as any).merchantId ?? merchantId,
+      entityType: (raw as any).entityType ?? entityType,
       dimensions: {
+        txCount10m:       signals.txCount10m       ?? signals.tx_count_10m       ?? 0,
         txCount1h:        signals.txCount1h        ?? signals.tx_count_1h        ?? 0,
         txCount24h:       signals.txCount24h       ?? signals.tx_count_24h       ?? 0,
         amountSum1h:      signals.amountSum1h      ?? signals.amount_sum_1h      ?? 0,
+        amountSum24h:     signals.amountSum24h     ?? signals.amount_sum_24h     ?? 0,
         uniqueDevices24h: signals.uniqueDevices24h ?? signals.unique_devices_24h ?? 0,
         uniqueIps24h:     signals.uniqueIps24h     ?? signals.unique_ips_24h     ?? 0,
         uniqueSessions1h: signals.uniqueSessions1h ?? signals.unique_sessions_1h ?? 0,
       },
       burstDetected: (raw as any).burstDetected ?? (raw as any).burst_detected ?? false,
       burstRatio:    (raw as any).burstRatio    ?? (raw as any).burst_ratio,
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Stateful context — multi-entity velocity fetch (ADR-009, ADR-010)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Fetches velocity signals for all 3 entity types in parallel,
+   * plus prior-decision memory (ADR-011).
+   * Composes a StatefulContext for rule evaluation.
+   */
+  async fetchStatefulContext(params: {
+    customerId: string;
+    deviceId?: string;
+    ip?: string;
+    merchantId: string;
+    priorDecisionMemory?: PriorDecisionMemory | null;
+  }): Promise<StatefulContext> {
+    const { customerId, deviceId, ip, merchantId, priorDecisionMemory } = params;
+
+    const [customerResult, deviceResult, ipResult, graphResult] = await Promise.allSettled([
+      this.withCircuitBreaker('velocity', () =>
+        this.fetchVelocitySignal(customerId, merchantId, 'customer'),
+      ),
+      deviceId
+        ? this.withCircuitBreaker('velocity', () =>
+            this.fetchVelocitySignal(deviceId, merchantId, 'device'),
+          )
+        : Promise.resolve(null),
+      ip
+        ? this.withCircuitBreaker('velocity', () =>
+            this.fetchVelocitySignal(ip.toLowerCase().trim(), merchantId, 'ip'),
+          )
+        : Promise.resolve(null),
+      // Graph intelligence (Sprint 8) — fetch if deviceId is available
+      deviceId
+        ? this.fetchGraphContext(deviceId, merchantId)
+        : Promise.resolve(null),
+    ]);
+
+    const extractDims = (result: PromiseSettledResult<VelocitySignal | null>): StatefulVelocityDims | undefined => {
+      if (result.status !== 'fulfilled' || !result.value) return undefined;
+      const d = result.value.dimensions;
+      return {
+        txCount10m: d.txCount10m,
+        txCount1h: d.txCount1h,
+        txCount24h: d.txCount24h,
+        amountSum1h: d.amountSum1h,
+        amountSum24h: d.amountSum24h,
+        uniqueDevices24h: d.uniqueDevices24h,
+        uniqueIps24h: d.uniqueIps24h,
+        uniqueSessions1h: d.uniqueSessions1h,
+        burstDetected: result.value.burstDetected,
+      };
+    };
+
+    const customerDims = extractDims(customerResult);
+
+    // Merge prior-decision memory into customer context (ADR-011)
+    const customer = customerDims
+      ? {
+          ...customerDims,
+          ...(priorDecisionMemory
+            ? {
+                previousBlockCount30d: priorDecisionMemory.previousBlockCount30d,
+                previousReviewCount7d: priorDecisionMemory.previousReviewCount7d,
+              }
+            : {}),
+        }
+      : priorDecisionMemory
+        ? {
+            previousBlockCount30d: priorDecisionMemory.previousBlockCount30d,
+            previousReviewCount7d: priorDecisionMemory.previousReviewCount7d,
+          }
+        : undefined;
+
+    // Extract graph features (Sprint 8)
+    const graph = graphResult.status === 'fulfilled' && graphResult.value
+      ? graphResult.value
+      : undefined;
+
+    return {
+      customer,
+      device: extractDims(deviceResult),
+      ip: extractDims(ipResult),
+      graph,
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Graph intelligence — POST /graph-intel/analyze (Sprint 8)
+  // -------------------------------------------------------------------------
+
+  async fetchGraphContext(
+    deviceId: string,
+    merchantId: string,
+  ): Promise<GraphFeatures | null> {
+    const baseUrl =
+      this.config.get<string>('services.graphIntelUrl') ?? 'http://localhost:3009';
+    const url = `${baseUrl}/graph-intel/analyze`;
+    const raw = await fetchWithTimeout<Record<string, unknown>>(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deviceId, merchantId }),
+    });
+    if (!raw) return null;
+
+    return {
+      sharedDeviceCount: (raw.sharedDeviceCount as number) ?? 0,
+      sharedIpCount: (raw.sharedIpCount as number) ?? 0,
+      fraudRingDetected: (raw.fraudRingDetected as boolean) ?? false,
+      fraudRingScore: (raw.riskScore as number) ?? 0,
     };
   }
 

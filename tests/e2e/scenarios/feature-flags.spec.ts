@@ -65,7 +65,7 @@ test.describe('Feature Flags', () => {
     test.skip(SKIP, 'Requires Docker services');
 
     const resp = await request.get(
-      `${FLAGS_URL}/v1/flags/${flagName}/check?merchantId=merchant-001`,
+      `${FLAGS_URL}/v1/flags/${flagName}/check?merchantId=00000000-0000-0000-0000-000000000001`,
     );
     expect(resp.status()).toBe(200);
 
@@ -89,7 +89,7 @@ test.describe('Feature Flags', () => {
     test.skip(SKIP, 'Requires Docker services');
 
     const resp = await request.get(
-      `${FLAGS_URL}/v1/flags/${flagName}/check?merchantId=merchant-001`,
+      `${FLAGS_URL}/v1/flags/${flagName}/check?merchantId=00000000-0000-0000-0000-000000000001`,
     );
     expect(resp.status()).toBe(200);
 

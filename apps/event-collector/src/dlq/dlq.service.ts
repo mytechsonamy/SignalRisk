@@ -7,6 +7,7 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
+import { TOPICS } from '@signalrisk/kafka-config';
 import { KafkaService, KafkaMessagePayload } from '../kafka/kafka.service';
 
 // ---------------------------------------------------------------------------
@@ -65,8 +66,6 @@ export interface DlqMessage {
 export class DlqService {
   private readonly logger = new Logger(DlqService.name);
 
-  private static readonly TOPIC_DLQ = 'signalrisk.events.dlq';
-
   constructor(private readonly kafkaService: KafkaService) {}
 
   /**
@@ -101,7 +100,7 @@ export class DlqService {
     const merchantId = this.extractMerchantId(enrichment.originalEvent);
 
     const payload: KafkaMessagePayload = {
-      topic: DlqService.TOPIC_DLQ,
+      topic: TOPICS.EVENTS_DLQ,
       key: merchantId,
       value: JSON.stringify(dlqMessage),
       headers: {
@@ -164,7 +163,7 @@ export class DlqService {
       const merchantId = this.extractMerchantId(enrichment.originalEvent);
 
       payloads.push({
-        topic: DlqService.TOPIC_DLQ,
+        topic: TOPICS.EVENTS_DLQ,
         key: merchantId,
         value: JSON.stringify(dlqMessage),
         headers: {

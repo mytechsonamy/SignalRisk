@@ -6,12 +6,10 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Kafka, Consumer, EachMessagePayload, logLevel } from 'kafkajs';
+import { TOPICS, CONSUMER_GROUPS } from '@signalrisk/kafka-config';
 import { WebhookConfigService } from '../webhook/webhook-config.service';
 import { WebhookDeliveryService } from '../webhook/webhook-delivery.service';
 import { DecisionEvent, WebhookPayload } from '../webhook/webhook.types';
-
-const TOPIC = 'decisions';
-const CONSUMER_GROUP = 'webhook-service';
 
 @Injectable()
 export class DecisionConsumerService implements OnModuleInit, OnModuleDestroy {
@@ -56,7 +54,7 @@ export class DecisionConsumerService implements OnModuleInit, OnModuleDestroy {
 
     this.kafka = new Kafka(kafkaOptions);
     this.consumer = this.kafka.consumer({
-      groupId: kafkaConfig?.groupId || CONSUMER_GROUP,
+      groupId: kafkaConfig?.groupId || CONSUMER_GROUPS.WEBHOOK_DISPATCHER,
       sessionTimeout: 30_000,
       heartbeatInterval: 3_000,
     });
@@ -73,7 +71,7 @@ export class DecisionConsumerService implements OnModuleInit, OnModuleDestroy {
 
   private async connectConsumer(): Promise<void> {
     await this.consumer.connect();
-    await this.consumer.subscribe({ topic: TOPIC, fromBeginning: false });
+    await this.consumer.subscribe({ topic: TOPICS.DECISIONS, fromBeginning: false });
 
     await this.consumer.run({
       eachMessage: async (payload: EachMessagePayload) => {
@@ -82,7 +80,7 @@ export class DecisionConsumerService implements OnModuleInit, OnModuleDestroy {
     });
 
     this.connected = true;
-    this.logger.log(`Decision consumer connected, subscribed to ${TOPIC}`);
+    this.logger.log(`Decision consumer connected, subscribed to ${TOPICS.DECISIONS}`);
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -121,10 +119,10 @@ export class DecisionConsumerService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    // Only process BLOCK or REVIEW outcomes
-    if (decision.outcome !== 'BLOCK' && decision.outcome !== 'REVIEW') {
+    // Only process BLOCK or REVIEW actions
+    if (decision.action !== 'BLOCK' && decision.action !== 'REVIEW') {
       this.logger.debug(
-        `Ignoring decision with outcome=${decision.outcome} (requestId=${decision.requestId})`,
+        `Ignoring decision with action=${decision.action} (requestId=${decision.requestId})`,
       );
       return;
     }
@@ -146,10 +144,10 @@ export class DecisionConsumerService implements OnModuleInit, OnModuleDestroy {
     }
 
     const webhookPayload: WebhookPayload = {
-      event: decision.outcome === 'BLOCK' ? 'decision.block' : 'decision.review',
+      event: decision.action === 'BLOCK' ? 'decision.block' : 'decision.review',
       requestId: decision.requestId,
       merchantId: decision.merchantId,
-      outcome: decision.outcome,
+      outcome: decision.action,
       riskScore: decision.riskScore,
       timestamp: decision.timestamp || new Date().toISOString(),
     };

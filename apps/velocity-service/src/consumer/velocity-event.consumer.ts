@@ -4,6 +4,9 @@
  * Consumes raw events from signalrisk.events.raw and updates
  * velocity counters for each merchant+entity pair.
  *
+ * Sprint 1 (Stateful Fraud): Single event now produces 3 velocity updates
+ * for customer, device, and IP entity types (ADR-009).
+ *
  * Consumer group: velocity-engine
  * Idempotent via Redis SET (processed event IDs).
  */
@@ -19,9 +22,9 @@ import { Kafka, Consumer, EachMessagePayload, logLevel } from 'kafkajs';
 import { VelocityService } from '../velocity/velocity.service';
 import { VelocityEvent } from '../velocity/velocity.types';
 import Redis from 'ioredis';
+import { TOPICS } from '@signalrisk/kafka-config';
 
 const CONSUMER_GROUP = 'velocity-engine';
-const TOPIC = 'signalrisk.events.raw';
 const PROCESSED_KEY_PREFIX = 'vel:processed:';
 const PROCESSED_TTL_SECONDS = 86400; // 24h dedup window
 
@@ -72,13 +75,13 @@ export class VelocityEventConsumer implements OnModuleInit, OnModuleDestroy {
 
     try {
       await this.consumer.connect();
-      await this.consumer.subscribe({ topic: TOPIC, fromBeginning: false });
+      await this.consumer.subscribe({ topic: TOPICS.EVENTS_RAW, fromBeginning: false });
 
       await this.consumer.run({
         eachMessage: async (payload) => this.handleMessage(payload),
       });
 
-      this.logger.log(`Kafka consumer connected, subscribed to ${TOPIC} (group: ${CONSUMER_GROUP})`);
+      this.logger.log(`Kafka consumer connected, subscribed to ${TOPICS.EVENTS_RAW} (group: ${CONSUMER_GROUP})`);
     } catch (error) {
       this.logger.error(`Failed to start Kafka consumer: ${(error as Error).message}`);
       throw error;
@@ -118,10 +121,13 @@ export class VelocityEventConsumer implements OnModuleInit, OnModuleDestroy {
       deviceId?: string;
       sessionId?: string;
       type?: string;
-      payload?: { amount?: number; [key: string]: unknown };
+      payload?: { amount?: number; customerId?: string; [key: string]: unknown };
       ipAddress?: string;
       timestamp: string;
       metadata?: Record<string, unknown>;
+      // Typed entity fields (Sprint 1)
+      customerId?: string;
+      entityId?: string;
     };
 
     try {
@@ -152,27 +158,68 @@ export class VelocityEventConsumer implements OnModuleInit, OnModuleDestroy {
       ? `test:${rawEvent.merchantId}`
       : rawEvent.merchantId;
 
-    // Build VelocityEvent from the raw Kafka message.
-    // Support both velocity-native schema (transactionId, amountMinor, deviceFingerprint)
-    // and event-collector schema (deviceId, sessionId, payload.amount).
-    const entityId = rawEvent.transactionId || rawEvent.deviceId || rawEvent.eventId;
+    // Extract common fields
     const amountMinor = rawEvent.amountMinor ?? Math.round((rawEvent.payload?.amount ?? 0) * 100);
     const deviceFingerprint = rawEvent.deviceFingerprint || rawEvent.deviceId;
+    const ipAddress = rawEvent.ipAddress;
     const sessionId = rawEvent.sessionId || (rawEvent.metadata?.sessionId as string) || undefined;
+    const timestampSeconds = Math.floor(new Date(rawEvent.timestamp).getTime() / 1000);
 
-    const velocityEvent: VelocityEvent = {
+    // --- Entity ID resolution per ADR-009 ---
+    // customer: payload.customerId || entityId || transactionId || eventId
+    const customerId = rawEvent.customerId
+      || rawEvent.payload?.customerId as string
+      || rawEvent.entityId
+      || rawEvent.transactionId
+      || rawEvent.eventId;
+
+    // device: deviceId/deviceFingerprint (authoritative: device-intel-service)
+    const deviceId = rawEvent.deviceId || rawEvent.deviceFingerprint;
+
+    // ip: ipAddress (raw, lowercase normalized)
+    const normalizedIp = ipAddress?.toLowerCase().trim();
+
+    // --- Build velocity events for each entity type (ADR-009) ---
+    const baseEvent = {
       eventId: rawEvent.eventId,
       merchantId: effectiveMerchantId,
-      entityId,
       amountMinor,
       deviceFingerprint,
-      ipAddress: rawEvent.ipAddress,
+      ipAddress,
       sessionId,
-      timestampSeconds: Math.floor(new Date(rawEvent.timestamp).getTime() / 1000),
+      timestampSeconds,
     };
 
+    // Always update customer counters
+    const customerEvent: VelocityEvent = {
+      ...baseEvent,
+      entityId: customerId,
+      entityType: 'customer',
+    };
+
+    // Update device counters if deviceId is available
+    const deviceEvent: VelocityEvent | null = deviceId
+      ? { ...baseEvent, entityId: deviceId, entityType: 'device' }
+      : null;
+
+    // Update IP counters if ipAddress is available
+    const ipEvent: VelocityEvent | null = normalizedIp
+      ? { ...baseEvent, entityId: normalizedIp, entityType: 'ip' }
+      : null;
+
     try {
-      await this.velocityService.incrementVelocity(velocityEvent);
+      // Execute all entity type updates
+      const updates: Promise<void>[] = [
+        this.velocityService.incrementVelocity(customerEvent),
+      ];
+      if (deviceEvent) {
+        updates.push(this.velocityService.incrementVelocity(deviceEvent));
+      }
+      if (ipEvent) {
+        updates.push(this.velocityService.incrementVelocity(ipEvent));
+      }
+
+      await Promise.all(updates);
     } catch (error) {
       this.logger.error(
         `Failed to increment velocity for event ${rawEvent.eventId}: ${(error as Error).message}`,

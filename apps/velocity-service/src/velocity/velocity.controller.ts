@@ -2,12 +2,14 @@
  * SignalRisk Velocity Engine — REST API
  *
  * Provides HTTP endpoints for querying velocity signals.
+ * Sprint 1 (Stateful Fraud): Added entityType query parameter (ADR-009).
  */
 
-import { Controller, Get, Post, Param, Body, Headers, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Param, Query, Body, Headers, HttpCode, HttpStatus } from '@nestjs/common';
 import { VelocityService } from './velocity.service';
 import { BurstService } from '../burst/burst.service';
 import {
+  EntityType,
   VelocitySignals,
   VelocityQueryRequest,
   VelocityQueryResult,
@@ -21,7 +23,7 @@ export class VelocityController {
   ) {}
 
   /**
-   * GET /v1/velocity/:entityId
+   * GET /v1/velocity/:entityId?entityType=customer
    *
    * Get velocity signals for a single entity.
    * Requires X-Merchant-ID header for tenant isolation.
@@ -30,17 +32,20 @@ export class VelocityController {
   async getVelocity(
     @Param('entityId') entityId: string,
     @Headers('x-merchant-id') headerMerchantId?: string,
-  ): Promise<{ entityId: string; signals: VelocitySignals }> {
+    @Query('entityType') entityType?: string,
+  ): Promise<{ entityId: string; entityType: EntityType; signals: VelocitySignals }> {
     // Extract merchantId from X-Merchant-ID header (set by TenantMiddleware or caller).
     // Falls back to 'default' for backward compatibility in integration tests.
     const merchantId = headerMerchantId?.trim() || 'default';
-    const signals = await this.velocityService.getVelocitySignals(merchantId, entityId);
+    const resolvedEntityType = this.resolveEntityType(entityType);
+
+    const signals = await this.velocityService.getVelocitySignals(merchantId, entityId, resolvedEntityType);
 
     // Enrich with burst detection
-    const burst = await this.burstService.detectBurst(merchantId, entityId);
+    const burst = await this.burstService.detectBurst(merchantId, entityId, resolvedEntityType);
     signals.burst_detected = burst.detected;
 
-    return { entityId, signals };
+    return { entityId, entityType: resolvedEntityType, signals };
   }
 
   /**
@@ -53,17 +58,26 @@ export class VelocityController {
   async batchQuery(
     @Body() request: VelocityQueryRequest,
   ): Promise<{ results: VelocityQueryResult[] }> {
-    const { merchantId, entityIds } = request;
+    const { merchantId, entityIds, entityType } = request;
+    const resolvedEntityType = this.resolveEntityType(entityType);
 
     const results = await Promise.all(
       entityIds.map(async (entityId) => {
-        const signals = await this.velocityService.getVelocitySignals(merchantId, entityId);
-        const burst = await this.burstService.detectBurst(merchantId, entityId);
+        const signals = await this.velocityService.getVelocitySignals(merchantId, entityId, resolvedEntityType);
+        const burst = await this.burstService.detectBurst(merchantId, entityId, resolvedEntityType);
         signals.burst_detected = burst.detected;
-        return { entityId, signals };
+        return { entityId, entityType: resolvedEntityType, signals };
       }),
     );
 
     return { results };
+  }
+
+  /** Validate and default entityType. */
+  private resolveEntityType(entityType?: string): EntityType {
+    if (entityType === 'customer' || entityType === 'device' || entityType === 'ip') {
+      return entityType;
+    }
+    return 'customer';
   }
 }

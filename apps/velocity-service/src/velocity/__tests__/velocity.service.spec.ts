@@ -3,6 +3,8 @@
  *
  * Tests Redis sorted set operations, windowed queries, and pruning behavior
  * using a mock Redis client.
+ *
+ * Sprint 1 (Stateful Fraud): Updated for entityType support + new windows.
  */
 
 import { Test, TestingModule } from '@nestjs/testing';
@@ -48,6 +50,7 @@ describe('VelocityService', () => {
     'redis.connectTimeout': 5000,
     'redis.maxRetriesPerRequest': 3,
     'velocity.keyTtlSeconds': 90000,
+    'velocity.window10m': 600,
     'velocity.window1h': 3600,
     'velocity.window24h': 86400,
     'velocity.baselineWindowSeconds': 604800,
@@ -77,11 +80,12 @@ describe('VelocityService', () => {
   });
 
   describe('incrementVelocity', () => {
-    it('should add transaction to sorted set with timestamp as score', async () => {
+    it('should add transaction to sorted set with entityType in key', async () => {
       const event: VelocityEvent = {
         eventId: 'evt-001',
         merchantId: 'merchant-1',
         entityId: 'entity-1',
+        entityType: 'customer',
         amountMinor: 10000,
         timestampSeconds: 1700000000,
       };
@@ -91,23 +95,65 @@ describe('VelocityService', () => {
       await service.incrementVelocity(event);
 
       expect(mockRedis.pipeline).toHaveBeenCalled();
-      // Transaction sorted set
+      // Transaction sorted set — now includes entityType
       expect(mockPipeline.zadd).toHaveBeenCalledWith(
-        'merchant-1:vel:tx:entity-1',
+        'merchant-1:vel:tx:customer:entity-1',
         1700000000,
         'evt-001',
       );
       // Amount sorted set
       expect(mockPipeline.zadd).toHaveBeenCalledWith(
-        'merchant-1:vel:amt:entity-1',
+        'merchant-1:vel:amt:customer:entity-1',
         1700000000,
         '10000:evt-001',
       );
       // Baseline sorted set
       expect(mockPipeline.zadd).toHaveBeenCalledWith(
-        'merchant-1:vel:baseline:entity-1',
+        'merchant-1:vel:baseline:customer:entity-1',
         1700000000,
         'evt-001',
+      );
+    });
+
+    it('should use device entityType in Redis keys', async () => {
+      const event: VelocityEvent = {
+        eventId: 'evt-010',
+        merchantId: 'merchant-1',
+        entityId: 'device-fp-123',
+        entityType: 'device',
+        amountMinor: 5000,
+        timestampSeconds: 1700000000,
+      };
+
+      mockPipelineExec.mockResolvedValue([]);
+
+      await service.incrementVelocity(event);
+
+      expect(mockPipeline.zadd).toHaveBeenCalledWith(
+        'merchant-1:vel:tx:device:device-fp-123',
+        1700000000,
+        'evt-010',
+      );
+    });
+
+    it('should use ip entityType in Redis keys', async () => {
+      const event: VelocityEvent = {
+        eventId: 'evt-011',
+        merchantId: 'merchant-1',
+        entityId: '192.168.1.1',
+        entityType: 'ip',
+        amountMinor: 3000,
+        timestampSeconds: 1700000000,
+      };
+
+      mockPipelineExec.mockResolvedValue([]);
+
+      await service.incrementVelocity(event);
+
+      expect(mockPipeline.zadd).toHaveBeenCalledWith(
+        'merchant-1:vel:tx:ip:192.168.1.1',
+        1700000000,
+        'evt-011',
       );
     });
 
@@ -116,6 +162,7 @@ describe('VelocityService', () => {
         eventId: 'evt-002',
         merchantId: 'merchant-1',
         entityId: 'entity-1',
+        entityType: 'customer',
         amountMinor: 5000,
         timestampSeconds: 1700000000,
       };
@@ -126,11 +173,11 @@ describe('VelocityService', () => {
 
       // TTL set for tx and amt keys (90000s)
       expect(mockPipeline.expire).toHaveBeenCalledWith(
-        'merchant-1:vel:tx:entity-1',
+        'merchant-1:vel:tx:customer:entity-1',
         90000,
       );
       expect(mockPipeline.expire).toHaveBeenCalledWith(
-        'merchant-1:vel:amt:entity-1',
+        'merchant-1:vel:amt:customer:entity-1',
         90000,
       );
     });
@@ -140,6 +187,7 @@ describe('VelocityService', () => {
         eventId: 'evt-003',
         merchantId: 'merchant-1',
         entityId: 'entity-1',
+        entityType: 'customer',
         amountMinor: 1000,
         deviceFingerprint: 'fp-abc123',
         timestampSeconds: 1700000000,
@@ -150,7 +198,7 @@ describe('VelocityService', () => {
       await service.incrementVelocity(event);
 
       expect(mockPipeline.pfadd).toHaveBeenCalledWith(
-        'merchant-1:vel:udev:entity-1',
+        'merchant-1:vel:udev:customer:entity-1',
         'fp-abc123',
       );
     });
@@ -160,6 +208,7 @@ describe('VelocityService', () => {
         eventId: 'evt-004',
         merchantId: 'merchant-1',
         entityId: 'entity-1',
+        entityType: 'customer',
         amountMinor: 1000,
         ipAddress: '192.168.1.1',
         timestampSeconds: 1700000000,
@@ -170,7 +219,7 @@ describe('VelocityService', () => {
       await service.incrementVelocity(event);
 
       expect(mockPipeline.pfadd).toHaveBeenCalledWith(
-        'merchant-1:vel:uip:entity-1',
+        'merchant-1:vel:uip:customer:entity-1',
         '192.168.1.1',
       );
     });
@@ -180,6 +229,7 @@ describe('VelocityService', () => {
         eventId: 'evt-005',
         merchantId: 'merchant-1',
         entityId: 'entity-1',
+        entityType: 'customer',
         amountMinor: 1000,
         sessionId: 'sess-xyz',
         timestampSeconds: 1700000000,
@@ -190,7 +240,7 @@ describe('VelocityService', () => {
       await service.incrementVelocity(event);
 
       expect(mockPipeline.pfadd).toHaveBeenCalledWith(
-        'merchant-1:vel:usess:entity-1',
+        'merchant-1:vel:usess:customer:entity-1',
         'sess-xyz',
       );
     });
@@ -200,6 +250,7 @@ describe('VelocityService', () => {
         eventId: 'evt-006',
         merchantId: 'merchant-1',
         entityId: 'entity-1',
+        entityType: 'customer',
         amountMinor: 1000,
         timestampSeconds: 1700000000,
       };
@@ -217,6 +268,7 @@ describe('VelocityService', () => {
         eventId: 'evt-007',
         merchantId: 'tenant-42',
         entityId: 'card-hash-99',
+        entityType: 'customer',
         amountMinor: 5000,
         deviceFingerprint: 'fp-1',
         ipAddress: '10.0.0.1',
@@ -229,38 +281,42 @@ describe('VelocityService', () => {
       await service.incrementVelocity(event);
 
       expect(mockPipeline.zadd).toHaveBeenCalledWith(
-        'tenant-42:vel:tx:card-hash-99',
+        'tenant-42:vel:tx:customer:card-hash-99',
         expect.any(Number),
         expect.any(String),
       );
       expect(mockPipeline.pfadd).toHaveBeenCalledWith(
-        'tenant-42:vel:udev:card-hash-99',
+        'tenant-42:vel:udev:customer:card-hash-99',
         'fp-1',
       );
       expect(mockPipeline.pfadd).toHaveBeenCalledWith(
-        'tenant-42:vel:uip:card-hash-99',
+        'tenant-42:vel:uip:customer:card-hash-99',
         '10.0.0.1',
       );
     });
   });
 
   describe('getVelocitySignals', () => {
-    it('should return all 6 velocity dimensions', async () => {
+    it('should return all velocity dimensions including 10m and 24h amounts', async () => {
       // Mock pipeline results (indexed by command order):
       // 0: zremrangebyscore tx (prune)
       // 1: zremrangebyscore amt (prune)
-      // 2: zcount tx 1h
-      // 3: zcount tx 24h
-      // 4: zrangebyscore amt 1h
-      // 5: pfcount udev
-      // 6: pfcount uip
-      // 7: pfcount usess
+      // 2: zcount tx 10m
+      // 3: zcount tx 1h
+      // 4: zcount tx 24h
+      // 5: zrangebyscore amt 1h
+      // 6: zrangebyscore amt 24h
+      // 7: pfcount udev
+      // 8: pfcount uip
+      // 9: pfcount usess
       mockPipelineExec.mockResolvedValue([
         [null, 0],       // prune tx
         [null, 0],       // prune amt
+        [null, 2],       // tx_count_10m = 2
         [null, 5],       // tx_count_1h = 5
         [null, 20],      // tx_count_24h = 20
-        [null, ['1000:evt-1', '2500:evt-2', '500:evt-3']],  // amounts
+        [null, ['1000:evt-1', '2500:evt-2', '500:evt-3']],  // amounts 1h
+        [null, ['1000:evt-1', '2500:evt-2', '500:evt-3', '3000:evt-4', '1500:evt-5']],  // amounts 24h
         [null, 3],       // unique_devices_24h = 3
         [null, 7],       // unique_ips_24h = 7
         [null, 2],       // unique_sessions_1h = 2
@@ -268,25 +324,59 @@ describe('VelocityService', () => {
 
       const signals = await service.getVelocitySignals('merchant-1', 'entity-1');
 
+      expect(signals.tx_count_10m).toBe(2);
       expect(signals.tx_count_1h).toBe(5);
       expect(signals.tx_count_24h).toBe(20);
       expect(signals.amount_sum_1h).toBe(4000); // 1000 + 2500 + 500
+      expect(signals.amount_sum_24h).toBe(8500); // 1000 + 2500 + 500 + 3000 + 1500
       expect(signals.unique_devices_24h).toBe(3);
       expect(signals.unique_ips_24h).toBe(7);
       expect(signals.unique_sessions_1h).toBe(2);
       expect(signals.burst_detected).toBe(false);
     });
 
+    it('should use entityType in Redis key lookups', async () => {
+      mockPipelineExec.mockResolvedValue([
+        [null, 0], [null, 0],
+        [null, 0], [null, 0], [null, 0],
+        [null, []], [null, []],
+        [null, 0], [null, 0], [null, 0],
+      ]);
+
+      await service.getVelocitySignals('merchant-1', 'device-123', 'device');
+
+      // Verify prune call uses entityType in key
+      expect(mockPipeline.zremrangebyscore).toHaveBeenCalledWith(
+        'merchant-1:vel:tx:device:device-123',
+        '-inf',
+        expect.any(Number),
+      );
+    });
+
+    it('should default entityType to customer', async () => {
+      mockPipelineExec.mockResolvedValue([
+        [null, 0], [null, 0],
+        [null, 0], [null, 0], [null, 0],
+        [null, []], [null, []],
+        [null, 0], [null, 0], [null, 0],
+      ]);
+
+      await service.getVelocitySignals('merchant-1', 'entity-1');
+
+      expect(mockPipeline.zremrangebyscore).toHaveBeenCalledWith(
+        'merchant-1:vel:tx:customer:entity-1',
+        '-inf',
+        expect.any(Number),
+      );
+    });
+
     it('should prune entries older than 24h window on read', async () => {
       mockPipelineExec.mockResolvedValue([
         [null, 2],  // pruned 2 entries from tx
         [null, 1],  // pruned 1 entry from amt
-        [null, 0],
-        [null, 0],
-        [null, []],
-        [null, 0],
-        [null, 0],
-        [null, 0],
+        [null, 0], [null, 0], [null, 0],
+        [null, []], [null, []],
+        [null, 0], [null, 0], [null, 0],
       ]);
 
       await service.getVelocitySignals('merchant-1', 'entity-1');
@@ -294,12 +384,12 @@ describe('VelocityService', () => {
       // Should call zremrangebyscore for tx and amt keys
       expect(mockPipeline.zremrangebyscore).toHaveBeenCalledTimes(2);
       expect(mockPipeline.zremrangebyscore).toHaveBeenCalledWith(
-        'merchant-1:vel:tx:entity-1',
+        'merchant-1:vel:tx:customer:entity-1',
         '-inf',
         expect.any(Number),
       );
       expect(mockPipeline.zremrangebyscore).toHaveBeenCalledWith(
-        'merchant-1:vel:amt:entity-1',
+        'merchant-1:vel:amt:customer:entity-1',
         '-inf',
         expect.any(Number),
       );
@@ -307,21 +397,19 @@ describe('VelocityService', () => {
 
     it('should return zero signals when no data exists', async () => {
       mockPipelineExec.mockResolvedValue([
-        [null, 0],
-        [null, 0],
-        [null, 0],
-        [null, 0],
-        [null, []],
-        [null, 0],
-        [null, 0],
-        [null, 0],
+        [null, 0], [null, 0],
+        [null, 0], [null, 0], [null, 0],
+        [null, []], [null, []],
+        [null, 0], [null, 0], [null, 0],
       ]);
 
       const signals = await service.getVelocitySignals('merchant-1', 'unknown-entity');
 
+      expect(signals.tx_count_10m).toBe(0);
       expect(signals.tx_count_1h).toBe(0);
       expect(signals.tx_count_24h).toBe(0);
       expect(signals.amount_sum_1h).toBe(0);
+      expect(signals.amount_sum_24h).toBe(0);
       expect(signals.unique_devices_24h).toBe(0);
       expect(signals.unique_ips_24h).toBe(0);
       expect(signals.unique_sessions_1h).toBe(0);
@@ -332,26 +420,26 @@ describe('VelocityService', () => {
 
       const signals = await service.getVelocitySignals('merchant-1', 'entity-1');
 
+      expect(signals.tx_count_10m).toBe(0);
       expect(signals.tx_count_1h).toBe(0);
       expect(signals.tx_count_24h).toBe(0);
       expect(signals.amount_sum_1h).toBe(0);
+      expect(signals.amount_sum_24h).toBe(0);
     });
 
     it('should correctly sum amounts from encoded sorted set members', async () => {
       mockPipelineExec.mockResolvedValue([
-        [null, 0],
-        [null, 0],
-        [null, 3],
-        [null, 3],
+        [null, 0], [null, 0],
+        [null, 3], [null, 3], [null, 3],
         [null, ['15000:evt-a', '250:evt-b', '99999:evt-c']],
-        [null, 0],
-        [null, 0],
-        [null, 0],
+        [null, ['15000:evt-a', '250:evt-b', '99999:evt-c']],
+        [null, 0], [null, 0], [null, 0],
       ]);
 
       const signals = await service.getVelocitySignals('merchant-1', 'entity-1');
 
       expect(signals.amount_sum_1h).toBe(115249); // 15000 + 250 + 99999
+      expect(signals.amount_sum_24h).toBe(115249);
     });
   });
 
@@ -365,6 +453,19 @@ describe('VelocityService', () => {
 
       // 168 / 168 hours = 1.0
       expect(baseline).toBe(1);
+    });
+
+    it('should use entityType in baseline key', async () => {
+      mockRedis.zremrangebyscore.mockResolvedValue(0);
+      mockRedis.zcount.mockResolvedValue(0);
+
+      await service.getBaseline('merchant-1', 'device-123', 'device');
+
+      expect(mockRedis.zremrangebyscore).toHaveBeenCalledWith(
+        'merchant-1:vel:baseline:device:device-123',
+        '-inf',
+        expect.any(Number),
+      );
     });
 
     it('should return 0 when no baseline data exists', async () => {
@@ -383,7 +484,7 @@ describe('VelocityService', () => {
       await service.getBaseline('merchant-1', 'entity-1');
 
       expect(mockRedis.zremrangebyscore).toHaveBeenCalledWith(
-        'merchant-1:vel:baseline:entity-1',
+        'merchant-1:vel:baseline:customer:entity-1',
         '-inf',
         expect.any(Number),
       );

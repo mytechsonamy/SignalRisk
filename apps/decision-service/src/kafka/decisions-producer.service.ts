@@ -14,8 +14,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Kafka, Producer, logLevel } from 'kafkajs';
 import { DecisionResult } from '../decision/decision.types';
-
-const TOPIC = 'signalrisk.decisions';
+import { TOPICS } from '@signalrisk/kafka-config';
 
 @Injectable()
 export class DecisionsProducerService implements OnModuleInit, OnModuleDestroy {
@@ -56,7 +55,7 @@ export class DecisionsProducerService implements OnModuleInit, OnModuleDestroy {
     try {
       await this.producer.connect();
       this.connected = true;
-      this.logger.log(`Kafka producer connected, publishing to ${TOPIC}`);
+      this.logger.log(`Kafka producer connected, publishing to ${TOPICS.DECISIONS}`);
     } catch (error) {
       this.logger.error(`Failed to connect Kafka producer: ${(error as Error).message}`);
     }
@@ -95,7 +94,7 @@ export class DecisionsProducerService implements OnModuleInit, OnModuleDestroy {
       }
 
       await this.producer.send({
-        topic: TOPIC,
+        topic: TOPICS.DECISIONS,
         messages: [
           {
             key: result.merchantId,

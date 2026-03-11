@@ -7,17 +7,8 @@ on:
 
 jobs:
   audit:
-    name: npm audit ${{ matrix.service }}
+    name: npm audit (monorepo)
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        service:
-          - auth-service
-          - event-collector
-          - decision-service
-          - case-service
-          - webhook-service
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -25,8 +16,16 @@ jobs:
           node-version: '20'
       - name: Install dependencies
         run: npm ci
-        working-directory: apps/${{ matrix.service }}
       - name: Run security audit
         run: npm audit --audit-level=high
-        working-directory: apps/${{ matrix.service }}
         continue-on-error: true
+      - name: Audit individual services
+        run: |
+          for dir in apps/*/; do
+            service=$(basename "$dir")
+            echo "::group::$service"
+            cd "$dir"
+            npm audit --audit-level=high 2>&1 || true
+            cd ../..
+            echo "::endgroup::"
+          done

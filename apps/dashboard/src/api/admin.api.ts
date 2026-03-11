@@ -1,99 +1,44 @@
+import { api } from '../lib/api';
 import type { AdminUser, ServiceHealth, Rule } from '../types/admin.types';
 
-async function getJson<T>(url: string): Promise<T> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-  }
-  return response.json() as Promise<T>;
+export async function fetchUsers(): Promise<AdminUser[]> {
+  return api.get<AdminUser[]>('/api/v1/admin/users');
 }
 
-async function postJson<T>(url: string, body: unknown): Promise<T> {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-  }
-  return response.json() as Promise<T>;
+export async function inviteUser(email: string, role: string): Promise<AdminUser> {
+  return api.post<AdminUser>('/api/v1/admin/users/invite', { email, role });
 }
 
-async function patchJson<T>(url: string, body: unknown): Promise<T> {
-  const response = await fetch(url, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-  }
-  return response.json() as Promise<T>;
+export async function deactivateUser(userId: string): Promise<void> {
+  return api.delete<void>(`/api/v1/admin/users/${userId}`);
 }
 
-async function deleteRequest(url: string): Promise<void> {
-  const response = await fetch(url, { method: 'DELETE' });
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-  }
+export async function fetchServiceHealth(): Promise<ServiceHealth[]> {
+  return api.get<ServiceHealth[]>('/api/v1/admin/health');
 }
 
-export async function fetchUsers(baseUrl = '/api'): Promise<AdminUser[]> {
-  return getJson<AdminUser[]>(`${baseUrl}/v1/admin/users`);
+export async function fetchRules(): Promise<Rule[]> {
+  return api.get<Rule[]>('/api/v1/admin/rules');
 }
 
-export async function inviteUser(
-  email: string,
-  role: string,
-  baseUrl = '/api',
-): Promise<AdminUser> {
-  return postJson<AdminUser>(`${baseUrl}/v1/admin/users/invite`, { email, role });
+export async function updateRuleWeight(ruleId: string, weight: number): Promise<Rule> {
+  return api.patch<Rule>(`/api/v1/admin/rules/${ruleId}`, { weight });
 }
 
-export async function deactivateUser(userId: string, baseUrl = '/api'): Promise<void> {
-  return deleteRequest(`${baseUrl}/v1/admin/users/${userId}`);
-}
-
-export async function fetchServiceHealth(baseUrl = '/api'): Promise<ServiceHealth[]> {
-  return getJson<ServiceHealth[]>(`${baseUrl}/v1/admin/health`);
-}
-
-export async function fetchRules(baseUrl = '/api'): Promise<Rule[]> {
-  return getJson<Rule[]>(`${baseUrl}/v1/admin/rules`);
-}
-
-export async function updateRuleWeight(
-  ruleId: string,
-  weight: number,
-  baseUrl = '/api',
-): Promise<Rule> {
-  return patchJson<Rule>(`${baseUrl}/v1/admin/rules/${ruleId}`, { weight });
-}
-
-export async function updateRuleExpression(
-  ruleId: string,
-  expression: string,
-  baseUrl = '/api',
-): Promise<Rule> {
-  return patchJson<Rule>(`${baseUrl}/v1/admin/rules/${ruleId}`, { expression });
+export async function updateRuleExpression(ruleId: string, expression: string): Promise<Rule> {
+  return api.patch<Rule>(`/api/v1/admin/rules/${ruleId}`, { expression });
 }
 
 export async function createRule(
   data: { name: string; expression: string; outcome: Rule['outcome']; weight: number; isActive: boolean },
-  baseUrl = '/api',
 ): Promise<Rule> {
-  return postJson<Rule>(`${baseUrl}/v1/admin/rules`, data);
+  return api.post<Rule>('/api/v1/admin/rules', data);
 }
 
-export async function deleteRule(ruleId: string, baseUrl = '/api'): Promise<void> {
-  return deleteRequest(`${baseUrl}/v1/admin/rules/${ruleId}`);
+export async function deleteRule(ruleId: string): Promise<void> {
+  return api.delete<void>(`/api/v1/admin/rules/${ruleId}`);
 }
 
-export async function toggleRuleActive(
-  ruleId: string,
-  isActive: boolean,
-  baseUrl = '/api',
-): Promise<Rule> {
-  return patchJson<Rule>(`${baseUrl}/v1/admin/rules/${ruleId}`, { isActive });
+export async function toggleRuleActive(ruleId: string, isActive: boolean): Promise<Rule> {
+  return api.patch<Rule>(`/api/v1/admin/rules/${ruleId}`, { isActive });
 }

@@ -35,6 +35,16 @@ export async function createIsolatedSchema(suiteName?: string): Promise<string> 
 
   await db.query(`CREATE SCHEMA "${schemaName}"`);
 
+  // Create non-superuser role for RLS testing (superusers bypass ALL RLS)
+  await db.query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'signalrisk_app') THEN
+        CREATE ROLE signalrisk_app LOGIN PASSWORD 'signalrisk_app';
+      END IF;
+    END $$;
+  `);
+  await db.query(`GRANT USAGE ON SCHEMA "${schemaName}" TO signalrisk_app`);
+
   // Register for global teardown cleanup
   await db.query(
     'INSERT INTO _test_schema_registry (schema_name) VALUES ($1) ON CONFLICT DO NOTHING',
@@ -47,7 +57,7 @@ export async function createIsolatedSchema(suiteName?: string): Promise<string> 
 
     -- Merchants (tenants)
     CREATE TABLE merchants (
-      id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       name        TEXT NOT NULL,
       api_key     TEXT UNIQUE,
       status      TEXT NOT NULL DEFAULT 'active',
@@ -57,7 +67,7 @@ export async function createIsolatedSchema(suiteName?: string): Promise<string> 
 
     -- Users
     CREATE TABLE users (
-      id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       merchant_id UUID NOT NULL REFERENCES merchants(id),
       email       TEXT NOT NULL,
       role        TEXT NOT NULL DEFAULT 'analyst',
@@ -66,7 +76,7 @@ export async function createIsolatedSchema(suiteName?: string): Promise<string> 
 
     -- Devices (fingerprints)
     CREATE TABLE devices (
-      id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       merchant_id     UUID NOT NULL REFERENCES merchants(id),
       fingerprint     TEXT NOT NULL,
       device_type     TEXT,
@@ -76,7 +86,7 @@ export async function createIsolatedSchema(suiteName?: string): Promise<string> 
 
     -- Fraud events
     CREATE TABLE events (
-      id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       merchant_id     UUID NOT NULL REFERENCES merchants(id),
       device_id       UUID REFERENCES devices(id),
       event_type      TEXT NOT NULL,
@@ -88,7 +98,7 @@ export async function createIsolatedSchema(suiteName?: string): Promise<string> 
 
     -- Decisions (fraud verdicts)
     CREATE TABLE decisions (
-      id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       merchant_id     UUID NOT NULL REFERENCES merchants(id),
       event_id        UUID NOT NULL REFERENCES events(id),
       verdict         TEXT NOT NULL,
@@ -97,32 +107,39 @@ export async function createIsolatedSchema(suiteName?: string): Promise<string> 
       created_at      TIMESTAMPTZ DEFAULT NOW()
     );
 
-    -- Enable RLS on all tenant tables
+    -- Enable RLS on all tenant tables (FORCE = applies to table owner too)
     ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE users FORCE ROW LEVEL SECURITY;
     ALTER TABLE devices ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE devices FORCE ROW LEVEL SECURITY;
     ALTER TABLE events ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE events FORCE ROW LEVEL SECURITY;
     ALTER TABLE decisions ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE decisions FORCE ROW LEVEL SECURITY;
 
     -- RESTRICTIVE RLS policies: only rows matching current merchant_id
     CREATE POLICY users_tenant_isolation ON users
-      AS RESTRICTIVE FOR ALL
+      FOR ALL
       USING (merchant_id = current_setting('app.current_merchant_id')::UUID);
 
     CREATE POLICY devices_tenant_isolation ON devices
-      AS RESTRICTIVE FOR ALL
+      FOR ALL
       USING (merchant_id = current_setting('app.current_merchant_id')::UUID);
 
     CREATE POLICY events_tenant_isolation ON events
-      AS RESTRICTIVE FOR ALL
+      FOR ALL
       USING (merchant_id = current_setting('app.current_merchant_id')::UUID);
 
     CREATE POLICY decisions_tenant_isolation ON decisions
-      AS RESTRICTIVE FOR ALL
+      FOR ALL
       USING (merchant_id = current_setting('app.current_merchant_id')::UUID);
 
     -- Reset search path
     SET search_path TO public;
   `);
+
+  // Grant table access to the non-superuser role (for RLS testing)
+  await db.query(`GRANT ALL ON ALL TABLES IN SCHEMA "${schemaName}" TO signalrisk_app`);
 
   return schemaName;
 }
@@ -141,19 +158,23 @@ export async function queryAsTenant(
   const client: PoolClient = await db.connect();
 
   try {
+    // Switch to non-superuser role so RLS policies are enforced
+    await client.query('SET ROLE signalrisk_app');
     await client.query(`SET search_path TO "${schemaName}"`);
     await client.query(`SET app.current_merchant_id TO '${merchantId}'`);
     const result = await client.query(query, params);
     return { rows: result.rows, rowCount: result.rowCount };
   } finally {
-    await client.query('RESET search_path');
     await client.query('RESET app.current_merchant_id');
+    await client.query('RESET search_path');
+    await client.query('RESET ROLE');
     client.release();
   }
 }
 
 /**
  * Execute a query as a superuser (bypasses RLS). Use for seeding data.
+ * Disables row_security temporarily so FORCE ROW LEVEL SECURITY is bypassed.
  */
 export async function queryAsSuper(
   schemaName: string,
@@ -165,10 +186,11 @@ export async function queryAsSuper(
 
   try {
     await client.query(`SET search_path TO "${schemaName}"`);
-    // Superuser bypasses RLS by default
+    await client.query('SET LOCAL row_security TO off');
     const result = await client.query(query, params);
     return { rows: result.rows, rowCount: result.rowCount };
   } finally {
+    await client.query('RESET row_security');
     await client.query('RESET search_path');
     client.release();
   }

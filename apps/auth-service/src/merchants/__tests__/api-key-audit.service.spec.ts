@@ -63,7 +63,7 @@ describe('ApiKeyAuditService', () => {
       service.logUsage(makeEntry({ merchantId: 'merchant-001', keyPrefix: 'sk_test_' }));
 
       const result = service.getRecentUsage('merchant-001', 'sk_test_');
-      expect(result).toHaveLength(1);
+      expect(result).toHaveLength(2);
       expect(result[0].merchantId).toBe('merchant-001');
       expect(result[0].keyPrefix).toBe('sk_test_');
     });

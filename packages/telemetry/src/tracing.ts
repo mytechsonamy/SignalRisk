@@ -53,7 +53,7 @@ export function initTracing(config: TracingConfig): NodeSDK {
   sdk = new NodeSDK({
     resource,
     traceExporter,
-    metricReader,
+    metricReader: metricReader as any,
     textMapPropagator: propagator,
     instrumentations: [
       new HttpInstrumentation({

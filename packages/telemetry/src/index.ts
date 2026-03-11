@@ -15,7 +15,7 @@ import { initMetrics } from './metrics';
 import { createLogger, LoggingConfig } from './logging';
 import { Logger } from 'pino';
 
-export interface TelemetryConfig extends TracingConfig, Partial<LoggingConfig> {}
+export type TelemetryConfig = TracingConfig & Partial<Omit<LoggingConfig, 'serviceName'>>;
 
 export interface TelemetryInstance {
   logger: Logger;

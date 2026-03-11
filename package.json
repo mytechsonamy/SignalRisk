@@ -12,15 +12,18 @@
     "tests/docs"
   ],
   "scripts": {
-    "test:all": "npm run test --workspaces --if-present 2>&1 || true",
-    "build:all": "npm run build --workspaces --if-present 2>&1 || true",
-    "lint:all": "npm run lint --workspaces --if-present 2>&1 || true"
+    "test:all": "npm run test --workspaces --if-present",
+    "build:all": "npm run build --workspaces --if-present",
+    "lint:all": "npm run lint --workspaces --if-present"
   },
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=9.0.0"
   },
   "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.57.0",
+    "@typescript-eslint/parser": "^8.57.0",
+    "eslint": "^10.0.3",
     "tsc-alias": "^1.8.10"
   },
   "dependencies": {

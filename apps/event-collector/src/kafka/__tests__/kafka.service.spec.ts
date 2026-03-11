@@ -108,11 +108,15 @@ describe('KafkaService', () => {
       expect(service.isConnected()).toBe(true);
     });
 
-    it('should throw if producer connection fails', async () => {
-      mockProducerConnect.mockRejectedValueOnce(new Error('Connection refused'));
+    it('should enter degraded mode if all connection retries fail', async () => {
+      mockProducerConnect.mockRejectedValue(new Error('Connection refused'));
 
-      await expect(service.connect()).rejects.toThrow('Connection refused');
+      // connect() retries internally and enters degraded mode instead of throwing
+      await service.connect(1, 0);
       expect(service.isConnected()).toBe(false);
+
+      // Reset mock for other tests
+      mockProducerConnect.mockResolvedValue(undefined);
     });
   });
 

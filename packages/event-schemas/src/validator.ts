@@ -86,7 +86,7 @@ export class EventSchemaValidator {
       removeAdditional: false,
       strict: false,
     });
-    addFormats(this.ajv);
+    addFormats(this.ajv as any);
 
     // Pre-compile envelope schema
     this.envelopeValidator = this.ajv.compile(baseEventSchema);

@@ -165,6 +165,7 @@ test.describe('Chaos — Kafka Down', () => {
   });
 
   test('system recovers after Kafka restart', async ({ request }) => {
+    test.setTimeout(120_000);
     test.skip(SKIP, 'Requires Docker services');
 
     stopKafka();

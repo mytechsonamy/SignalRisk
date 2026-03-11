@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build-and-push:
     name: Build & Push ${{ matrix.service }}
@@ -27,6 +31,8 @@ jobs:
           - case-service
           - webhook-service
           - graph-intel-service
+          - feature-flag-service
+          - outbox-relay
     steps:
       - uses: actions/checkout@v4
       - name: Log in to GitHub Container Registry
@@ -38,8 +44,9 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: ./apps/${{ matrix.service }}
-          file: ./apps/${{ matrix.service }}/Dockerfile.prod
+          context: .
+          file: ./Dockerfile
+          build-args: SERVICE=${{ matrix.service }}
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/signalrisk-${{ matrix.service }}:latest
@@ -72,6 +79,6 @@ jobs:
           kubectl apply -f infrastructure/k8s/ingress.yaml
       - name: Wait for rollout
         run: |
-          for service in auth-service event-collector decision-service; do
+          for service in auth-service event-collector decision-service case-service; do
             kubectl rollout status deployment/$service -n signalrisk --timeout=300s
           done

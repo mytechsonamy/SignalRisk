@@ -7,7 +7,7 @@ export interface WebhookConfig {
 export interface DecisionEvent {
   requestId: string;
   merchantId: string;
-  outcome: 'ALLOW' | 'REVIEW' | 'BLOCK';
+  action: 'ALLOW' | 'REVIEW' | 'BLOCK';
   riskScore: number;
   timestamp: string;
   signals: Record<string, unknown>;

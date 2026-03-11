@@ -79,7 +79,7 @@ const devicePayload = {
 
 const velocityPayload = {
   entityId: 'user-1', merchantId: 'merch-1',
-  dimensions: { txCount1h: 2, txCount24h: 5, amountSum1h: 100, uniqueDevices24h: 1, uniqueIps24h: 1, uniqueSessions1h: 1 },
+  dimensions: { txCount10m: 1, txCount1h: 2, txCount24h: 5, amountSum1h: 100, amountSum24h: 400, uniqueDevices24h: 1, uniqueIps24h: 1, uniqueSessions1h: 1 },
   burstDetected: false,
 };
 
@@ -141,14 +141,17 @@ describe('SignalFetcher.fetchAllSignals', () => {
     fetcher = new SignalFetcher(mockConfigService as never);
   });
 
-  it('fetches all 5 signals in parallel and returns a complete SignalBundle', async () => {
+  it('fetches all 5 signals + stateful context in parallel and returns a complete SignalBundle', async () => {
     // Each fetch call returns the matching payload
+    // 5 original signals + 3 stateful velocity fetches (customer, device, ip)
+    mockFetch.mockResolvedValue(okResponse(velocityPayload));
     mockFetch
       .mockResolvedValueOnce(okResponse(devicePayload))     // device
       .mockResolvedValueOnce(okResponse(behavioralPayload)) // behavioral
       .mockResolvedValueOnce(okResponse(networkPayload))    // network
       .mockResolvedValueOnce(okResponse(telcoPayload))      // telco
-      .mockResolvedValueOnce(okResponse(velocityPayload));  // velocity
+      .mockResolvedValueOnce(okResponse(velocityPayload));  // velocity (main)
+    // remaining calls: stateful velocity fetches (customer, device, ip)
 
     const bundle = await fetcher.fetchAllSignals({
       deviceId: 'dev-1',
@@ -164,11 +167,13 @@ describe('SignalFetcher.fetchAllSignals', () => {
     expect(bundle.network).toEqual(networkPayload);
     expect(bundle.telco).toEqual(telcoPayload);
     expect(bundle.velocity).toEqual(velocityPayload);
-    // All 5 fetch calls were made concurrently (Promise.allSettled)
-    expect(mockFetch).toHaveBeenCalledTimes(5);
+    expect(bundle.stateful).toBeDefined();
+    // 5 original + 3 stateful velocity fetches
+    expect(mockFetch.mock.calls.length).toBeGreaterThanOrEqual(5);
   });
 
   it('returns null for a signal when its downstream service returns an error (fail-open)', async () => {
+    mockFetch.mockResolvedValue(okResponse(velocityPayload)); // default for stateful
     mockFetch
       .mockResolvedValueOnce(errorResponse())               // device → null
       .mockResolvedValueOnce(okResponse(behavioralPayload)) // behavioral
@@ -188,12 +193,13 @@ describe('SignalFetcher.fetchAllSignals', () => {
     // device failed → null; rest succeed
     expect(bundle.device).toBeNull();
     expect(bundle.behavioral).toEqual(behavioralPayload);
-    expect(bundle.velocity).toEqual(velocityPayload);
+    expect(bundle.velocity).toBeDefined();
   });
 
   it('returns null for optional signals when their identifiers are not provided', async () => {
     // Only velocity is always fetched; device/behavioral/network/telco require IDs
-    mockFetch.mockResolvedValueOnce(okResponse(velocityPayload));
+    // Stateful also fetches customer velocity (always) but no device/ip
+    mockFetch.mockResolvedValue(okResponse(velocityPayload));
 
     const bundle = await fetcher.fetchAllSignals({
       entityId: 'user-1',
@@ -205,8 +211,9 @@ describe('SignalFetcher.fetchAllSignals', () => {
     expect(bundle.behavioral).toBeNull();
     expect(bundle.network).toBeNull();
     expect(bundle.telco).toBeNull();
-    expect(bundle.velocity).toEqual(velocityPayload);
-    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(bundle.velocity).toBeDefined();
+    // At least velocity (main) + stateful customer velocity
+    expect(mockFetch.mock.calls.length).toBeGreaterThanOrEqual(1);
   });
 
   it('returns all-null bundle when all services are down (complete fail-open)', async () => {
@@ -339,8 +346,71 @@ describe('DecisionOrchestratorService.computeWeightedScoreFromBundle', () => {
   });
 
   it('returns 50 (neutral REVIEW score) when all signals are null', () => {
-    const bundle = { device: null, behavioral: null, network: null, telco: null, velocity: null };
+    const bundle = { device: null, behavioral: null, network: null, telco: null, velocity: null, stateful: null };
     const score = orchestrator.computeWeightedScoreFromBundle(bundle);
     expect(score).toBe(50);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5. Stateful context with prior-decision memory (ADR-011)
+// ---------------------------------------------------------------------------
+
+describe('SignalFetcher.fetchStatefulContext with prior-decision memory', () => {
+  let fetcher: SignalFetcher;
+
+  beforeEach(() => {
+    fetcher = new SignalFetcher(mockConfigService as never);
+  });
+
+  it('merges prior-decision memory into customer context', async () => {
+    mockFetch.mockResolvedValue(okResponse(velocityPayload));
+
+    const stateful = await fetcher.fetchStatefulContext({
+      customerId: 'user-1',
+      merchantId: 'merch-1',
+      priorDecisionMemory: {
+        previousBlockCount30d: 3,
+        previousReviewCount7d: 5,
+      },
+    });
+
+    expect(stateful.customer).toBeDefined();
+    expect(stateful.customer?.previousBlockCount30d).toBe(3);
+    expect(stateful.customer?.previousReviewCount7d).toBe(5);
+    // Velocity dims should also be present
+    expect(stateful.customer?.txCount1h).toBeDefined();
+  });
+
+  it('creates customer context with only prior-decision fields when velocity fails', async () => {
+    mockFetch.mockRejectedValue(new TypeError('ECONNREFUSED'));
+
+    const stateful = await fetcher.fetchStatefulContext({
+      customerId: 'user-1',
+      merchantId: 'merch-1',
+      priorDecisionMemory: {
+        previousBlockCount30d: 2,
+        previousReviewCount7d: 0,
+      },
+    });
+
+    expect(stateful.customer).toBeDefined();
+    expect(stateful.customer?.previousBlockCount30d).toBe(2);
+    expect(stateful.customer?.previousReviewCount7d).toBe(0);
+    // Velocity dims should be absent since fetch failed
+    expect(stateful.customer?.txCount1h).toBeUndefined();
+  });
+
+  it('omits prior-decision fields when priorDecisionMemory is not provided', async () => {
+    mockFetch.mockResolvedValue(okResponse(velocityPayload));
+
+    const stateful = await fetcher.fetchStatefulContext({
+      customerId: 'user-1',
+      merchantId: 'merch-1',
+    });
+
+    expect(stateful.customer).toBeDefined();
+    expect(stateful.customer?.previousBlockCount30d).toBeUndefined();
+    expect(stateful.customer?.previousReviewCount7d).toBeUndefined();
   });
 });

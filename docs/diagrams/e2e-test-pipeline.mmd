@@ -1,0 +1,53 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#1e3a5f', 'primaryTextColor': '#fff', 'lineColor': '#475569', 'fontSize': '13px'}}}%%
+
+graph LR
+    subgraph P1["<b>🟢 e2e-light</b><br/><i>Fast smoke tests</i>"]
+        direction TB
+        L1["happy-path"]
+        L2["health-checks (13)"]
+        L3["merchant-crud"]
+    end
+
+    subgraph P2["<b>🟡 e2e-heavy</b><br/><i>Pipeline & blast tests</i>"]
+        direction TB
+        H1["fraud-blast (4)"]
+        H2["analytics-decision (8)"]
+        H3["case-lifecycle"]
+        H4["feature-flags (8)"]
+        H5["rate-limit"]
+    end
+
+    subgraph P3["<b>🔴 chaos</b><br/><i>Resilience tests</i>"]
+        direction TB
+        C1["kafka-chaos (5)"]
+        C2["Service stop/restart"]
+    end
+
+    P1 -->|"must pass<br/>before"| P2 -->|"must pass<br/>before"| P3
+
+    subgraph Config["<b>⚙️ Configuration</b>"]
+        direction TB
+        CF1["Timeout: 60s/test"]
+        CF2["Workers: 4 parallel"]
+        CF3["Retries: 0"]
+        CF4["p99: < 1000ms"]
+    end
+
+    subgraph Results["<b>📊 Results (Sprint 34)</b>"]
+        direction TB
+        RES["<b>78 tests</b><br/>12 spec files<br/>3 projects<br/><b>~38s runtime</b>"]
+    end
+
+    P3 --> Results
+
+    classDef lightStyle fill:#dcfce7,stroke:#22c55e,color:#166534
+    classDef heavyStyle fill:#fef9c3,stroke:#eab308,color:#854d0e
+    classDef chaosStyle fill:#fee2e2,stroke:#ef4444,color:#991b1b
+    classDef configStyle fill:#f1f5f9,stroke:#94a3b8,color:#334155
+    classDef resultStyle fill:#1e3a5f,stroke:#3b82f6,color:#fff
+
+    class L1,L2,L3 lightStyle
+    class H1,H2,H3,H4,H5 heavyStyle
+    class C1,C2 chaosStyle
+    class CF1,CF2,CF3,CF4 configStyle
+    class RES resultStyle

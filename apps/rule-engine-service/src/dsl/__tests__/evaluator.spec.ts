@@ -206,6 +206,144 @@ describe('RuleEvaluator', () => {
     });
   });
 
+  describe('evaluate() — stateful context rules (Sprint 4)', () => {
+    it('should match stateful.customer.previousBlockCount30d > 0', () => {
+      const rule = makeRule(
+        'RULE stateful_repeat WHEN stateful.customer.previousBlockCount30d > 0 THEN BLOCK WEIGHT 0.9 MISSING SKIP',
+      );
+      const ctx: SignalContext = {
+        stateful: { customer: { previousBlockCount30d: 3 } },
+      };
+      const result = evaluator.evaluate(rule, ctx);
+      expect(result.matched).toBe(true);
+      expect(result.action).toBe('BLOCK');
+    });
+
+    it('should not match stateful.customer.previousBlockCount30d > 0 when count is 0', () => {
+      const rule = makeRule(
+        'RULE stateful_repeat WHEN stateful.customer.previousBlockCount30d > 0 THEN BLOCK WEIGHT 0.9 MISSING SKIP',
+      );
+      const ctx: SignalContext = {
+        stateful: { customer: { previousBlockCount30d: 0 } },
+      };
+      expect(evaluator.evaluate(rule, ctx).matched).toBe(false);
+    });
+
+    it('should match compound stateful rule with AND', () => {
+      const rule = makeRule(
+        'RULE stateful_repeat_blocker WHEN stateful.customer.previousBlockCount30d > 0 AND stateful.customer.txCount1h > 3 THEN BLOCK WEIGHT 0.9 MISSING SKIP',
+      );
+      const ctx: SignalContext = {
+        stateful: { customer: { previousBlockCount30d: 2, txCount1h: 5 } },
+      };
+      expect(evaluator.evaluate(rule, ctx).matched).toBe(true);
+    });
+
+    it('should not match compound stateful rule when one condition fails', () => {
+      const rule = makeRule(
+        'RULE stateful_repeat_blocker WHEN stateful.customer.previousBlockCount30d > 0 AND stateful.customer.txCount1h > 3 THEN BLOCK WEIGHT 0.9 MISSING SKIP',
+      );
+      const ctx: SignalContext = {
+        stateful: { customer: { previousBlockCount30d: 2, txCount1h: 1 } },
+      };
+      expect(evaluator.evaluate(rule, ctx).matched).toBe(false);
+    });
+
+    it('should match stateful.customer.txCount10m > 5 for high 10m velocity', () => {
+      const rule = makeRule(
+        'RULE stateful_high_10m WHEN stateful.customer.txCount10m > 5 THEN REVIEW WEIGHT 0.7 MISSING SKIP',
+      );
+      const ctx: SignalContext = {
+        stateful: { customer: { txCount10m: 8 } },
+      };
+      expect(evaluator.evaluate(rule, ctx).matched).toBe(true);
+      expect(evaluator.evaluate(rule, ctx).action).toBe('REVIEW');
+    });
+
+    it('should match stateful.device.uniqueIps24h for device-level rule', () => {
+      const rule = makeRule(
+        'RULE stateful_device_spread WHEN stateful.device.uniqueIps24h > 10 THEN REVIEW WEIGHT 0.6 MISSING SKIP',
+      );
+      const ctx: SignalContext = {
+        stateful: { device: { uniqueIps24h: 15 } },
+      };
+      expect(evaluator.evaluate(rule, ctx).matched).toBe(true);
+    });
+
+    it('should match stateful.ip.txCount1h for IP-level rule', () => {
+      const rule = makeRule(
+        'RULE stateful_ip_burst WHEN stateful.ip.txCount1h > 50 THEN BLOCK WEIGHT 0.8 MISSING SKIP',
+      );
+      const ctx: SignalContext = {
+        stateful: { ip: { txCount1h: 75 } },
+      };
+      expect(evaluator.evaluate(rule, ctx).matched).toBe(true);
+      expect(evaluator.evaluate(rule, ctx).action).toBe('BLOCK');
+    });
+
+    it('should skip stateful rule when stateful context is absent', () => {
+      const rule = makeRule(
+        'RULE stateful_repeat WHEN stateful.customer.previousBlockCount30d > 0 THEN BLOCK WEIGHT 0.9 MISSING SKIP',
+      );
+      const result = evaluator.evaluate(rule, {});
+      expect(result.matched).toBe(false);
+      expect(result.skipped).toBe(true);
+    });
+
+    it('should skip stateful rule when entity type is absent', () => {
+      const rule = makeRule(
+        'RULE stateful_device WHEN stateful.device.txCount1h > 10 THEN REVIEW MISSING SKIP',
+      );
+      const ctx: SignalContext = {
+        stateful: { customer: { txCount1h: 100 } },
+        // device not present in stateful
+      };
+      const result = evaluator.evaluate(rule, ctx);
+      expect(result.skipped).toBe(true);
+    });
+  });
+
+  describe('evaluate() — graph context rules (Sprint 8)', () => {
+    it('should match stateful.graph.fraudRingDetected == true', () => {
+      const rule = makeRule(
+        'RULE graph_ring WHEN stateful.graph.fraudRingDetected == true THEN BLOCK WEIGHT 1.0 MISSING SKIP',
+      );
+      const ctx: SignalContext = {
+        stateful: { graph: { fraudRingDetected: true } },
+      };
+      expect(evaluator.evaluate(rule, ctx).matched).toBe(true);
+      expect(evaluator.evaluate(rule, ctx).action).toBe('BLOCK');
+    });
+
+    it('should not match graph ring when not detected', () => {
+      const rule = makeRule(
+        'RULE graph_ring WHEN stateful.graph.fraudRingDetected == true THEN BLOCK WEIGHT 1.0 MISSING SKIP',
+      );
+      const ctx: SignalContext = {
+        stateful: { graph: { fraudRingDetected: false } },
+      };
+      expect(evaluator.evaluate(rule, ctx).matched).toBe(false);
+    });
+
+    it('should match stateful.graph.sharedDeviceCount > 5', () => {
+      const rule = makeRule(
+        'RULE graph_device WHEN stateful.graph.sharedDeviceCount > 5 THEN REVIEW WEIGHT 0.7 MISSING SKIP',
+      );
+      const ctx: SignalContext = {
+        stateful: { graph: { sharedDeviceCount: 8 } },
+      };
+      expect(evaluator.evaluate(rule, ctx).matched).toBe(true);
+    });
+
+    it('should skip graph rule when graph context absent', () => {
+      const rule = makeRule(
+        'RULE graph_ring WHEN stateful.graph.fraudRingDetected == true THEN BLOCK MISSING SKIP',
+      );
+      const result = evaluator.evaluate(rule, { stateful: {} });
+      expect(result.skipped).toBe(true);
+    });
+  });
+
   describe('evaluateAll()', () => {
     it('should evaluate multiple rules and return all results', () => {
       const rules = [

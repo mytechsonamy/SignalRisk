@@ -8,6 +8,8 @@
 
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Kafka, Consumer, EachMessagePayload, logLevel } from 'kafkajs';
+import { TOPICS, CONSUMER_GROUPS } from '@signalrisk/kafka-config';
 import { KafkaService } from '../kafka/kafka.service';
 
 // ---------------------------------------------------------------------------
@@ -61,8 +63,7 @@ export class DlqConsumerService implements OnModuleInit, OnModuleDestroy {
   private static readonly CACHE_CAP = 1000;
 
   private running = false;
-
-  private static readonly TOPIC_RAW = 'signalrisk.events.raw';
+  private consumer: Consumer | null = null;
 
   constructor(
     private readonly configService: ConfigService,
@@ -77,14 +78,101 @@ export class DlqConsumerService implements OnModuleInit, OnModuleDestroy {
     this.logger.log(
       `DLQ Consumer initialized: maxRetries=${this.maxRetries}, baseDelayMs=${this.baseDelayMs}`,
     );
-    // In production, this would start a KafkaJS consumer subscribing to
-    // signalrisk.events.dlq with consumer group signalrisk.cg.dlq-processor.
-    // For now, events are processed via the processRecord() method.
+
+    // Start Kafka consumer for DLQ topic
+    const enabled = this.configService.get<string>('DLQ_CONSUMER_ENABLED', 'true');
+    if (enabled === 'false') {
+      this.logger.log('DLQ Consumer disabled via DLQ_CONSUMER_ENABLED=false');
+      return;
+    }
+
+    try {
+      const brokers = (this.configService.get<string>('KAFKA_BROKERS') || 'localhost:9092').split(',');
+      const kafka = new Kafka({
+        clientId: 'event-collector-dlq',
+        brokers,
+        logLevel: logLevel.ERROR,
+        retry: { retries: 5 },
+      });
+
+      this.consumer = kafka.consumer({
+        groupId: CONSUMER_GROUPS.DLQ_PROCESSOR,
+        sessionTimeout: 30_000,
+        heartbeatInterval: 3_000,
+      });
+
+      await this.consumer.connect();
+      await this.consumer.subscribe({
+        topic: TOPICS.EVENTS_DLQ,
+        fromBeginning: false,
+      });
+
+      await this.consumer.run({
+        eachMessage: async (payload: EachMessagePayload) => {
+          if (!this.running) return;
+          try {
+            const value = payload.message.value?.toString();
+            if (!value) return;
+
+            const dlqRecord = this.parseMessage(payload, value);
+            await this.processRecord(dlqRecord);
+          } catch (err) {
+            this.logger.error(`DLQ message processing error: ${(err as Error).message}`);
+          }
+        },
+      });
+
+      this.logger.log(`DLQ Consumer started — subscribing to ${TOPICS.EVENTS_DLQ}`);
+    } catch (err) {
+      this.logger.error(`DLQ Consumer failed to start: ${(err as Error).message}`);
+    }
   }
 
   async onModuleDestroy(): Promise<void> {
     this.running = false;
+    if (this.consumer) {
+      try {
+        await this.consumer.disconnect();
+      } catch {
+        // ignore disconnect errors during shutdown
+      }
+    }
     this.logger.log('DLQ Consumer shutting down');
+  }
+
+  private parseMessage(payload: EachMessagePayload, value: string): DlqRecord {
+    try {
+      const parsed = JSON.parse(value);
+      return {
+        eventId: parsed.eventId || payload.message.headers?.['event-id']?.toString() || 'unknown',
+        timestamp: parsed.timestamp || new Date().toISOString(),
+        source: parsed.source || 'event-collector',
+        schemaVersion: parsed.schemaVersion || 1,
+        originalTopic: parsed.originalTopic || payload.message.headers?.['dlq-original-topic']?.toString() || TOPICS.EVENTS_RAW,
+        originalPartition: parsed.originalPartition || payload.partition,
+        originalOffset: parsed.originalOffset || Number(payload.message.offset),
+        originalValue: parsed.originalValue || value,
+        errorMessage: parsed.errorMessage || '',
+        validationErrors: parsed.validationErrors || [],
+        failureReason: parsed.failureReason || 'unknown',
+        retryCount: parsed.retryCount ?? Number(payload.message.headers?.['dlq-retry-count']?.toString() || '0'),
+      };
+    } catch {
+      return {
+        eventId: payload.message.headers?.['event-id']?.toString() || 'unknown',
+        timestamp: new Date().toISOString(),
+        source: 'event-collector',
+        schemaVersion: 1,
+        originalTopic: TOPICS.EVENTS_RAW,
+        originalPartition: payload.partition,
+        originalOffset: Number(payload.message.offset),
+        originalValue: value,
+        errorMessage: 'Failed to parse DLQ record',
+        validationErrors: [],
+        failureReason: 'parse_error',
+        retryCount: 0,
+      };
+    }
   }
 
   /**
@@ -202,7 +290,7 @@ export class DlqConsumerService implements OnModuleInit, OnModuleDestroy {
     // 1. Publish to the exhausted Kafka topic
     await this.kafkaService.sendBatch([
       {
-        topic: 'signalrisk.events.dlq.exhausted',
+        topic: TOPICS.EVENTS_DLQ_EXHAUSTED,
         key: record.eventId,
         value: record.originalValue,
         headers: {
@@ -250,13 +338,13 @@ export class DlqConsumerService implements OnModuleInit, OnModuleDestroy {
     const partitionKey = `${merchantId}:${sessionId}`;
 
     this.logger.log(
-      `Republishing DLQ event ${dlqRecord.eventId} to ${DlqConsumerService.TOPIC_RAW} ` +
+      `Republishing DLQ event ${dlqRecord.eventId} to ${TOPICS.EVENTS_RAW} ` +
         `(attempt ${dlqRecord.retryCount + 1}, originalTopic=${dlqRecord.originalTopic})`,
     );
 
     await this.kafkaService.sendBatch([
       {
-        topic: DlqConsumerService.TOPIC_RAW,
+        topic: TOPICS.EVENTS_RAW,
         key: partitionKey,
         value: dlqRecord.originalValue,
         headers: {
