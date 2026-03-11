@@ -60,7 +60,7 @@ RUN --mount=from=deps,source=/app,target=/deps \
 RUN for pkg in packages/redis-module packages/signal-contracts \
                packages/event-schemas packages/kafka-config \
                packages/kafka-health; do \
-      [ -d "$pkg/src" ] && (cd "$pkg" && npx tsc --skipLibCheck 2>/dev/null || true); \
+      [ -d "$pkg/src" ] && (cd "$pkg" && npx tsc --skipLibCheck); \
     done
 
 # ---------------------------------------------------------------------------
@@ -76,6 +76,13 @@ COPY package.json ./
 # Copy only this service's source (NOT all apps/)
 COPY apps/${SERVICE}/ ./apps/${SERVICE}/
 
+# decision-service cross-imports rule-engine-service DSL modules at compile time.
+# Copy rule-engine source for all builds (small, only .ts files — no node_modules).
+# Non-decision services ignore it; Docker layer is shared via cache.
+COPY apps/rule-engine-service/src/ ./apps/rule-engine-service/src/
+COPY apps/rule-engine-service/tsconfig.json ./apps/rule-engine-service/
+COPY apps/rule-engine-service/package.json  ./apps/rule-engine-service/
+
 # Copy only this service's node_modules from deps
 RUN --mount=from=deps,source=/app,target=/deps \
     if [ -d "/deps/apps/${SERVICE}/node_modules" ]; then \
@@ -90,6 +97,12 @@ RUN cd "apps/${SERVICE}" && \
     else \
       npx tsc -p tsconfig.json --skipLibCheck && \
       tsc-alias -p tsconfig.json; \
+    fi
+
+# Copy non-TS assets (e.g. default.rules) into dist at the path tsc rootDir expects.
+# For decision-service, tsc widens rootDir → dist/rule-engine-service/src/rules/
+RUN if [ -d "apps/${SERVICE}/dist/rule-engine-service/src" ]; then \
+      cp -r apps/rule-engine-service/src/rules "apps/${SERVICE}/dist/rule-engine-service/src/" 2>/dev/null || true; \
     fi
 
 # ---------------------------------------------------------------------------
@@ -124,4 +137,4 @@ USER signalrisk
 
 EXPOSE ${PORT}
 
-CMD ["sh", "-c", "exec node apps/${SERVICE}/dist/main.js"]
+CMD ["sh", "-c", "if [ -f apps/${SERVICE}/dist/main.js ]; then exec node apps/${SERVICE}/dist/main.js; else exec node apps/${SERVICE}/dist/${SERVICE}/src/main.js; fi"]
