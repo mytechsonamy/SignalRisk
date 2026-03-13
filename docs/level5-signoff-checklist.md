@@ -49,7 +49,7 @@
 - [x] `docs/TECHNICAL.md` matches the actual auth and decision behavior
 - [x] `docs/USER-GUIDE.md` matches the real operator login flow
 - [x] `docs/testing/uat-plan.md` includes the current prod-like validation profile
-- [ ] `docs/architecture/system-overview.md` reflects current ports, topics, and feedback loop behavior
+- [x] `docs/architecture/system-overview.md` reflects current ports, topics, and feedback loop behavior
 - [x] `docs/level5-final-hardening-plan.md` reflects current blocker status
 
 ## 7. Final Signoff

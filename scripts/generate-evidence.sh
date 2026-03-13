@@ -134,6 +134,46 @@ else
 fi
 E2E_REPORT_STATUS=$( [ -n "$E2E_PASSED" ] && [ "$E2E_PASSED" != "unknown" ] && echo "collected" || echo "collection_failed" )
 
+# ─────────────────────────────────────────────────────────────
+# Scenario-level results — derived from E2E spec output
+# ─────────────────────────────────────────────────────────────
+
+echo "  Parsing scenario results from E2E output..."
+
+# Helper: check if a spec name appears in E2E output as passed or failed
+spec_status() {
+  local spec_pattern="$1"
+  if echo "$E2E_RESULT" | grep -qiE "${spec_pattern}.*✓|✓.*${spec_pattern}|passed.*${spec_pattern}|${spec_pattern}.*ok" 2>/dev/null; then
+    echo "PASSED"
+  elif echo "$E2E_RESULT" | grep -qiE "${spec_pattern}.*✘|✘.*${spec_pattern}|failed.*${spec_pattern}" 2>/dev/null; then
+    echo "FAILED"
+  elif [ "$E2E_EXIT" -eq 0 ]; then
+    echo "PASSED (suite green)"
+  else
+    echo "NOT VERIFIED (E2E suite failed)"
+  fi
+}
+
+# P0 scenario results — mapped to E2E specs
+# SR-P0-001/002: merchant-crud.spec.ts covers auth token issuance + invalid creds
+SC_P0_001=$(spec_status "merchant.*auth\|issues.*token\|happy.*path")
+SC_P0_002=$(spec_status "invalid.*cred\|reject\|unauthorized")
+# SR-P0-003/004: happy-path.spec.ts covers valid event ingestion + DLQ
+SC_P0_003=$(spec_status "valid.*event\|ingest\|happy.*path")
+SC_P0_004=$(spec_status "invalid.*event\|DLQ\|dlq")
+# SR-P0-005/006: happy-path + case-lifecycle cover decision + case creation
+SC_P0_005=$(spec_status "decision\|deterministic\|happy.*path")
+SC_P0_006=$(spec_status "case.*service\|case.*creat\|lifecycle")
+# SR-P0-009/010: multi-tenant-isolation.spec.ts covers cross-tenant + JWT forge
+SC_P0_009=$(spec_status "cross.*tenant\|tenant.*isol\|multi.*tenant")
+SC_P0_010=$(spec_status "forged.*jwt\|jwt.*reject\|invalid.*token")
+# SR-P0-013/014: chaos specs cover Redis/Kafka outage
+SC_P0_013=$(spec_status "redis.*outage\|redis.*down\|chaos.*redis")
+SC_P0_014=$(spec_status "kafka.*outage\|kafka.*down\|chaos.*kafka")
+# P1 scenarios
+SC_P1_001=$(spec_status "rule.*crud\|admin.*rule")
+SC_P1_005=$(spec_status "token.*revok\|jwt.*revoke\|logout")
+
 # Docker container health
 DOCKER_HEALTH=$(docker compose -f docker-compose.full.yml ps --format '{{.Name}}: {{.Status}}' 2>/dev/null || echo "Docker not running")
 
@@ -212,25 +252,27 @@ $DOCKER_HEALTH
 
 ## Scenario Summary
 
+> Scenario status derived from E2E suite execution (exit code: $E2E_EXIT)
+
 ### P0 Scenarios
 | ID | Title | Status |
 |---|---|---|
-| SR-P0-001 | Merchant Auth Issues Token | PASS |
-| SR-P0-002 | Invalid Credentials Rejected | PASS |
-| SR-P0-003 | Event Ingestion Valid Event | PASS |
-| SR-P0-004 | Invalid Event → DLQ | PASS |
-| SR-P0-005 | Decision Deterministic Outcome | PASS |
-| SR-P0-006 | Decision → Case Service | PASS |
-| SR-P0-009 | Cross-Tenant API Denied | PASS |
-| SR-P0-010 | Forged JWT Rejected | PASS |
-| SR-P0-013 | Redis Outage Degrades Safely | PASS |
-| SR-P0-014 | Kafka Outage Degrades Safely | PASS |
+| SR-P0-001 | Merchant Auth Issues Token | $SC_P0_001 |
+| SR-P0-002 | Invalid Credentials Rejected | $SC_P0_002 |
+| SR-P0-003 | Event Ingestion Valid Event | $SC_P0_003 |
+| SR-P0-004 | Invalid Event → DLQ | $SC_P0_004 |
+| SR-P0-005 | Decision Deterministic Outcome | $SC_P0_005 |
+| SR-P0-006 | Decision → Case Service | $SC_P0_006 |
+| SR-P0-009 | Cross-Tenant API Denied | $SC_P0_009 |
+| SR-P0-010 | Forged JWT Rejected | $SC_P0_010 |
+| SR-P0-013 | Redis Outage Degrades Safely | $SC_P0_013 |
+| SR-P0-014 | Kafka Outage Degrades Safely | $SC_P0_014 |
 
 ### P1 Scenarios
 | ID | Title | Status |
 |---|---|---|
-| SR-P1-001 | Rule CRUD Flow | PASS (admin endpoint implemented) |
-| SR-P1-005 | Token Revoke Path | PASS |
+| SR-P1-001 | Rule CRUD Flow | $SC_P1_001 |
+| SR-P1-005 | Token Revoke Path | $SC_P1_005 |
 
 ## Defect Summary
 - Open Sev-1: 0
