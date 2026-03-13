@@ -28,6 +28,7 @@
 import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
+import { recordDecision, recordError } from '@signalrisk/telemetry';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
@@ -141,7 +142,13 @@ export class DecisionOrchestratorService implements OnModuleInit {
     if (this.decisionCache) {
       const cached = await this.decisionCache.get(req.merchantId, req.entityId);
       if (cached) {
-        return { ...cached, cached: true, latencyMs: Date.now() - startedAt };
+        const cacheLatencyMs = Date.now() - startedAt;
+        recordDecision(
+          cached.action.toLowerCase() as 'allow' | 'block' | 'review',
+          cacheLatencyMs,
+          { merchant_id: req.merchantId, entity_type: (req as any).entityType ?? 'customer', source: 'cache' },
+        );
+        return { ...cached, cached: true, latencyMs: cacheLatencyMs };
       }
     }
 
@@ -186,6 +193,7 @@ export class DecisionOrchestratorService implements OnModuleInit {
             topRiskFactors: ['watchlist.denylist'],
           });
         }
+        recordDecision('block', latencyMs, { merchant_id: req.merchantId, entity_type: entityType, reason: 'denylist' });
         return denyResult;
       }
 
@@ -387,6 +395,7 @@ export class DecisionOrchestratorService implements OnModuleInit {
     } catch (err) {
       // DSL evaluation failure → fallback to threshold-based action (graceful degradation)
       this.logger.warn(`DSL rule evaluation failed: ${(err as Error).message}. Using threshold-based action.`);
+      recordError('decision-service', 'dsl_evaluation_failure', { merchant_id: req.merchantId });
     }
 
     const latencyMs = Date.now() - startedAt;
@@ -438,6 +447,13 @@ export class DecisionOrchestratorService implements OnModuleInit {
       };
       this.decisionGateway.broadcastDecision(broadcastEvent);
     }
+
+    // Record decision telemetry (OTel counter + histogram)
+    recordDecision(
+      action.toLowerCase() as 'allow' | 'block' | 'review',
+      latencyMs,
+      { merchant_id: req.merchantId, entity_type: entityType },
+    );
 
     return result;
   }

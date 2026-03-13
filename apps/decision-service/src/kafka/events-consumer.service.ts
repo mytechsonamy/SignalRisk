@@ -24,6 +24,7 @@ import { DecisionStoreService } from '../decision/decision-store.service';
 import { DecisionsProducerService } from './decisions-producer.service';
 import { DecisionRequest } from '../decision/decision.types';
 import { TOPICS } from '@signalrisk/kafka-config';
+import { recordEvent, recordError } from '@signalrisk/telemetry';
 
 const CONSUMER_GROUP = 'decision-service';
 
@@ -143,6 +144,9 @@ export class EventsConsumerService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
+    // Record event consumed for telemetry
+    recordEvent('raw', { merchant_id: rawEvent.merchantId });
+
     // Map raw event to DecisionRequest
     const request: DecisionRequest = {
       requestId: rawEvent.eventId,
@@ -180,6 +184,7 @@ export class EventsConsumerService implements OnModuleInit, OnModuleDestroy {
         `Failed to process event ${rawEvent.eventId}: ${(error as Error).message}`,
         (error as Error).stack,
       );
+      recordError('decision-service', 'event_processing_failure', { event_id: rawEvent.eventId });
     }
   }
 }

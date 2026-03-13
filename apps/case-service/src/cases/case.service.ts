@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { recordEntityTypeFallback } from '@signalrisk/telemetry';
 import { CaseRepository } from './case.repository';
 import {
   Case,
@@ -31,6 +32,7 @@ export class CaseService {
       this.logger.warn(
         `Decision ${decision.requestId} missing entityType — defaulting to 'customer'`,
       );
+      recordEntityTypeFallback({ decision_id: decision.requestId, merchant_id: decision.merchantId });
     }
 
     this.logger.log(

@@ -34,6 +34,13 @@ The current blocking gaps are:
 3. gate runner still contains synthetic PASS behavior
 4. analyst feedback does not yet affect live decisioning
 
+Historical note:
+
+- the blocker list above describes the original Level 4/5 hardening entry point
+- Sprint 36-39 code changes addressed most of those direct implementation gaps
+- the remaining Level-5 closure scope is now tracked in `docs/level5-final-hardening-plan.md`
+- the main unresolved problems are no longer core feature gaps, but release trust chain, observability completeness, seed/dev separation, and production-like evidence
+
 ## 3. Execution Order
 
 The correct order is:

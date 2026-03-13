@@ -6,6 +6,10 @@ export {
   recordDecision,
   recordEvent,
   recordError,
+  recordEntityProfileError,
+  recordFeatureSnapshotError,
+  recordWatchlistTimeout,
+  recordEntityTypeFallback,
   SignalRiskMetrics,
 } from './metrics';
 export { createLogger, createChildLogger, LoggingConfig } from './logging';

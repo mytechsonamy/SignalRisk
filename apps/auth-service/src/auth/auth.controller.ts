@@ -8,6 +8,7 @@ import {
   HttpStatus,
   BadRequestException,
   UnauthorizedException,
+  NotImplementedException,
   Inject,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
@@ -146,15 +147,8 @@ export class AuthController {
       }
 
       case GrantType.PASSWORD: {
-        if (!dto.username || !dto.password || !dto.merchant_id) {
-          throw new BadRequestException(
-            'username, password, and merchant_id are required for password grant',
-          );
-        }
-        // In production: validate user credentials against DB
-        // For now, return a structured error
-        throw new BadRequestException(
-          'Password grant requires database user lookup (not yet connected)',
+        throw new NotImplementedException(
+          'Password grant (grant_type=password) is not supported. Use POST /v1/auth/login for dashboard authentication.',
         );
       }
 

@@ -24,6 +24,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Pool } from 'pg';
 import { DecisionResult } from './decision.types';
+import { recordEntityProfileError, recordFeatureSnapshotError } from '@signalrisk/telemetry';
 
 @Injectable()
 export class DecisionStoreService {
@@ -218,7 +219,7 @@ export class DecisionStoreService {
       this.logger.warn(
         `Entity profile update failed for ${entityType}:${entityId}: ${(err as Error).message}`,
       );
-      // AR-7: entity_profile_update_errors_total metric would be incremented here
+      recordEntityProfileError({ entity_type: entityType, entity_id: entityId });
     } finally {
       client?.release();
     }
@@ -306,7 +307,7 @@ export class DecisionStoreService {
       this.logger.warn(
         `Feature snapshot write failed for ${decisionId}: ${(err as Error).message}`,
       );
-      // AR-6: feature_snapshot_write_errors_total metric would be incremented here
+      recordFeatureSnapshotError({ decision_id: decisionId });
     } finally {
       client?.release();
     }

@@ -443,7 +443,8 @@ The decision-service exposes analytics endpoints (unprotected, for dashboard con
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/v1/auth/token` | Issue JWT (client_credentials or refresh_token) |
+| POST | `/v1/auth/login` | Dashboard login (email + password → JWT) |
+| POST | `/v1/auth/token` | Issue JWT (client_credentials or refresh_token; password grant not supported — use /login) |
 | POST | `/v1/auth/token/refresh` | Refresh access token |
 | POST | `/v1/auth/logout` | Revoke current token (add jti to denylist) |
 | POST | `/v1/auth/register` | Register new merchant |

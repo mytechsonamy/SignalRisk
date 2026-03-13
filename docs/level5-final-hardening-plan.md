@@ -3,6 +3,10 @@
 > Date: 11 March 2026
 > Basis: code review of auth, decision, feedback, gate runner, evidence, and current roadmap documents
 
+This document supersedes the remaining Level-5 closure subset of `docs/production-readiness-level4-5-plan.md`.
+
+Final go/no-go release verification should be executed with `docs/level5-signoff-checklist.md`.
+
 ## 1. Current Maturity Assessment
 
 ### Current state
@@ -120,7 +124,7 @@ Seed and non-production fallback behavior still exists in important paths.
 Observed:
 
 - non-production login fallback still uses seed credentials
-- E2E helpers depend on seeded merchants and secrets
+- E2E helpers use test-scoped OAuth client credentials and remain acceptable for non-dashboard API validation
 - screenshot automation still uses `admin123`
 
 This is acceptable for dev/test, but not enough for a clean Level-5 boundary.
@@ -187,7 +191,12 @@ Make release status trustworthy.
 - `watchlist_check_timeout_total`
 - `entity_type_fallback_total`
 
-4. Wire counters into dashboards / release evidence
+4. Make telemetry integration mandatory
+- call runtime telemetry from decision and feedback paths
+- emit the four Level-5 counters through the shared telemetry package
+- integrate decision-level telemetry in the live decision path rather than leaving it as optional follow-up
+
+5. Wire counters into dashboards / release evidence
 - update metrics controller or telemetry path
 - add evidence section for new counters
 
@@ -196,6 +205,7 @@ Make release status trustworthy.
 - a failing blocking test produces a failing evidence outcome
 - `G8` fails if evidence is incomplete or contradictory
 - all 4 Level-5 counters are observable at runtime
+- decision-service emits real telemetry for decision outcomes and relevant error paths
 - staging evidence includes actual counter values
 
 ### Owner workstreams
@@ -218,7 +228,8 @@ Prove the platform behaves correctly in a production-like profile.
 - remove accidental seed assumptions from production-like validation flows
 
 2. Auth surface normalization
-- decide whether password grant is supported or removed from Level-5 scope
+- de-scope password grant for Level 5 unless explicitly funded as a follow-up feature
+- replace placeholder behavior with explicit unsupported semantics
 - align docs and endpoints accordingly
 
 3. Prod-like UAT rerun
@@ -238,6 +249,7 @@ Prove the platform behaves correctly in a production-like profile.
 - all Level-4/5 scenarios have current evidence
 - auth documentation matches actual supported flows
 - pilot readiness verdict is backed by current runtime evidence, not old reports
+- screenshot and operator-support scripts no longer depend on hardcoded fallback credentials
 
 ### Owner workstreams
 
@@ -262,6 +274,7 @@ Update after Sprint 40-41 closure:
 - `docs/architecture/system-overview.md`
 - `docs/claude/source-of-truth.md`
 - `docs/production-readiness-level4-5-plan.md`
+- `docs/level5-signoff-checklist.md`
 
 ### Gate updates
 
@@ -272,6 +285,7 @@ Update after Sprint 40-41 closure:
 - open blockers and waivers are listed
 - signoff fields are populated
 - no stale “PASS” remains from earlier sprint artifacts
+- artifact freshness is evaluated against the current target sprint/release, not only by a fixed age threshold
 
 ### UAT / scenario updates
 
@@ -290,9 +304,10 @@ SignalRisk can be called Level 5 production-ready only when all of the following
 1. Blocking gates fail honestly on bad runtime or bad evidence.
 2. Evidence generation no longer masks failed test execution.
 3. Closed-loop state and snapshot paths emit real error metrics.
-4. Prod-like validation can run without seed-login dependency.
-5. Auth documentation matches supported production behavior.
-6. Current staging or pilot evidence confirms operator auth, WebSocket isolation, feedback enforcement, and snapshot persistence.
+4. Decision-service emits runtime telemetry for decision outcomes and key error paths.
+5. Prod-like validation can run without seed-login dependency.
+6. Auth documentation matches supported production behavior.
+7. Current staging or pilot evidence confirms operator auth, WebSocket isolation, feedback enforcement, and snapshot persistence.
 
 ## 6. Final Summary
 

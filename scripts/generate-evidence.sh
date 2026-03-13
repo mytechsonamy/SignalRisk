@@ -21,23 +21,118 @@ mkdir -p "$EVIDENCE_DIR"
 echo "Generating Sprint $SPRINT evidence pack..."
 
 # ─────────────────────────────────────────────────────────────
-# Collect test results
+# G1: Build & Static Validation
 # ─────────────────────────────────────────────────────────────
 
-# Unit test counts
-UNIT_RESULT=$(npm run test:all 2>&1 || true)
+echo "  Running G1 checks..."
+
+# TypeScript
+npx tsc --noEmit -p tsconfig.json 2>/dev/null && G1_TSC="PASSED" || G1_TSC="FAILED (exit $?)"
+
+# ESLint
+npm run lint:all 2>/dev/null && G1_LINT="PASSED" || G1_LINT="FAILED (exit $?)"
+
+# Build
+npm run build:all 2>/dev/null && G1_BUILD="PASSED" || G1_BUILD="FAILED (exit $?)"
+
+# || true check
+G1_NO_OR_TRUE_HITS=$(grep -r '|| true' package.json apps/*/package.json packages/*/package.json 2>/dev/null | grep -v node_modules || true)
+if [ -z "$G1_NO_OR_TRUE_HITS" ]; then
+  G1_NO_OR_TRUE="PASSED"
+else
+  G1_NO_OR_TRUE="FAILED — found: $G1_NO_OR_TRUE_HITS"
+fi
+
+# ─────────────────────────────────────────────────────────────
+# G3: Integration & Contract Validation
+# ─────────────────────────────────────────────────────────────
+
+echo "  Running G3 checks..."
+
+# Kafka topic canonical
+G3_HARDCODED=$(grep -rn "topic.*['\"]events['\"\`]" apps/ --include='*.ts' 2>/dev/null | \
+  grep -v node_modules | grep -v dist | grep -v '.spec.' | grep -v '.test.' | \
+  grep -v 'kafka-config' | grep -v 'TOPICS\.' | grep -v '// ' || true)
+if [ -z "$G3_HARDCODED" ]; then
+  G3_KAFKA_CANONICAL="PASSED"
+else
+  G3_KAFKA_CANONICAL="FAILED — hardcoded topics found"
+fi
+
+# Smoke tests
+export TEST_DB_HOST="${TEST_DB_HOST:-localhost}"
+export TEST_DB_PORT="${TEST_DB_PORT:-15432}"
+export TEST_DB_USER="${TEST_DB_USER:-signalrisk}"
+export TEST_DB_PASSWORD="${TEST_DB_PASSWORD:-signalrisk_dev}"
+export TEST_DB_NAME="${TEST_DB_NAME:-signalrisk}"
+
+(cd tests && npx jest smoke --forceExit 2>/dev/null) && G3_SMOKE="PASSED" || G3_SMOKE="FAILED (exit $?)"
+
+# ─────────────────────────────────────────────────────────────
+# G4: Security & Tenant Isolation
+# ─────────────────────────────────────────────────────────────
+
+echo "  Running G4 checks..."
+
+# TenantGuard RS256 JWKS
+if grep -q "jwksClient\|JWKS\|RS256" apps/case-service/src/guards/tenant.guard.ts 2>/dev/null; then
+  G4_JWKS="PASSED"
+else
+  G4_JWKS="FAILED — TenantGuard missing JWKS verification"
+fi
+
+# Hardcoded credential scan
+G4_CRED_HITS=$(grep -rn "admin123\|test-secret\|hardcoded.*password" apps/*/src/ --include='*.ts' 2>/dev/null | \
+  grep -v node_modules | grep -v dist | grep -v '.spec.' | grep -v '.test.' | \
+  grep -v 'NODE_ENV' || true)
+if [ -z "$G4_CRED_HITS" ]; then
+  G4_NO_CREDS="PASSED"
+else
+  G4_NO_CREDS="FAILED — hardcoded credentials found"
+fi
+
+# E2E multi-tenant isolation
+npx playwright test --config tests/e2e/playwright.config.real.ts tests/e2e/scenarios/multi-tenant-isolation.spec.ts 2>/dev/null \
+  && G4_MULTI_TENANT="PASSED" || G4_MULTI_TENANT="FAILED (exit $?)"
+
+# ─────────────────────────────────────────────────────────────
+# G2 + G5: Test execution
+# ─────────────────────────────────────────────────────────────
+
+echo "  Running G2/G5 tests..."
+
+# Unit test counts — capture exit code honestly
+UNIT_RESULT=$(npm run test:all 2>&1) && UNIT_EXIT=0 || UNIT_EXIT=$?
 UNIT_SUITES=$(echo "$UNIT_RESULT" | grep -oP 'Test Suites:\s+\K\d+ passed' | head -1 || echo "unknown")
 UNIT_TESTS=$(echo "$UNIT_RESULT" | grep -oP 'Tests:\s+\K\d+ passed' | head -1 || echo "unknown")
+if [ "$UNIT_EXIT" -eq 0 ]; then
+  UNIT_STATUS="PASSED"
+else
+  UNIT_STATUS="FAILED (exit $UNIT_EXIT)"
+fi
+UNIT_REPORT_STATUS=$( [ -n "$UNIT_SUITES" ] && [ "$UNIT_SUITES" != "unknown" ] && echo "collected" || echo "collection_failed" )
 
-# Dashboard test counts
-DASHBOARD_RESULT=$(cd apps/dashboard && npx vitest run 2>&1 || true)
+# Dashboard test counts — capture exit code honestly
+DASHBOARD_RESULT=$(cd apps/dashboard && npx vitest run 2>&1) && DASHBOARD_EXIT=0 || DASHBOARD_EXIT=$?
 DASHBOARD_TESTS=$(echo "$DASHBOARD_RESULT" | grep -oP 'Tests\s+\K\d+ passed' | head -1 || echo "unknown")
+if [ "$DASHBOARD_EXIT" -eq 0 ]; then
+  DASHBOARD_STATUS="PASSED"
+else
+  DASHBOARD_STATUS="FAILED (exit $DASHBOARD_EXIT)"
+fi
+DASHBOARD_REPORT_STATUS=$( [ -n "$DASHBOARD_TESTS" ] && [ "$DASHBOARD_TESTS" != "unknown" ] && echo "collected" || echo "collection_failed" )
 
-# E2E test counts (run or capture existing)
-E2E_RESULT=$(npx playwright test --config tests/e2e/playwright.config.real.ts 2>&1 || true)
+# E2E test counts — capture exit code honestly
+E2E_RESULT=$(npx playwright test --config tests/e2e/playwright.config.real.ts 2>&1) && E2E_EXIT=0 || E2E_EXIT=$?
 E2E_PASSED=$(echo "$E2E_RESULT" | grep -oP '\d+ passed' | head -1 || echo "unknown")
 E2E_FAILED=$(echo "$E2E_RESULT" | grep -oP '\d+ failed' | head -1 || echo "0 failed")
 E2E_SKIPPED=$(echo "$E2E_RESULT" | grep -oP '\d+ skipped' | head -1 || echo "0 skipped")
+if [ "$E2E_EXIT" -eq 0 ]; then
+  E2E_STATUS="PASSED"
+else
+  E2E_STATUS="FAILED (exit $E2E_EXIT)"
+fi
+E2E_REPORT_STATUS=$( [ -n "$E2E_PASSED" ] && [ "$E2E_PASSED" != "unknown" ] && echo "collected" || echo "collection_failed" )
 
 # Docker container health
 DOCKER_HEALTH=$(docker compose -f docker-compose.full.yml ps --format '{{.Name}}: {{.Status}}' 2>/dev/null || echo "Docker not running")
@@ -79,26 +174,32 @@ All 14 backend services + dashboard (15 total)
 ## Gate Status
 
 ### G1: Build & Static Validation
-- TypeScript: PASS
-- ESLint: PASS
-- Build: PASS
-- No \`|| true\` in scripts: PASS
+- TypeScript: $G1_TSC
+- ESLint: $G1_LINT
+- Build: $G1_BUILD
+- No \`|| true\` in scripts: $G1_NO_OR_TRUE
 
 ### G2: Unit/Component Validation
 - Backend unit tests: $UNIT_SUITES, $UNIT_TESTS
+  - execution_status: $UNIT_STATUS
+  - report_collection_status: $UNIT_REPORT_STATUS
 - Dashboard tests: $DASHBOARD_TESTS
+  - execution_status: $DASHBOARD_STATUS
+  - report_collection_status: $DASHBOARD_REPORT_STATUS
 
 ### G3: Integration & Contract Validation
-- Kafka topic canonical: PASS (all imports from @signalrisk/kafka-config)
-- Smoke tests: PASS (Redis rate-limit Lua, PostgreSQL case CRUD, fingerprint consistency)
+- Kafka topic canonical: $G3_KAFKA_CANONICAL
+- Smoke tests: $G3_SMOKE
 
 ### G4: Security & Tenant Isolation
-- TenantGuard RS256 JWKS verification: PASS
-- No hardcoded credentials in prod code: PASS
-- E2E multi-tenant isolation: PASS (5/5)
+- TenantGuard RS256 JWKS verification: $G4_JWKS
+- No hardcoded credentials in prod code: $G4_NO_CREDS
+- E2E multi-tenant isolation: $G4_MULTI_TENANT
 
 ### G5: E2E & Workflow Validation
 - Full E2E suite: $E2E_PASSED, $E2E_FAILED, $E2E_SKIPPED
+  - execution_status: $E2E_STATUS
+  - report_collection_status: $E2E_REPORT_STATUS
 - Projects: e2e-light → e2e-heavy → chaos (sequential)
 
 ## Service Health (at evidence time)

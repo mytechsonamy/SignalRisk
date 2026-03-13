@@ -39,16 +39,17 @@ Navigate to your dashboard URL (`http://localhost:5173` in development) and ente
 
 Current verified behavior:
 
-- dashboard login uses seed users in development
-- seed-user login is disabled when `NODE_ENV=production`
+- dashboard login uses `POST /v1/auth/login` (DB-backed authentication via UsersService + bcrypt)
+- seed-user login fallback is available in development only (`NODE_ENV !== production`)
 - the dashboard stores auth state client-side and redirects to the Overview page after successful login
+- password grant (`grant_type=password`) on `/v1/auth/token` is **not supported** — use `/v1/auth/login` instead
 
 Development seed users:
 
 - **Admin account**: `admin@signalrisk.io`
 - **Analyst account**: `analyst@signalrisk.io`
 
-Default development passwords are environment-driven and may fall back to seed values in local environments. Do not reuse seed credentials outside development.
+Default development passwords are environment-driven (`SEED_ADMIN_PASSWORD`, `SEED_ANALYST_PASSWORD`) and may fall back to seed values in local environments. Do not reuse seed credentials outside development.
 
 After login you are taken directly to the **Overview** page.
 

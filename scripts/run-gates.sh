@@ -344,41 +344,142 @@ gate_g7() {
 gate_g8() {
   run_gate "G8: Evidence & Signoff Completeness"
 
-  # Check evidence pack exists
+  # Parse --sprint N or TARGET_SPRINT env var for stale check
+  local target_sprint="${TARGET_SPRINT:-}"
+  for arg in "$@"; do
+    case "$arg" in
+      --sprint) shift; target_sprint="${1:-}" ;;
+      --sprint=*) target_sprint="${arg#*=}" ;;
+    esac
+  done
+
+  # ── G8.1: Sprint exit evidence — exists + required sections + stale check ──
   local latest_evidence
   latest_evidence=$(ls -t docs/testing/evidence/sprint-*-exit.md 2>/dev/null | head -1)
   if [ -n "$latest_evidence" ]; then
-    log_pass "G8.1 Sprint exit evidence exists: $latest_evidence"
+    # Stale check: sprint number must match TARGET_SPRINT if set
+    local stale=false
+    if [ -n "$target_sprint" ]; then
+      if ! echo "$latest_evidence" | grep -q "sprint-${target_sprint}-exit"; then
+        stale=true
+      fi
+    fi
+    if [ "$stale" = true ]; then
+      log_fail "G8.1 Sprint exit evidence is stale (expected sprint-${target_sprint}, found: $(basename "$latest_evidence"))"
+    else
+      # Structural check: evidence must contain required sections
+      local g81_missing=""
+      grep -q "## Gate Status"       "$latest_evidence" 2>/dev/null || g81_missing="${g81_missing} 'Gate Status'"
+      grep -q "## Defect Summary"    "$latest_evidence" 2>/dev/null || g81_missing="${g81_missing} 'Defect Summary'"
+      grep -q "## Recommendation"    "$latest_evidence" 2>/dev/null || g81_missing="${g81_missing} 'Recommendation'"
+      # Must have at least one execution_status line showing real test outcome
+      grep -qE 'execution_status:.*(PASSED|FAILED)' "$latest_evidence" 2>/dev/null || g81_missing="${g81_missing} 'execution_status'"
+
+      if [ -z "$g81_missing" ]; then
+        log_pass "G8.1 Sprint exit evidence: $(basename "$latest_evidence") (required sections present)"
+      else
+        log_fail "G8.1 Sprint exit evidence missing required sections:${g81_missing}"
+      fi
+    fi
   else
     log_fail "G8.1 No sprint exit evidence found"
   fi
 
-  # Check quality gates doc exists
+  # ── G8.2: Quality gates doc — gate definitions with numbered gates ──
   if [ -f "docs/testing/quality-gates.md" ]; then
-    log_pass "G8.2 Quality gates definition exists"
+    # Must define at least G1 through G5 (minimum gate set)
+    local gate_count
+    gate_count=$(grep -cE '^#+.*G[1-8]' docs/testing/quality-gates.md 2>/dev/null || echo 0)
+    if [ "$gate_count" -ge 5 ]; then
+      log_pass "G8.2 Quality gates defines $gate_count gate sections"
+    else
+      log_fail "G8.2 Quality gates doc has only $gate_count gate sections (need >= 5)"
+    fi
   else
     log_fail "G8.2 Quality gates definition missing"
   fi
 
-  # Check scenario catalog exists
+  # ── G8.3: Scenario catalog — has P0 scenario IDs with status ──
   if [ -f "docs/testing/scenario-catalog.md" ]; then
-    log_pass "G8.3 Scenario catalog exists"
+    local scenario_count
+    scenario_count=$(grep -cE 'SR-P[0-9]+-[0-9]+' docs/testing/scenario-catalog.md 2>/dev/null || echo 0)
+    if [ "$scenario_count" -ge 5 ]; then
+      log_pass "G8.3 Scenario catalog with $scenario_count scenario IDs"
+    else
+      log_fail "G8.3 Scenario catalog has only $scenario_count scenarios (need >= 5)"
+    fi
   else
     log_fail "G8.3 Scenario catalog missing"
   fi
 
-  # Check CLAUDE.md exists and has key sections
-  if grep -q "Execution Order" CLAUDE.md 2>/dev/null; then
-    log_pass "G8.4 CLAUDE.md with execution order"
+  # ── G8.4: CLAUDE.md — required structural sections ──
+  local g84_missing=""
+  grep -q "## 3\. Production Maturity Map"  CLAUDE.md 2>/dev/null || \
+    grep -q "Maturity Map"                   CLAUDE.md 2>/dev/null || g84_missing="${g84_missing} 'Maturity Map'"
+  grep -q "## 6\. Architecture Rules"       CLAUDE.md 2>/dev/null || \
+    grep -q "Architecture Rules"             CLAUDE.md 2>/dev/null || g84_missing="${g84_missing} 'Architecture Rules'"
+  grep -q "## 7\. Execution Order"          CLAUDE.md 2>/dev/null || \
+    grep -q "Execution Order"                CLAUDE.md 2>/dev/null || g84_missing="${g84_missing} 'Execution Order'"
+  # Maturity map must have actual data rows (pipe-delimited table)
+  grep -qE '^\|.*Verified' CLAUDE.md 2>/dev/null || g84_missing="${g84_missing} 'Maturity Map data rows'"
+  if [ -z "$g84_missing" ]; then
+    log_pass "G8.4 CLAUDE.md has required structural sections"
   else
-    log_fail "G8.4 CLAUDE.md missing or incomplete"
+    log_fail "G8.4 CLAUDE.md missing:${g84_missing}"
   fi
 
-  # Check decision log
+  # ── G8.5: Decision log — has numbered ADR entries with decision + reason ──
   if [ -f "docs/claude/decision-log.md" ]; then
-    log_pass "G8.5 Decision log (ADR) exists"
+    local adr_count
+    adr_count=$(grep -cE 'ADR-[0-9]+' docs/claude/decision-log.md 2>/dev/null || echo 0)
+    if [ "$adr_count" -ge 3 ]; then
+      log_pass "G8.5 Decision log with $adr_count ADR entries"
+    else
+      log_fail "G8.5 Decision log has only $adr_count ADR entries (need >= 3)"
+    fi
   else
     log_fail "G8.5 Decision log missing"
+  fi
+
+  # ── G8.6: Evidence — explicit blocker/waiver section with counts ──
+  if [ -n "$latest_evidence" ]; then
+    # Must have a Defect Summary section AND a Waivers section
+    local has_defect_section=false has_waiver_section=false
+    grep -qi "## Defect Summary\|## Defects\|## Open Blockers" "$latest_evidence" 2>/dev/null && has_defect_section=true
+    grep -qi "## Waivers\|## Waiver" "$latest_evidence" 2>/dev/null && has_waiver_section=true
+
+    if [ "$has_defect_section" = true ] && [ "$has_waiver_section" = true ]; then
+      # Check if defect counts are explicit (e.g. "Sev-1: 0" or "Open Sev-1: 0")
+      if grep -qiE 'sev-[12].*:.*[0-9]' "$latest_evidence" 2>/dev/null; then
+        log_pass "G8.6 Evidence has defect summary + waivers with explicit severity counts"
+      else
+        log_fail "G8.6 Evidence has defect/waiver sections but missing explicit severity counts"
+      fi
+    else
+      local g86_missing=""
+      [ "$has_defect_section" = false ] && g86_missing="${g86_missing} 'Defect Summary'"
+      [ "$has_waiver_section" = false ] && g86_missing="${g86_missing} 'Waivers'"
+      log_fail "G8.6 Evidence missing required sections:${g86_missing}"
+    fi
+  else
+    log_fail "G8.6 No evidence file to check for blockers/waivers"
+  fi
+
+  # ── G8.7: Signoff — must have Prepared by + Date + Recommendation ──
+  if [ -n "$latest_evidence" ]; then
+    local g87_missing=""
+    grep -qiE '^(prepared by|author|signed by):' "$latest_evidence" 2>/dev/null || \
+      grep -qi "Prepared by:" "$latest_evidence" 2>/dev/null || g87_missing="${g87_missing} 'Prepared by/Author'"
+    grep -qE '^Date:.*[0-9]{4}-[0-9]{2}-[0-9]{2}' "$latest_evidence" 2>/dev/null || g87_missing="${g87_missing} 'Date (YYYY-MM-DD)'"
+    grep -qi "## Recommendation" "$latest_evidence" 2>/dev/null || g87_missing="${g87_missing} 'Recommendation section'"
+
+    if [ -z "$g87_missing" ]; then
+      log_pass "G8.7 Evidence has signoff fields (author, date, recommendation)"
+    else
+      log_fail "G8.7 Evidence missing signoff fields:${g87_missing}"
+    fi
+  else
+    log_fail "G8.7 No evidence file to check for signoff"
   fi
 }
 
@@ -410,7 +511,7 @@ case "$GATE" in
     gate_g8
     ;;
   *)
-    echo "Usage: $0 [G1|G2|G3|G4|G5|all]"
+    echo "Usage: $0 [G1|G2|G3|G4|G5|G6|G7|G8|all] [--sprint N]"
     exit 1
     ;;
 esac

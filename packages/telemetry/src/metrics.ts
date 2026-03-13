@@ -11,6 +11,14 @@ export interface SignalRiskMetrics {
   ruleEvalDuration: Histogram;
   /** Counter tracking fraud decisions (by verdict: allow, block, review) */
   decisionCount: Counter;
+  /** Counter tracking entity profile update failures */
+  entityProfileUpdateErrors: Counter;
+  /** Counter tracking feature snapshot write failures */
+  featureSnapshotWriteErrors: Counter;
+  /** Counter tracking watchlist check timeouts */
+  watchlistCheckTimeouts: Counter;
+  /** Counter tracking entity type fallbacks (missing entityType) */
+  entityTypeFallbacks: Counter;
 }
 
 let metricsInstance: SignalRiskMetrics | null = null;
@@ -51,6 +59,26 @@ export function initMetrics(serviceName: string): SignalRiskMetrics {
       description: 'Total fraud decisions by verdict',
       unit: '{decisions}',
     }),
+
+    entityProfileUpdateErrors: meter.createCounter('signalrisk.entity_profile.update_errors', {
+      description: 'Entity profile update failures',
+      unit: '{errors}',
+    }),
+
+    featureSnapshotWriteErrors: meter.createCounter('signalrisk.feature_snapshot.write_errors', {
+      description: 'Feature snapshot write failures',
+      unit: '{errors}',
+    }),
+
+    watchlistCheckTimeouts: meter.createCounter('signalrisk.watchlist.check_timeouts', {
+      description: 'Watchlist check timeouts',
+      unit: '{timeouts}',
+    }),
+
+    entityTypeFallbacks: meter.createCounter('signalrisk.entity_type.fallbacks', {
+      description: 'Entity type fallback to customer (missing entityType)',
+      unit: '{fallbacks}',
+    }),
   };
 
   return metricsInstance;
@@ -63,20 +91,27 @@ export function getMetrics(): SignalRiskMetrics {
   return metricsInstance;
 }
 
+/** Safe getter — returns null if not initialized (for record* functions) */
+function tryGetMetrics(): SignalRiskMetrics | null {
+  return metricsInstance;
+}
+
 /** Record a fraud decision with latency */
 export function recordDecision(
   verdict: 'allow' | 'block' | 'review',
   latencyMs: number,
   attributes: Record<string, string> = {},
 ): void {
-  const m = getMetrics();
+  const m = tryGetMetrics();
+  if (!m) return;
   m.decisionLatency.record(latencyMs, { verdict, ...attributes });
   m.decisionCount.add(1, { verdict, ...attributes });
 }
 
 /** Record an event processed */
 export function recordEvent(eventType: string, attributes: Record<string, string> = {}): void {
-  const m = getMetrics();
+  const m = tryGetMetrics();
+  if (!m) return;
   m.eventThroughput.add(1, { event_type: eventType, ...attributes });
 }
 
@@ -86,6 +121,35 @@ export function recordError(
   errorType: string,
   attributes: Record<string, string> = {},
 ): void {
-  const m = getMetrics();
+  const m = tryGetMetrics();
+  if (!m) return;
   m.errorRate.add(1, { service, error_type: errorType, ...attributes });
+}
+
+/** Record entity profile update error */
+export function recordEntityProfileError(attributes: Record<string, string> = {}): void {
+  const m = tryGetMetrics();
+  if (!m) return;
+  m.entityProfileUpdateErrors.add(1, attributes);
+}
+
+/** Record feature snapshot write error */
+export function recordFeatureSnapshotError(attributes: Record<string, string> = {}): void {
+  const m = tryGetMetrics();
+  if (!m) return;
+  m.featureSnapshotWriteErrors.add(1, attributes);
+}
+
+/** Record watchlist check timeout */
+export function recordWatchlistTimeout(attributes: Record<string, string> = {}): void {
+  const m = tryGetMetrics();
+  if (!m) return;
+  m.watchlistCheckTimeouts.add(1, attributes);
+}
+
+/** Record entity type fallback */
+export function recordEntityTypeFallback(attributes: Record<string, string> = {}): void {
+  const m = tryGetMetrics();
+  if (!m) return;
+  m.entityTypeFallbacks.add(1, attributes);
 }

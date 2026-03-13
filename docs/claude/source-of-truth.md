@@ -1,7 +1,7 @@
 # SignalRisk — Source of Truth Map
 
 > Her contract tipi icin tek sahip dosya/paket. Baska yerden alma.
-> Son guncelleme: Sprint 34 (2026-03-08)
+> Son guncelleme: Sprint 41 (2026-03-12)
 
 ## Contract Ownership
 
@@ -18,6 +18,7 @@
 | Quality gates | `docs/testing/quality-gates.md` | Markdown | G1-G8 tanimlari |
 | Scenario catalog | `docs/testing/scenario-catalog.md` | Markdown | SR-P0/P1/P2 ID'leri |
 | Evidence format | `docs/testing/evidence-and-reporting.md` | Markdown template | Sprint/release artifacts |
+| Level 5 signoff | `docs/level5-signoff-checklist.md` | Markdown checklist | Final production-ready verdict |
 | Skill tanimlari | `docs/skills/` | Markdown | Local wrapper: `~/.claude/skills/` |
 | Architecture rules | `CLAUDE.md` §6 | Markdown | R1-R11 kurallari |
 | Decision log | `docs/claude/decision-log.md` | ADR format | ADR-001 → ADR-00N |

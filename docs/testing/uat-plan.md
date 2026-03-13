@@ -416,3 +416,31 @@ It must be updated when any of the following changes:
 - simulation packs, fixtures, or signoff expectations
 
 Do not defer UAT document updates to a later documentation sprint if they affect current acceptance behavior.
+
+## 16. Prod-Like Validation Profile
+
+For Level 5 hardening, UAT must include a **prod-like profile** run that validates:
+
+### Entry Criteria
+- Seed fallback must NOT be used (all auth via DB-backed UsersService)
+- `NODE_ENV=production` or equivalent guard active
+- Screenshot script uses `SCREENSHOT_EMAIL` / `SCREENSHOT_PASSWORD` env vars (no hardcoded credentials)
+
+### Required Scenarios
+1. **Invite → Login → Password Change**: Admin invites user → user receives tempPassword → login with tempPassword → change password → login with new password
+2. **RS256 WebSocket Tenant Isolation**: Connect WebSocket with RS256 JWT → verify room-based tenant isolation → cross-tenant broadcast blocked
+3. **EntityType Decision → Case → Label → Watchlist Propagation**: Send event with explicit entityType → verify decision, case, label, and watchlist all carry entityType
+4. **FRAUD / LEGITIMATE Feedback Loop**: Resolve case as FRAUD → verify denylist entry → new event for same entity → BLOCK. Resolve as LEGITIMATE → verify cooldown/allowlist behavior
+5. **Feature Snapshot Persistence**: Send event → verify `decision_feature_snapshots` row written with structured `f_*` columns
+
+### Credential Inventory
+| Script | Auth Method | Prod-Compatible |
+|---|---|---|
+| `tests/e2e/scenarios/helpers.ts` | OAuth `client_credentials` | Yes |
+| `scripts/capture-screenshots.ts` | Env vars (`SCREENSHOT_EMAIL`/`SCREENSHOT_PASSWORD`) | Yes |
+| `apps/auth-service` seed users | DB-backed with seed fallback (dev-only) | Dev only — disabled in production |
+
+### Exit Criteria
+- All 5 scenarios pass without seed fallback
+- No hardcoded credentials used in any script
+- Evidence pack generated with honest test status (no `|| true` masking)

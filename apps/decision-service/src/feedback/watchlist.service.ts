@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Pool } from 'pg';
+import { recordWatchlistTimeout } from '@signalrisk/telemetry';
 
 export interface WatchlistCheckResult {
   isDenylisted: boolean;
@@ -70,6 +71,7 @@ export class WatchlistService {
         new Promise<WatchlistCheckResult>((resolve) =>
           setTimeout(() => {
             this.logger.warn(`Watchlist check timeout (50ms) for entity ${entityId}`);
+            recordWatchlistTimeout({ entity_id: entityId, entity_type: entityType });
             resolve(fallback);
           }, 50),
         ),

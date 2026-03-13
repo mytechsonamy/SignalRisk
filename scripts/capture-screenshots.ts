@@ -34,10 +34,19 @@ const FRAUD_TESTER_NAV = [
 ];
 
 async function getAuthToken(): Promise<{ token: string; user: { id: string; email: string; role: string } }> {
+  const email = process.env.SCREENSHOT_EMAIL;
+  const password = process.env.SCREENSHOT_PASSWORD;
+  if (!email || !password) {
+    throw new Error(
+      'SCREENSHOT_EMAIL and SCREENSHOT_PASSWORD env vars are required. ' +
+      'Example: SCREENSHOT_EMAIL=admin@signalrisk.io SCREENSHOT_PASSWORD=... npx tsx scripts/capture-screenshots.ts',
+    );
+  }
+
   const resp = await fetch(`${AUTH_URL}/v1/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'admin@signalrisk.io', password: 'admin123' }),
+    body: JSON.stringify({ email, password }),
   });
 
   if (!resp.ok) {
@@ -52,7 +61,7 @@ async function getAuthToken(): Promise<{ token: string; user: { id: string; emai
   };
 
   const token = body.accessToken ?? body.access_token ?? body.token ?? '';
-  const user = body.user ?? { id: 'admin', email: 'admin@signalrisk.io', role: 'admin' };
+  const user = body.user ?? { id: 'admin', email, role: 'admin' };
 
   if (!token) throw new Error(`No token in auth response: ${JSON.stringify(body)}`);
   return { token, user };
