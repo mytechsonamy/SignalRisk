@@ -2,7 +2,8 @@ RULE emulator_block WHEN device.isEmulator == true THEN BLOCK WEIGHT 1.0
 RULE very_low_trust WHEN device.trustScore < 20 THEN BLOCK WEIGHT 0.9
 RULE low_trust WHEN device.trustScore < 40 THEN REVIEW WEIGHT 0.7 MISSING SKIP
 RULE velocity_burst WHEN velocity.burstDetected == true THEN REVIEW WEIGHT 0.8 MISSING SKIP
-RULE high_velocity WHEN velocity.txCount1h > 100 THEN REVIEW WEIGHT 0.6 MISSING SKIP
+RULE moderate_velocity WHEN velocity.txCount1h > 10 THEN REVIEW WEIGHT 0.6 MISSING SKIP
+RULE high_velocity WHEN velocity.txCount1h > 100 THEN BLOCK WEIGHT 0.8 MISSING SKIP
 RULE tor_exit WHEN network.isTor == true THEN BLOCK WEIGHT 1.0 MISSING SKIP
 RULE vpn_proxy WHEN network.isVpn == true THEN REVIEW WEIGHT 0.5 MISSING SKIP
 RULE bot_block WHEN behavioral.isBot == true THEN BLOCK WEIGHT 0.9 MISSING SKIP

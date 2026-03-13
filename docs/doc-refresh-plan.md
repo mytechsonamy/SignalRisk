@@ -160,5 +160,5 @@ These documents should be treated as living documents and reviewed continuously:
 - [docs/USER-GUIDE.md](/Users/musti/Documents/Documents%20-%20Mustafa%20MacBook%20Pro/Projects/signalrisk/docs/USER-GUIDE.md)
 - [docs/testing/README.md](/Users/musti/Documents/Documents%20-%20Mustafa%20MacBook%20Pro/Projects/signalrisk/docs/testing/README.md)
 - [docs/testing/scenario-catalog.md](/Users/musti/Documents/Documents%20-%20Mustafa%20MacBook%20Pro/Projects/signalrisk/docs/testing/scenario-catalog.md)
-- [docs/testing/uat-plan.md](/Users/musti/Documents/Documents%20-%20Mustafa%20MacBook%20Pro/Projects/signalrisk/docs/testing/uat-plan.md)
+- [docs/uat-tests/uat-plan.md](/Users/musti/Documents/Documents%20-%20Mustafa%20MacBook%20Pro/Projects/signalrisk/docs/uat-tests/uat-plan.md)
 - stateful fraud docs under `docs/stateful-fraud-*.md`

@@ -18,6 +18,7 @@ export const AUTH_URL     = process.env.AUTH_URL     ?? 'http://localhost:3001';
 export const EVENT_URL    = process.env.EVENT_URL    ?? 'http://localhost:3002';
 export const DECISION_URL = process.env.DECISION_URL ?? 'http://localhost:3009';
 export const CASE_URL     = process.env.CASE_URL     ?? 'http://localhost:3010';
+export const VELOCITY_URL = process.env.VELOCITY_URL ?? 'http://localhost:3004';
 
 // ---------------------------------------------------------------------------
 // Dev fixture credentials (must match docker-compose seed / test DB fixtures)
@@ -276,4 +277,200 @@ export function generateEventId(): string {
  */
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// ---------------------------------------------------------------------------
+// Closed-loop test helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Poll case-service until at least one case appears for the given search term
+ * (typically an entityId or deviceId).
+ *
+ * GET /v1/cases?merchantId=...&search=<term>
+ */
+export async function pollForCase(
+  request: APIRequestContext,
+  token: string,
+  searchTerm: string,
+  maxAttempts = 15,
+  intervalMs = 2000,
+): Promise<{
+  id: string;
+  entityId: string;
+  entityType?: string;
+  action: string;
+  status: string;
+  merchantId: string;
+  riskScore: number;
+  resolution: string | null;
+}> {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const response = await request.get(`${CASE_URL}/v1/cases`, {
+      headers: {
+        Authorization:  `Bearer ${token}`,
+        'X-Merchant-ID': TEST_MERCHANT.merchantId,
+      },
+      params: {
+        merchantId: TEST_MERCHANT.merchantId,
+        search:     searchTerm,
+      },
+    });
+
+    if (response.ok()) {
+      const body = (await response.json()) as {
+        cases?: Array<Record<string, unknown>>;
+      };
+      const cases = body.cases ?? [];
+      if (cases.length > 0) return cases[0] as ReturnType<typeof pollForCase> extends Promise<infer T> ? T : never;
+    }
+
+    if (attempt < maxAttempts) {
+      await new Promise((r) => setTimeout(r, intervalMs));
+    }
+  }
+
+  throw new Error(`pollForCase timed out after ${maxAttempts} attempts for search=${searchTerm}`);
+}
+
+/**
+ * Resolve a case via PATCH /v1/cases/{id}?merchantId=...
+ *
+ * Used by closed-loop tests to trigger label publishing → watchlist updates.
+ */
+export async function resolveCase(
+  request: APIRequestContext,
+  token: string,
+  caseId: string,
+  resolution: 'FRAUD' | 'LEGITIMATE' | 'INCONCLUSIVE',
+  notes = 'E2E closed-loop test resolution',
+): Promise<Record<string, unknown>> {
+  const response = await request.patch(
+    `${CASE_URL}/v1/cases/${caseId}`,
+    {
+      headers: {
+        Authorization:  `Bearer ${token}`,
+        'X-Merchant-ID': TEST_MERCHANT.merchantId,
+      },
+      params: { merchantId: TEST_MERCHANT.merchantId },
+      data: {
+        status:          'RESOLVED',
+        resolution,
+        resolutionNotes: notes,
+      },
+    },
+  );
+
+  if (!response.ok()) {
+    throw new Error(
+      `resolveCase(${caseId}, ${resolution}) failed: HTTP ${response.status()} — ${await response.text()}`,
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Run a SQL query against the signalrisk PostgreSQL container.
+ * Returns the raw stdout (tab-aligned, no headers).
+ *
+ * Used by closed-loop tests to verify side-effect state that isn't exposed via HTTP
+ * (watchlist_entries, entity_profiles, decision_feature_snapshots).
+ */
+export function queryPostgres(sql: string): string {
+  return execSync(
+    `docker exec signalrisk-postgres psql -U signalrisk -d signalrisk -tAc "${sql.replace(/"/g, '\\"')}"`,
+    {
+      cwd:      path.resolve(__dirname, '..', '..', '..'),
+      encoding: 'utf8',
+      timeout:  10_000,
+    },
+  ).trim();
+}
+
+/**
+ * Send a burst of events from the same device to trigger velocity rules.
+ * Returns after all events are ingested (does not wait for decisions).
+ *
+ * Events are sent in batches of 5 with 200ms gaps and individual 429 retries
+ * to handle backpressure from the rate adjuster after heavy test projects.
+ */
+export async function blastEventsFromDevice(
+  request: APIRequestContext,
+  deviceId: string,
+  count: number,
+  overrides: Partial<{ ipAddress: string; customerId: string; type: string }> = {},
+): Promise<number[]> {
+  const statuses: number[] = [];
+  const BATCH_SIZE = 5;
+  const BATCH_GAP_MS = 200;
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY_MS = 1000;
+
+  for (let batchStart = 0; batchStart < count; batchStart += BATCH_SIZE) {
+    const batchEnd = Math.min(batchStart + BATCH_SIZE, count);
+    const batchPromises = Array.from(
+      { length: batchEnd - batchStart },
+      async (_, j) => {
+        const i = batchStart + j;
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+          const response = await request.post(`${EVENT_URL}/v1/events`, {
+            headers: {
+              Authorization:  `Bearer ${TEST_MERCHANT.apiKey}`,
+              'X-Merchant-ID': TEST_MERCHANT.merchantId,
+            },
+            data: {
+              events: [
+                {
+                  merchantId: TEST_MERCHANT.merchantId,
+                  deviceId,
+                  sessionId:  `sess-blast-${deviceId}-${i}`,
+                  type:       overrides.type ?? 'PAYMENT',
+                  payload:    { amount: 100 + i, currency: 'TRY', paymentMethod: 'credit_card' },
+                  ipAddress:  overrides.ipAddress ?? '5.6.7.8',
+                  eventId:    crypto.randomUUID(),
+                  ...(overrides.customerId ? { customerId: overrides.customerId } : {}),
+                },
+              ],
+            },
+          });
+          const status = response.status();
+          if (status !== 429 || attempt === MAX_RETRIES) return status;
+          await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * (attempt + 1)));
+        }
+        return 429; // fallback
+      },
+    );
+    const batchStatuses = await Promise.all(batchPromises);
+    statuses.push(...batchStatuses);
+    if (batchStart + BATCH_SIZE < count) {
+      await new Promise((r) => setTimeout(r, BATCH_GAP_MS));
+    }
+  }
+  return statuses;
+}
+
+/**
+ * Wait until velocity-service reports tx_count_1h above the given threshold
+ * for the specified entity.
+ */
+export async function waitForVelocity(
+  request: APIRequestContext,
+  entityId: string,
+  threshold = 10,
+  maxAttempts = 30,
+  intervalMs = 1000,
+): Promise<boolean> {
+  for (let i = 0; i < maxAttempts; i++) {
+    await sleep(intervalMs);
+    const resp = await request.get(
+      `${VELOCITY_URL}/v1/velocity/${encodeURIComponent(entityId)}`,
+      { headers: { 'X-Merchant-ID': TEST_MERCHANT.merchantId } },
+    );
+    if (resp.ok()) {
+      const body = (await resp.json()) as { signals?: { tx_count_1h?: number } };
+      if ((body.signals?.tx_count_1h ?? 0) > threshold) return true;
+    }
+  }
+  return false;
 }

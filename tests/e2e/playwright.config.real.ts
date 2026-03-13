@@ -23,12 +23,19 @@ export default defineConfig({
       fullyParallel: false,
       dependencies: ['e2e-light'],
     },
+    // Closed-loop tests — feedback, denylist, allowlist, entity-type propagation
+    {
+      name: 'closed-loop',
+      testMatch: /denylist-enforcement|allowlist-cooldown|entity-type-propagation|feedback-loop-chain/,
+      fullyParallel: false,
+      dependencies: ['e2e-heavy'],
+    },
     // Chaos tests last — they stop/start Redis, disrupting other services
     {
       name: 'chaos',
       testMatch: /chaos-redis|chaos-kafka/,
       fullyParallel: false,
-      dependencies: ['e2e-heavy'],
+      dependencies: ['closed-loop'],
     },
   ],
   webServer: process.env.SKIP_DOCKER ? undefined : {

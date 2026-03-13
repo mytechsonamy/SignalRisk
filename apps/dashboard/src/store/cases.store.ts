@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { api } from '../lib/api';
 import type { Case, CaseStatus, CasePriority, CaseListResponse } from '../types/case.types';
+import { getStoredToken } from '../lib/auth';
 
 interface CasesFilters {
   status?: CaseStatus;
@@ -27,6 +28,17 @@ interface CasesState {
   bulkResolve: (resolution: string) => Promise<void>;
 }
 
+function getMerchantIdFromToken(): string {
+  const token = getStoredToken();
+  if (!token) return '';
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.merchant_id || payload.merchantId || payload.sub || '';
+  } catch {
+    return '';
+  }
+}
+
 export const useCasesStore = create<CasesState>((set, get) => ({
   cases: [],
   total: 0,
@@ -39,15 +51,19 @@ export const useCasesStore = create<CasesState>((set, get) => ({
     set({ loading: true });
     try {
       const { page, filters } = get();
+      const merchantId = getMerchantIdFromToken();
       const params = new URLSearchParams();
+      if (merchantId) params.set('merchantId', merchantId);
       params.set('page', String(page));
       params.set('limit', '20');
       if (filters.status) params.set('status', filters.status);
       if (filters.priority) params.set('priority', filters.priority);
       if (filters.search) params.set('search', filters.search);
 
-      const response = await api.get<CaseListResponse>(`/v1/cases?${params.toString()}`);
-      set({ cases: response.cases, total: response.total });
+      const response = await api.get<CaseListResponse>(`/api/v1/cases?${params.toString()}`);
+      set({ cases: response.cases ?? [], total: response.total ?? 0 });
+    } catch {
+      set({ cases: [], total: 0 });
     } finally {
       set({ loading: false });
     }
@@ -86,8 +102,13 @@ export const useCasesStore = create<CasesState>((set, get) => ({
   },
 
   resolveCase: async (id, resolution, notes) => {
-    await api.put(`/v1/cases/${id}/resolve`, { resolution, notes });
-    // Remove from list — default filter is OPEN, resolved cases leave the active queue
+    const merchantId = getMerchantIdFromToken();
+    const qs = merchantId ? `?merchantId=${merchantId}` : '';
+    await api.patch(`/api/v1/cases/${id}${qs}`, {
+      status: 'RESOLVED',
+      resolution,
+      resolutionNotes: notes,
+    });
     set((state) => ({
       cases: state.cases.filter((c) => c.id !== id),
       total: Math.max(0, state.total - 1),
@@ -95,8 +116,9 @@ export const useCasesStore = create<CasesState>((set, get) => ({
   },
 
   escalateCase: async (id) => {
-    await api.put(`/v1/cases/${id}/escalate`, {});
-    // Remove from OPEN queue — escalated cases are handled by senior analysts
+    const merchantId = getMerchantIdFromToken();
+    const qs = merchantId ? `?merchantId=${merchantId}` : '';
+    await api.patch(`/api/v1/cases/${id}${qs}`, { status: 'ESCALATED' });
     set((state) => ({
       cases: state.cases.filter((c) => c.id !== id),
       total: Math.max(0, state.total - 1),
@@ -105,8 +127,16 @@ export const useCasesStore = create<CasesState>((set, get) => ({
 
   bulkResolve: async (resolution) => {
     const { selectedIds } = get();
+    const merchantId = getMerchantIdFromToken();
+    const qs = merchantId ? `?merchantId=${merchantId}` : '';
     await Promise.all(
-      selectedIds.map((id) => api.put(`/v1/cases/${id}/resolve`, { resolution, notes: '' })),
+      selectedIds.map((id) =>
+        api.patch(`/api/v1/cases/${id}${qs}`, {
+          status: 'RESOLVED',
+          resolution,
+          resolutionNotes: '',
+        }),
+      ),
     );
     set((state) => ({
       cases: state.cases.filter((c) => !state.selectedIds.includes(c.id)),

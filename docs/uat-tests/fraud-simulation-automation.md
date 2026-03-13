@@ -334,7 +334,7 @@ Simulation runs should report:
 
 This automation plan should connect to:
 
-- [docs/testing/master-test-strategy.md](/Users/musti/Documents/Documents%20-%20Mustafa%20MacBook%20Pro/Projects/signalrisk/docs/testing/master-test-strategy.md)
-- [docs/testing/scenario-catalog.md](/Users/musti/Documents/Documents%20-%20Mustafa%20MacBook%20Pro/Projects/signalrisk/docs/testing/scenario-catalog.md)
-- [docs/testing/test-agent-operations.md](/Users/musti/Documents/Documents%20-%20Mustafa%20MacBook%20Pro/Projects/signalrisk/docs/testing/test-agent-operations.md)
-- [docs/testing/uat-plan.md](/Users/musti/Documents/Documents%20-%20Mustafa%20MacBook%20Pro/Projects/signalrisk/docs/testing/uat-plan.md)
+- [docs/testing/master-test-strategy.md](../testing/master-test-strategy.md)
+- [docs/testing/scenario-catalog.md](../testing/scenario-catalog.md)
+- [docs/testing/test-agent-operations.md](../testing/test-agent-operations.md)
+- [docs/uat-tests/uat-plan.md](./uat-plan.md)

@@ -29,6 +29,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
+      '/api/v1/cases': {
+        target: 'http://localhost:3010',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
       '/api/v1/analytics': {
         target: 'http://localhost:3009',
         changeOrigin: true,

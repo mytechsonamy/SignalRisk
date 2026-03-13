@@ -32,8 +32,8 @@ If a change affects runtime behavior, operator workflow, acceptance criteria, or
 ### Testing and acceptance
 
 - [ ] `docs/testing/scenario-catalog.md` reviewed if a new blocking scenario was added, changed, or retired
-- [ ] `docs/testing/uat-plan.md` reviewed if user acceptance flows changed
-- [ ] `docs/testing/fraud-simulation-automation.md` reviewed if simulation packs or isolation behavior changed
+- [ ] `docs/uat-tests/uat-plan.md` reviewed if user acceptance flows changed
+- [ ] `docs/uat-tests/fraud-simulation-automation.md` reviewed if simulation packs or isolation behavior changed
 - [ ] `docs/testing/quality-gates.md` reviewed if gate thresholds or blocking rules changed
 - [ ] `docs/testing/evidence-and-reporting.md` reviewed if evidence expectations changed
 

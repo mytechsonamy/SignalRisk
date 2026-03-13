@@ -9,6 +9,8 @@ It is the canonical reference for:
 - which scenarios must run until pass criteria are met
 - which evidence must be collected before a sprint, release, or hotfix can close
 
+UAT-specific planning and simulation documents live under `docs/uat-tests/`.
+
 ## Documents
 
 | Document | Purpose |
@@ -18,8 +20,6 @@ It is the canonical reference for:
 | `scenario-catalog.md` | Detailed scenario inventory with pass/fail criteria and retry expectations |
 | `quality-gates.md` | Sprint, release, and production exit criteria |
 | `evidence-and-reporting.md` | Required artifacts, defect workflow, and report templates |
-| `uat-plan.md` | User acceptance testing scope, roles, packs, and signoff model |
-| `fraud-simulation-automation.md` | Fraud transaction simulation and automation design |
 | `docs-drift-checklist.md` | Checklist for keeping technical, user, and testing docs aligned with implementation |
 
 ## Core Rule
@@ -48,16 +48,33 @@ No agent may mark a scenario, task, sprint, or release as complete until:
 
 | Area | Current location |
 |---|---|
-| E2E UI/API flows | `tests/e2e` |
-| Load tests | `tests/load` |
-| Kafka integration | `tests/kafka-integration` |
-| Integration tests | `tests/integration` |
-| Compliance checks | `tests/compliance` |
-| DR / health | `tests/dr` |
-| Production readiness | `tests/production-readiness` |
-| Smoke checks | `tests/smoke` |
-| Documentation checks | `tests/docs` |
-| Workspace/package integrity | `tests/workspaces` |
+| E2E Playwright scenarios (13 specs, 78 tests) | `tests/e2e/scenarios/` |
+| E2E legacy Jest specs (7 specs) | `tests/e2e/specs/` |
+| FraudTester app (5 scenarios + 3 adversarial agents) | `apps/fraud-tester/src/` |
+| Load tests (k6) | `tests/load/` |
+| Kafka integration | `tests/kafka-integration/` |
+| Integration tests | `tests/integration/` |
+| Tenant isolation tests | `tests/isolation/` |
+| Compliance checks | `tests/compliance/` |
+| DR / health | `tests/dr/` |
+| Production readiness | `tests/production-readiness/` |
+| Smoke checks | `tests/smoke/` |
+| Benchmark / perf | `tests/benchmark/` |
+| Documentation checks | `tests/docs/` |
+| Workspace/package integrity | `tests/workspaces/` |
+| Helm chart tests | `tests/helm/` |
+| ArgoCD tests | `tests/argocd/` |
+| Build tests | `tests/build/` |
+
+## Test Traffic Isolation
+
+FraudTester and simulation traffic is isolated from production analytics via:
+
+- **Header**: `X-SignalRisk-Test: true` (event-collector reads, propagates to Kafka)
+- **DB column**: `decisions.is_test` (migration 005, partial index)
+- **Analytics**: all 6 analytics queries filter `WHERE is_test = false`
+- **Webhooks**: webhook-service skips delivery for `isTest === true`
+- **FraudTester**: always sends `X-SignalRisk-Test: true` automatically (`signalrisk.adapter.ts`)
 
 ## Intended Use
 
@@ -65,8 +82,23 @@ No agent may mark a scenario, task, sprint, or release as complete until:
 - Agent execution: use `test-agent-operations.md`
 - Regression planning: use `scenario-catalog.md`
 - Release signoff: use `master-test-strategy.md` and `evidence-and-reporting.md`
-- UAT planning and signoff: use `uat-plan.md`
-- Fraud mechanism automation planning: use `fraud-simulation-automation.md`
+
+## UAT Documents
+
+| Document | Purpose |
+|---|---|
+| `../uat-tests/uat-plan.md` | User acceptance testing scope, roles, packs, and signoff model |
+| `../uat-tests/fraud-simulation-automation.md` | Fraud transaction simulation and automation design |
+| `../uat-tests/synthetic-uat-strategy.md` | Synthetic merchant traffic, truth-labeled scenarios, and production-like UAT without real customer data |
+| `../uat-tests/go-live-readiness-report-template.md` | Final go-live readiness report template |
+| `../uat-tests/final-signoff-evidence-template.md` | Final Level 5 evidence pack template |
+| `../uat-tests/uat-agent-and-skills-blueprint.md` | Required agents, skills, ownership, and no-gap execution model |
+
+## Intended Use
+
+- UAT planning and signoff: use `../uat-tests/uat-plan.md`
+- Fraud mechanism automation planning: use `../uat-tests/fraud-simulation-automation.md`
+- Synthetic production-like UAT planning: use `../uat-tests/synthetic-uat-strategy.md`
 
 ## Documentation Maintenance Rule
 

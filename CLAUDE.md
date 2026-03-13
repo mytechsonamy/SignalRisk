@@ -42,7 +42,7 @@ Dev credential'lar: `.env.local` dosyasina bak — CLAUDE.md'de inline yazilmaz.
 |---|---|
 | ✅ Verified functional | event pipeline, case (entityType typed), velocity (typed entities: customer/device/IP), graph, feature-flag, health checks, RLS (11 tablo), webhook (contract fixed), decision, all Kafka topics canonical, auth store (PostgreSQL), schema_migrations tracking (015), users CRUD + invite + password, admin health aggregation, admin rules CRUD, dashboard proxy routing, stateful context (ADR-009/010), DSL rule evaluation live (21 rules in decision path), prior-decision memory typed (ADR-011 + entity_type), analyst labels + watchlist (ADR-012), sequence detection (3 patterns), graph enrichment, feature governance aligned, 21 DSL rules (10 base + 5 stateful + 3 sequence + 3 graph), dashboard login DB-backed (ADR-013), WebSocket RS256 JWKS + tenant rooms (ADR-014), feedback consumer (STATE_LABELS → watchlist enforcement), watchlist decision-time check (denylist/watchlist/allowlist per FD-2), entity profiles (auto-update on decision), feature snapshots (decision_feature_snapshots), gate runner G7.3/G7.4 real tests |
 | ⚠ Observed risk | outbox-relay topic routing (canonical ama test yok) |
-| ? Assumption | FraudTester analytics isolation (hala dogrulanmadi) |
+| ✅ Verified | FraudTester analytics isolation (is_test column + X-SignalRisk-Test header + analytics 6 query filter + webhook skip) |
 
 ---
 
@@ -56,7 +56,7 @@ Her contract tipi icin tek sahip dosya/paket. Baska yerden alma.
 | Kafka consumer groups | `packages/kafka-config/src/index.ts` (CONSUMER_GROUPS object) |
 | Event payload schema | `packages/event-schemas/` |
 | Signal contracts | `packages/signal-contracts/` |
-| Auth claims (JWT) | `apps/auth-service/src/auth/jwt.strategy.ts` |
+| Auth claims (JWT) | `apps/auth-service/src/auth/strategies/jwt.strategy.ts` |
 | DB schema (source) | `database/migrations/` + `packages/db-migrations/` |
 | Port / env map | `docker-compose.full.yml` → pointer: `docs/claude/service-map.md` |
 | Quality gates | `docs/testing/quality-gates.md` |
@@ -68,6 +68,8 @@ Her contract tipi icin tek sahip dosya/paket. Baska yerden alma.
 | Stateful fraud architecture | `docs/stateful-fraud-architecture.md` |
 | Stateful fraud roadmap | `docs/stateful-fraud-roadmap.md` |
 | Analyst feedback policy | `docs/stateful-fraud-architecture.md` §7.3 |
+| Data model reference | `docs/DATA-MODEL.md` |
+| Integration guide | `docs/INTEGRATION-GUIDE.md` |
 
 > Detay: `docs/claude/source-of-truth.md`
 
@@ -92,7 +94,7 @@ P0 fix'lerin tumu tamamlandi:
 
 **R1: Iki auth sistemi — ASLA karistirma**
 - event-collector: `Bearer sk_test_<32hex>` (API key)
-- Diger tum servisler: `Bearer <jwt>` (HS256)
+- Diger tum servisler: `Bearer <jwt>` (RS256 asymmetric via KeyManager)
 
 **R2: Auth store — PostgreSQL-backed**
 - `MerchantsService` PostgreSQL (`merchants` tablosu). `@Inject(PG_POOL)` ile `pg.Pool` kullanir.

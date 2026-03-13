@@ -655,6 +655,9 @@ export default function GraphIntelPage() {
         setFraudRings(data.fraudRings);
         setSuspiciousDevices(data.suspiciousDevices);
       })
+      .catch(() => {
+        // graph-intel endpoint may not be available — show empty state
+      })
       .finally(() => setLoading(false));
   }, []);
 

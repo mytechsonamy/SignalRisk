@@ -102,7 +102,7 @@ export class DecisionsProducerService implements OnModuleInit, OnModuleDestroy {
               requestId: result.requestId,
               merchantId: result.merchantId,
               action: result.action,
-              entityId: (result as any).deviceId || result.requestId,
+              entityId: result.entityId || (result as any).deviceId || result.requestId,
               riskScore: result.riskScore,
               riskFactors: result.riskFactors,
               appliedRules: result.appliedRules,

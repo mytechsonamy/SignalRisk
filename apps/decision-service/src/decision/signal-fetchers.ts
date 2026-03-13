@@ -435,8 +435,8 @@ export class SignalFetcher {
         uniqueIps24h:     signals.uniqueIps24h     ?? signals.unique_ips_24h     ?? 0,
         uniqueSessions1h: signals.uniqueSessions1h ?? signals.unique_sessions_1h ?? 0,
       },
-      burstDetected: (raw as any).burstDetected ?? (raw as any).burst_detected ?? false,
-      burstRatio:    (raw as any).burstRatio    ?? (raw as any).burst_ratio,
+      burstDetected: (raw as any).burstDetected ?? (raw as any).burst_detected ?? signals.burstDetected ?? signals.burst_detected ?? false,
+      burstRatio:    (raw as any).burstRatio    ?? (raw as any).burst_ratio    ?? signals.burstRatio    ?? signals.burst_ratio,
     };
   }
 

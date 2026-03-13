@@ -77,3 +77,8 @@ Real-time fraud decision engine for payment and carrier billing events. The curr
 - Level 4 Closed-Loop Fraud building blocks are implemented in code, including analyst feedback enforcement and durable entity state updates.
 - Level 5 Production hardening is largely implemented in code, including DB-backed operator auth, RS256 WebSocket auth, real gate checks, and feature snapshots.
 - Remaining validation is operational rather than architectural: stack reruns, UAT/evidence refresh, and staging verification.
+
+Related references:
+
+- [Data Model](/Users/musti/Documents/Documents%20-%20Mustafa%20MacBook%20Pro/Projects/signalrisk/docs/architecture/data-model.md)
+- [Merchant Integration Guide](/Users/musti/Documents/Documents%20-%20Mustafa%20MacBook%20Pro/Projects/signalrisk/docs/product/merchant-integration-guide.md)

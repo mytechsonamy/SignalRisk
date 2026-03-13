@@ -166,6 +166,7 @@ export class DecisionOrchestratorService implements OnModuleInit {
         const denyResult: DecisionResult = {
           requestId: req.requestId,
           merchantId: req.merchantId,
+          entityId: req.entityId,
           action: 'BLOCK',
           riskScore: 100,
           riskFactors: [{
@@ -403,6 +404,7 @@ export class DecisionOrchestratorService implements OnModuleInit {
     const result: DecisionResult = {
       requestId:    req.requestId,
       merchantId:   req.merchantId,
+      entityId:     req.entityId,
       action,
       riskScore,
       riskFactors,

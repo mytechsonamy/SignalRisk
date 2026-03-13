@@ -78,18 +78,18 @@ export class AuthController {
     // Seed admin users (in-memory, for development ONLY)
     const seedUsers = [
       {
-        id: 'usr-admin-001',
+        id: '00000000-0000-0000-0000-000000000099',
         email: 'admin@signalrisk.io',
         password: process.env.SEED_ADMIN_PASSWORD || 'admin123',
         role: 'admin',
-        merchantId: 'merchant-signalrisk',
+        merchantId: '00000000-0000-0000-0000-000000000004',
       },
       {
-        id: 'usr-analyst-001',
+        id: '00000000-0000-0000-0000-000000000098',
         email: 'analyst@signalrisk.io',
         password: process.env.SEED_ANALYST_PASSWORD || 'analyst123',
         role: 'analyst',
-        merchantId: 'merchant-signalrisk',
+        merchantId: '00000000-0000-0000-0000-000000000001',
       },
     ];
 

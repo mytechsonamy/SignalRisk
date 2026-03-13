@@ -59,7 +59,7 @@ RUN --mount=from=deps,source=/app,target=/deps \
 # Build shared packages once
 RUN for pkg in packages/redis-module packages/signal-contracts \
                packages/event-schemas packages/kafka-config \
-               packages/kafka-health; do \
+               packages/kafka-health packages/telemetry; do \
       [ -d "$pkg/src" ] && (cd "$pkg" && npx tsc --skipLibCheck); \
     done
 

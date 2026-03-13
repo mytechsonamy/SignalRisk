@@ -22,6 +22,7 @@ export interface RiskFactor {
 export interface DecisionResult {
   requestId: string;
   merchantId: string;
+  entityId?: string;      // entity that was evaluated (deviceId, customerId, etc.)
   action: DecisionAction;
   riskScore: number;      // 0-100
   riskFactors: RiskFactor[];

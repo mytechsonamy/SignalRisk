@@ -141,7 +141,7 @@ Primary files:
 - `apps/auth-service/src/auth/auth.controller.ts`
 - `tests/e2e/scenarios/helpers.ts`
 - `scripts/capture-screenshots.ts`
-- `docs/testing/uat-plan.md`
+- `docs/uat-tests/uat-plan.md`
 
 ### P0-5: Auth surface is improved, but not yet fully normalized
 
@@ -268,7 +268,7 @@ Update after Sprint 40-41 closure:
 
 - `docs/TECHNICAL.md`
 - `docs/USER-GUIDE.md`
-- `docs/testing/uat-plan.md`
+- `docs/uat-tests/uat-plan.md`
 - `docs/testing/evidence-and-reporting.md`
 - `docs/testing/quality-gates.md`
 - `docs/architecture/system-overview.md`
